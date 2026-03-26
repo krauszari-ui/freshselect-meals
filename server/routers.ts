@@ -6,13 +6,17 @@ import { ENV } from "./_core/env";
 import { z } from "zod";
 
 // Referral → ClickUp List ID mapping
-const REFERRAL_LIST_MAP: Record<string, string> = {
-  foodoo: "901414846482",
-  rosemary: "901414846482",
-  chestnut: "901414846482",
-  central: "901414846482",
-};
+// When a ?ref= parameter is present, submissions go to the referral list.
+// Direct submissions (no ref) go to the default list.
+const REFERRAL_LIST_ID = "901414869527";
 const DEFAULT_LIST_ID = "901414846482";
+
+const REFERRAL_LIST_MAP: Record<string, string> = {
+  foodoo: REFERRAL_LIST_ID,
+  rosemary: REFERRAL_LIST_ID,
+  chestnut: REFERRAL_LIST_ID,
+  central: REFERRAL_LIST_ID,
+};
 
 export const appRouter = router({
   system: systemRouter,

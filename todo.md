@@ -25,3 +25,4 @@
 - [x] Header with logo and CTA button
 - [x] Mobile responsive design
 - [x] Write vitest tests for backend submission procedure
+- [x] Map referral parameter to ClickUp list ID 901414869527 for referral submissions
