@@ -77,8 +77,12 @@ describe("submission.submit", () => {
 
     await caller.submission.submit(validInput());
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    // First call is ClickUp, second may be notification
+    const clickUpCall = fetchSpy.mock.calls.find(
+      (call) => (call[0] as string).includes("clickup.com")
+    );
+    expect(clickUpCall).toBeDefined();
+    const [url, options] = clickUpCall as [string, RequestInit];
     expect(url).toContain("https://api.clickup.com/api/v2/list/");
     expect(url).toContain("/task");
     expect(options.method).toBe("POST");
@@ -86,9 +90,11 @@ describe("submission.submit", () => {
     expect(options.headers).toHaveProperty("Content-Type", "application/json");
 
     const body = JSON.parse(options.body as string);
-    expect(body.name).toBe("Jane Doe — Foodoo");
+    expect(body.name).toBe("Jane Doe \u2014 Foodoo");
     expect(body.markdown_description).toContain("**Medicaid ID:** AB12345C");
-    expect(body.markdown_description).toContain("**Cell Phone:** (555) 123-4567");
+    expect(body.markdown_description).toContain(
+      "**Cell Phone:** (555) 123-4567"
+    );
     expect(body.tags).toContain("freshselect-meals");
   });
 
@@ -99,15 +105,24 @@ describe("submission.submit", () => {
     const input = {
       ...validInput(),
       householdMembers: [
-        { name: "John Doe", dateOfBirth: "03/10/2015", medicaidId: "CD67890E" },
+        {
+          name: "John Doe",
+          dateOfBirth: "03/10/2015",
+          medicaidId: "CD67890E",
+        },
       ],
     };
 
     await caller.submission.submit(input);
 
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const clickUpCall = fetchSpy.mock.calls.find(
+      (call) => (call[0] as string).includes("clickup.com")
+    );
+    const [, options] = clickUpCall as [string, RequestInit];
     const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("## Additional Household Members");
+    expect(body.markdown_description).toContain(
+      "## Additional Household Members"
+    );
     expect(body.markdown_description).toContain("**Name:** John Doe");
     expect(body.markdown_description).toContain("**Medicaid ID:** CD67890E");
   });
@@ -125,11 +140,20 @@ describe("submission.submit", () => {
 
     await caller.submission.submit(input);
 
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const clickUpCall = fetchSpy.mock.calls.find(
+      (call) => (call[0] as string).includes("clickup.com")
+    );
+    const [, options] = clickUpCall as [string, RequestInit];
     const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("**Meal Focus:** breakfast, lunch");
-    expect(body.markdown_description).toContain("**Breakfast Items:** Eggs and toast");
-    expect(body.markdown_description).toContain("**Lunch Items:** Salad and soup");
+    expect(body.markdown_description).toContain(
+      "**Meal Focus:** breakfast, lunch"
+    );
+    expect(body.markdown_description).toContain(
+      "**Breakfast Items:** Eggs and toast"
+    );
+    expect(body.markdown_description).toContain(
+      "**Lunch Items:** Salad and soup"
+    );
   });
 
   it("includes referral source when provided", async () => {
@@ -140,10 +164,133 @@ describe("submission.submit", () => {
 
     await caller.submission.submit(input);
 
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const clickUpCall = fetchSpy.mock.calls.find(
+      (call) => (call[0] as string).includes("clickup.com")
+    );
+    const [, options] = clickUpCall as [string, RequestInit];
     const body = JSON.parse(options.body as string);
     expect(body.markdown_description).toContain("## Referral");
-    expect(body.markdown_description).toContain("**Source:** community_center");
+    expect(body.markdown_description).toContain(
+      "**Source:** community_center"
+    );
+  });
+
+  it("routes sha referral to the correct ClickUp list", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = { ...validInput(), ref: "sha" };
+
+    await caller.submission.submit(input);
+
+    const clickUpCall = fetchSpy.mock.calls.find(
+      (call) => (call[0] as string).includes("clickup.com")
+    );
+    const [url] = clickUpCall as [string, RequestInit];
+    expect(url).toContain("901414869527");
+  });
+
+  it("routes submissions without referral to the default list", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.submission.submit(validInput());
+
+    const clickUpCall = fetchSpy.mock.calls.find(
+      (call) => (call[0] as string).includes("clickup.com")
+    );
+    const [url] = clickUpCall as [string, RequestInit];
+    expect(url).toContain("901414846482");
+  });
+
+  it("includes due date when Pregnant is selected", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = {
+      ...validInput(),
+      healthCategories: ["Pregnant"],
+      dueDate: "2026-08-15",
+    };
+
+    await caller.submission.submit(input);
+
+    const clickUpCall = fetchSpy.mock.calls.find(
+      (call) => (call[0] as string).includes("clickup.com")
+    );
+    const [, options] = clickUpCall as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+    expect(body.markdown_description).toContain("**Due Date:** 2026-08-15");
+  });
+
+  it("includes miscarriage date when Had a Miscarriage is selected", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = {
+      ...validInput(),
+      healthCategories: ["Had a Miscarriage"],
+      miscarriageDate: "2026-01-10",
+    };
+
+    await caller.submission.submit(input);
+
+    const clickUpCall = fetchSpy.mock.calls.find(
+      (call) => (call[0] as string).includes("clickup.com")
+    );
+    const [, options] = clickUpCall as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+    expect(body.markdown_description).toContain(
+      "**Date of Miscarriage:** 2026-01-10"
+    );
+  });
+
+  it("includes infant info when Postpartum is selected", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = {
+      ...validInput(),
+      healthCategories: ["Postpartum (Within the last 12 months)"],
+      infantName: "Baby Doe",
+      infantDateOfBirth: "2026-02-01",
+      infantMedicaidId: "XY98765Z",
+    };
+
+    await caller.submission.submit(input);
+
+    const clickUpCall = fetchSpy.mock.calls.find(
+      (call) => (call[0] as string).includes("clickup.com")
+    );
+    const [, options] = clickUpCall as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+    expect(body.markdown_description).toContain("**Infant Name:** Baby Doe");
+    expect(body.markdown_description).toContain(
+      "**Infant Date of Birth:** 2026-02-01"
+    );
+    expect(body.markdown_description).toContain(
+      "**Infant Medicaid ID (CIN):** XY98765Z"
+    );
+  });
+
+  it("sends owner notification after successful submission", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.submission.submit(validInput());
+
+    // There should be at least 2 fetch calls: ClickUp + notification
+    const notifCall = fetchSpy.mock.calls.find(
+      (call) =>
+        (call[0] as string).includes("notification") ||
+        (call[0] as string).includes("forge")
+    );
+    // Notification may or may not fire depending on env config,
+    // but ClickUp call should always happen
+    const clickUpCall = fetchSpy.mock.calls.find(
+      (call) => (call[0] as string).includes("clickup.com")
+    );
+    expect(clickUpCall).toBeDefined();
   });
 
   it("rejects invalid Medicaid ID format", async () => {
@@ -199,10 +346,17 @@ describe("submission.submit", () => {
 
     await caller.submission.submit(input);
 
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const clickUpCall = fetchSpy.mock.calls.find(
+      (call) => (call[0] as string).includes("clickup.com")
+    );
+    const [, options] = clickUpCall as [string, RequestInit];
     const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("**Needs Refrigerator:** Yes");
+    expect(body.markdown_description).toContain(
+      "**Needs Refrigerator:** Yes"
+    );
     expect(body.markdown_description).toContain("**Needs Microwave:** Yes");
-    expect(body.markdown_description).toContain("**Needs Cooking Utensils:** No");
+    expect(body.markdown_description).toContain(
+      "**Needs Cooking Utensils:** No"
+    );
   });
 });

@@ -3,11 +3,10 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
+import { notifyOwner } from "./_core/notification";
 import { z } from "zod";
 
-// Referral → ClickUp List ID mapping
-// When a ?ref= parameter is present, submissions go to the referral list.
-// Direct submissions (no ref) go to the default list.
+// Referral -> ClickUp List ID mapping
 const REFERRAL_LIST_ID = "901414869527";
 const DEFAULT_LIST_ID = "901414846482";
 
@@ -16,6 +15,7 @@ const REFERRAL_LIST_MAP: Record<string, string> = {
   rosemary: REFERRAL_LIST_ID,
   chestnut: REFERRAL_LIST_ID,
   central: REFERRAL_LIST_ID,
+  sha: REFERRAL_LIST_ID,
 };
 
 export const appRouter = router({
@@ -37,7 +37,12 @@ export const appRouter = router({
           firstName: z.string().min(1),
           lastName: z.string().min(1),
           dateOfBirth: z.string().min(1),
-          medicaidId: z.string().regex(/^[A-Za-z]{2}\d{5}[A-Za-z]$/, "Medicaid ID must be 2 letters, 5 numbers, 1 letter"),
+          medicaidId: z
+            .string()
+            .regex(
+              /^[A-Za-z]{2}\d{5}[A-Za-z]$/,
+              "Medicaid ID must be 2 letters, 5 numbers, 1 letter"
+            ),
           cellPhone: z.string().min(1),
           homePhone: z.string().optional(),
           email: z.string().email(),
@@ -47,6 +52,13 @@ export const appRouter = router({
           state: z.string().min(1),
           zipcode: z.string().min(1),
           healthCategories: z.array(z.string()),
+          // Conditional health fields
+          dueDate: z.string().optional(),
+          miscarriageDate: z.string().optional(),
+          infantName: z.string().optional(),
+          infantDateOfBirth: z.string().optional(),
+          infantMedicaidId: z.string().optional(),
+          // Benefits
           employed: z.string().min(1),
           spouseEmployed: z.string().min(1),
           hasWic: z.string().min(1),
@@ -78,7 +90,7 @@ export const appRouter = router({
           (input.ref && REFERRAL_LIST_MAP[input.ref.toLowerCase()]) ||
           DEFAULT_LIST_ID;
 
-        const taskName = `${input.firstName} ${input.lastName} — ${input.supermarket}`;
+        const taskName = `${input.firstName} ${input.lastName} \u2014 ${input.supermarket}`;
 
         const lines: string[] = [];
         lines.push("## Personal Information");
@@ -105,6 +117,33 @@ export const appRouter = router({
         if (input.healthCategories.length > 0) {
           lines.push("## Health Categories");
           input.healthCategories.forEach((c) => lines.push(`- ${c}`));
+          // Conditional fields for health categories
+          if (
+            input.healthCategories.includes("Pregnant") &&
+            input.dueDate
+          ) {
+            lines.push(`**Due Date:** ${input.dueDate}`);
+          }
+          if (
+            input.healthCategories.includes("Had a Miscarriage") &&
+            input.miscarriageDate
+          ) {
+            lines.push(`**Date of Miscarriage:** ${input.miscarriageDate}`);
+          }
+          if (
+            input.healthCategories.includes(
+              "Postpartum (Within the last 12 months)"
+            )
+          ) {
+            if (input.infantName)
+              lines.push(`**Infant Name:** ${input.infantName}`);
+            if (input.infantDateOfBirth)
+              lines.push(`**Infant Date of Birth:** ${input.infantDateOfBirth}`);
+            if (input.infantMedicaidId)
+              lines.push(
+                `**Infant Medicaid ID (CIN):** ${input.infantMedicaidId}`
+              );
+          }
           lines.push("");
         }
 
@@ -114,7 +153,9 @@ export const appRouter = router({
         lines.push(`**WIC:** ${input.hasWic}`);
         lines.push(`**SNAP:** ${input.hasSnap}`);
         if (input.foodAllergies)
-          lines.push(`**Food Allergies / Dietary Restrictions:** ${input.foodAllergies}`);
+          lines.push(
+            `**Food Allergies / Dietary Restrictions:** ${input.foodAllergies}`
+          );
         lines.push(`**New Applicant:** ${input.newApplicant}`);
         lines.push("");
 
@@ -186,6 +227,17 @@ export const appRouter = router({
             const errorText = await response.text();
             console.error("[ClickUp API] Error:", response.status, errorText);
             throw new Error(`ClickUp API returned ${response.status}`);
+          }
+
+          // Send owner notification about new submission
+          try {
+            await notifyOwner({
+              title: `New Meal Application: ${input.firstName} ${input.lastName}`,
+              content: `A new food assistance application has been submitted.\n\n**Applicant:** ${input.firstName} ${input.lastName}\n**Email:** ${input.email}\n**Phone:** ${input.cellPhone}\n**Supermarket:** ${input.supermarket}\n**Reference:** ${refNumber}${input.ref ? `\n**Referral Source:** ${input.ref}` : ""}`,
+            });
+          } catch (notifError) {
+            // Notification failure should not block the submission
+            console.warn("[Notification] Failed to notify owner:", notifError);
           }
 
           return {

@@ -27,6 +27,8 @@ import {
   Phone,
   Mail,
   AlertCircle,
+  Baby,
+  Calendar,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -51,6 +53,11 @@ interface FormData {
   state: string;
   zipcode: string;
   healthCategories: string[];
+  dueDate: string;
+  miscarriageDate: string;
+  infantName: string;
+  infantDateOfBirth: string;
+  infantMedicaidId: string;
   employed: string;
   spouseEmployed: string;
   hasWic: string;
@@ -132,11 +139,13 @@ function validateStep2(data: FormData): FormErrors {
   const errors: FormErrors = {};
   if (!data.firstName.trim()) errors.firstName = "First name is required";
   if (!data.lastName.trim()) errors.lastName = "Last name is required";
-  if (!data.dateOfBirth.trim()) errors.dateOfBirth = "Date of birth is required";
+  if (!data.dateOfBirth.trim())
+    errors.dateOfBirth = "Date of birth is required";
   if (!data.medicaidId.trim()) {
     errors.medicaidId = "Medicaid ID is required";
   } else if (!/^[A-Za-z]{2}\d{5}[A-Za-z]$/.test(data.medicaidId)) {
-    errors.medicaidId = "Must be 2 letters, 5 numbers, 1 letter (e.g. AB12345C)";
+    errors.medicaidId =
+      "Must be 2 letters, 5 numbers, 1 letter (e.g. AB12345C)";
   }
   if (!data.cellPhone.trim()) {
     errors.cellPhone = "Cell phone is required";
@@ -148,10 +157,39 @@ function validateStep2(data: FormData): FormErrors {
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
     errors.email = "Please enter a valid email address";
   }
-  if (!data.streetAddress.trim()) errors.streetAddress = "Street address is required";
+  if (!data.streetAddress.trim())
+    errors.streetAddress = "Street address is required";
   if (!data.city.trim()) errors.city = "City is required";
   if (!data.state.trim()) errors.state = "State is required";
   if (!data.zipcode.trim()) errors.zipcode = "Zipcode is required";
+
+  // Conditional health field validations
+  if (
+    data.healthCategories.includes("Pregnant") &&
+    !data.dueDate.trim()
+  ) {
+    errors.dueDate = "Due date is required when Pregnant is selected";
+  }
+  if (
+    data.healthCategories.includes("Had a Miscarriage") &&
+    !data.miscarriageDate.trim()
+  ) {
+    errors.miscarriageDate =
+      "Date of miscarriage is required when Had a Miscarriage is selected";
+  }
+  if (
+    data.healthCategories.includes("Postpartum (Within the last 12 months)")
+  ) {
+    if (!data.infantName.trim())
+      errors.infantName = "Infant name is required when Postpartum is selected";
+    if (!data.infantDateOfBirth.trim())
+      errors.infantDateOfBirth =
+        "Infant date of birth is required when Postpartum is selected";
+    if (!data.infantMedicaidId.trim())
+      errors.infantMedicaidId =
+        "Infant Medicaid ID is required when Postpartum is selected";
+  }
+
   if (!data.employed) errors.employed = "Please select";
   if (!data.spouseEmployed) errors.spouseEmployed = "Please select";
   if (!data.hasWic) errors.hasWic = "Please select";
@@ -161,15 +199,18 @@ function validateStep2(data: FormData): FormErrors {
   for (let i = 0; i < count; i++) {
     const m = data.householdMembers[i];
     if (!m || !m.name.trim()) errors[`member_${i}_name`] = "Name is required";
-    if (!m || !m.dateOfBirth.trim()) errors[`member_${i}_dob`] = "DOB is required";
-    if (!m || !m.medicaidId.trim()) errors[`member_${i}_medicaidId`] = "Medicaid ID is required";
+    if (!m || !m.dateOfBirth.trim())
+      errors[`member_${i}_dob`] = "DOB is required";
+    if (!m || !m.medicaidId.trim())
+      errors[`member_${i}_medicaidId`] = "Medicaid ID is required";
   }
   return errors;
 }
 
 function validateStep3(data: FormData): FormErrors {
   const errors: FormErrors = {};
-  if (!data.healthyMealsRequest.trim()) errors.healthyMealsRequest = "This field is required";
+  if (!data.healthyMealsRequest.trim())
+    errors.healthyMealsRequest = "This field is required";
   if (!data.needsRefrigerator) errors.needsRefrigerator = "Please select";
   if (!data.needsMicrowave) errors.needsMicrowave = "Please select";
   if (!data.needsCookingUtensils) errors.needsCookingUtensils = "Please select";
@@ -244,6 +285,11 @@ const INITIAL_FORM: FormData = {
   state: "NY",
   zipcode: "",
   healthCategories: [],
+  dueDate: "",
+  miscarriageDate: "",
+  infantName: "",
+  infantDateOfBirth: "",
+  infantMedicaidId: "",
   employed: "",
   spouseEmployed: "",
   hasWic: "",
@@ -319,7 +365,9 @@ export default function Home() {
       });
       setErrors((prev) => {
         const next = { ...prev };
-        delete next[`member_${index}_${field === "dateOfBirth" ? "dob" : field}`];
+        delete next[
+          `member_${index}_${field === "dateOfBirth" ? "dob" : field}`
+        ];
         return next;
       });
     },
@@ -331,7 +379,29 @@ export default function Home() {
       const cats = prev.healthCategories.includes(category)
         ? prev.healthCategories.filter((c) => c !== category)
         : [...prev.healthCategories, category];
-      return { ...prev, healthCategories: cats };
+      // Clear conditional fields when unchecking
+      const updates: Partial<FormData> = { healthCategories: cats };
+      if (!cats.includes("Pregnant")) {
+        updates.dueDate = "";
+      }
+      if (!cats.includes("Had a Miscarriage")) {
+        updates.miscarriageDate = "";
+      }
+      if (!cats.includes("Postpartum (Within the last 12 months)")) {
+        updates.infantName = "";
+        updates.infantDateOfBirth = "";
+        updates.infantMedicaidId = "";
+      }
+      return { ...prev, ...updates };
+    });
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.dueDate;
+      delete next.miscarriageDate;
+      delete next.infantName;
+      delete next.infantDateOfBirth;
+      delete next.infantMedicaidId;
+      return next;
     });
   }, []);
 
@@ -375,6 +445,11 @@ export default function Home() {
       homePhone: formData.homePhone || undefined,
       aptUnit: formData.aptUnit || undefined,
       foodAllergies: formData.foodAllergies || undefined,
+      dueDate: formData.dueDate || undefined,
+      miscarriageDate: formData.miscarriageDate || undefined,
+      infantName: formData.infantName || undefined,
+      infantDateOfBirth: formData.infantDateOfBirth || undefined,
+      infantMedicaidId: formData.infantMedicaidId || undefined,
       breakfastItems: formData.breakfastItems || undefined,
       lunchItems: formData.lunchItems || undefined,
       dinnerItems: formData.dinnerItems || undefined,
@@ -410,7 +485,7 @@ export default function Home() {
 
       <main className="flex-1">
         <AnimatePresence mode="wait">
-          {/* ── Hero ────────────────────────────────────────────── */}
+          {/* Hero */}
           {step === 0 && (
             <motion.div
               key="hero"
@@ -438,7 +513,7 @@ export default function Home() {
                       As an SCN vendor, pick fresh meals from the best local
                       supermarkets in Williamsburg.{" "}
                       <span className="font-semibold text-foreground">
-                        {"You choose \u2014 no fixed boxes."}
+                        You choose &mdash; no fixed boxes.
                       </span>
                     </p>
                     <div className="flex items-center justify-center gap-3 text-sm text-muted-foreground mb-10 flex-wrap">
@@ -446,12 +521,12 @@ export default function Home() {
                         <ShieldCheck className="w-4 h-4 text-primary" />
                         Confidential
                       </span>
-                      <span className="text-border">{"\u2022"}</span>
+                      <span className="text-border">&bull;</span>
                       <span className="flex items-center gap-1.5">
                         <CheckCircle2 className="w-4 h-4 text-primary" />
                         SCN Approved
                       </span>
-                      <span className="text-border">{"\u2022"}</span>
+                      <span className="text-border">&bull;</span>
                       <span className="flex items-center gap-1.5">
                         <Heart className="w-4 h-4 text-primary" />
                         Local & Fresh
@@ -510,7 +585,7 @@ export default function Home() {
             </motion.div>
           )}
 
-          {/* ── Wizard Steps ────────────────────────────────────── */}
+          {/* Wizard Steps */}
           {step >= 1 && step <= 3 && (
             <motion.div
               key={`step-${step}`}
@@ -849,19 +924,218 @@ export default function Home() {
                       </p>
                       <div className="space-y-3">
                         {HEALTH_CATEGORIES.map((cat) => (
-                          <label
-                            key={cat}
-                            className="flex items-start gap-3 cursor-pointer group"
-                          >
-                            <Checkbox
-                              checked={formData.healthCategories.includes(cat)}
-                              onCheckedChange={() => toggleHealthCategory(cat)}
-                              className="mt-0.5"
-                            />
-                            <span className="text-sm text-foreground group-hover:text-primary transition-colors">
-                              {cat}
-                            </span>
-                          </label>
+                          <div key={cat}>
+                            <label className="flex items-start gap-3 cursor-pointer group">
+                              <Checkbox
+                                checked={formData.healthCategories.includes(cat)}
+                                onCheckedChange={() =>
+                                  toggleHealthCategory(cat)
+                                }
+                                className="mt-0.5"
+                              />
+                              <span className="text-sm text-foreground group-hover:text-primary transition-colors">
+                                {cat}
+                              </span>
+                            </label>
+
+                            {/* Pregnant -> Due Date */}
+                            {cat === "Pregnant" &&
+                              formData.healthCategories.includes(
+                                "Pregnant"
+                              ) && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: "auto" }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="ml-8 mt-2 mb-1"
+                                >
+                                  <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
+                                    <Label
+                                      htmlFor="dueDate"
+                                      className="text-sm flex items-center gap-1.5"
+                                    >
+                                      <Calendar className="w-3.5 h-3.5 text-primary" />
+                                      Due Date{" "}
+                                      <span className="text-destructive">
+                                        *
+                                      </span>
+                                    </Label>
+                                    <Input
+                                      id="dueDate"
+                                      type="date"
+                                      value={formData.dueDate}
+                                      onChange={(e) =>
+                                        updateField("dueDate", e.target.value)
+                                      }
+                                      className={`mt-1 max-w-xs ${
+                                        errors.dueDate
+                                          ? "border-destructive"
+                                          : ""
+                                      }`}
+                                    />
+                                    <FieldError error={errors.dueDate} />
+                                  </div>
+                                </motion.div>
+                              )}
+
+                            {/* Had a Miscarriage -> Date of Miscarriage */}
+                            {cat === "Had a Miscarriage" &&
+                              formData.healthCategories.includes(
+                                "Had a Miscarriage"
+                              ) && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: "auto" }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="ml-8 mt-2 mb-1"
+                                >
+                                  <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
+                                    <Label
+                                      htmlFor="miscarriageDate"
+                                      className="text-sm flex items-center gap-1.5"
+                                    >
+                                      <Calendar className="w-3.5 h-3.5 text-primary" />
+                                      Date of Miscarriage{" "}
+                                      <span className="text-destructive">
+                                        *
+                                      </span>
+                                    </Label>
+                                    <Input
+                                      id="miscarriageDate"
+                                      type="date"
+                                      value={formData.miscarriageDate}
+                                      onChange={(e) =>
+                                        updateField(
+                                          "miscarriageDate",
+                                          e.target.value
+                                        )
+                                      }
+                                      className={`mt-1 max-w-xs ${
+                                        errors.miscarriageDate
+                                          ? "border-destructive"
+                                          : ""
+                                      }`}
+                                    />
+                                    <FieldError
+                                      error={errors.miscarriageDate}
+                                    />
+                                  </div>
+                                </motion.div>
+                              )}
+
+                            {/* Postpartum -> Infant Name, DOB, Medicaid ID */}
+                            {cat ===
+                              "Postpartum (Within the last 12 months)" &&
+                              formData.healthCategories.includes(
+                                "Postpartum (Within the last 12 months)"
+                              ) && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: "auto" }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="ml-8 mt-2 mb-1"
+                                >
+                                  <div className="p-4 rounded-lg bg-primary/5 border border-primary/10 space-y-3">
+                                    <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                                      <Baby className="w-4 h-4 text-primary" />
+                                      Infant Information
+                                    </p>
+                                    <div>
+                                      <Label
+                                        htmlFor="infantName"
+                                        className="text-sm"
+                                      >
+                                        Infant Name{" "}
+                                        <span className="text-destructive">
+                                          *
+                                        </span>
+                                      </Label>
+                                      <Input
+                                        id="infantName"
+                                        placeholder="Enter infant's full name"
+                                        value={formData.infantName}
+                                        onChange={(e) =>
+                                          updateField(
+                                            "infantName",
+                                            e.target.value
+                                          )
+                                        }
+                                        className={`mt-1 ${
+                                          errors.infantName
+                                            ? "border-destructive"
+                                            : ""
+                                        }`}
+                                      />
+                                      <FieldError error={errors.infantName} />
+                                    </div>
+                                    <div>
+                                      <Label
+                                        htmlFor="infantDob"
+                                        className="text-sm flex items-center gap-1.5"
+                                      >
+                                        <Calendar className="w-3.5 h-3.5 text-primary" />
+                                        Infant Date of Birth{" "}
+                                        <span className="text-destructive">
+                                          *
+                                        </span>
+                                      </Label>
+                                      <Input
+                                        id="infantDob"
+                                        type="date"
+                                        value={formData.infantDateOfBirth}
+                                        onChange={(e) =>
+                                          updateField(
+                                            "infantDateOfBirth",
+                                            e.target.value
+                                          )
+                                        }
+                                        className={`mt-1 max-w-xs ${
+                                          errors.infantDateOfBirth
+                                            ? "border-destructive"
+                                            : ""
+                                        }`}
+                                      />
+                                      <FieldError
+                                        error={errors.infantDateOfBirth}
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label
+                                        htmlFor="infantMedicaidId"
+                                        className="text-sm"
+                                      >
+                                        Infant Medicaid ID (CIN){" "}
+                                        <span className="text-destructive">
+                                          *
+                                        </span>
+                                      </Label>
+                                      <Input
+                                        id="infantMedicaidId"
+                                        placeholder="Enter infant's Medicaid ID"
+                                        value={formData.infantMedicaidId}
+                                        onChange={(e) =>
+                                          updateField(
+                                            "infantMedicaidId",
+                                            e.target.value
+                                          )
+                                        }
+                                        className={`mt-1 ${
+                                          errors.infantMedicaidId
+                                            ? "border-destructive"
+                                            : ""
+                                        }`}
+                                      />
+                                      <FieldError
+                                        error={errors.infantMedicaidId}
+                                      />
+                                    </div>
+                                  </div>
+                                </motion.div>
+                              )}
+                          </div>
                         ))}
                       </div>
                     </CardContent>
@@ -876,10 +1150,26 @@ export default function Home() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {(
                           [
-                            { id: "employed", label: "Are you Employed?", key: "employed" },
-                            { id: "spouseEmployed", label: "Is the Spouse Employed?", key: "spouseEmployed" },
-                            { id: "hasWic", label: "Do you have WIC?", key: "hasWic" },
-                            { id: "hasSnap", label: "Do you have SNAP?", key: "hasSnap" },
+                            {
+                              id: "employed",
+                              label: "Are you Employed?",
+                              key: "employed",
+                            },
+                            {
+                              id: "spouseEmployed",
+                              label: "Is the Spouse Employed?",
+                              key: "spouseEmployed",
+                            },
+                            {
+                              id: "hasWic",
+                              label: "Do you have WIC?",
+                              key: "hasWic",
+                            },
+                            {
+                              id: "hasSnap",
+                              label: "Do you have SNAP?",
+                              key: "hasSnap",
+                            },
                           ] as const
                         ).map((q) => (
                           <div key={q.id}>
@@ -1392,7 +1682,7 @@ export default function Home() {
             </motion.div>
           )}
 
-          {/* ── Success ─────────────────────────────────────────── */}
+          {/* Success */}
           {step === 4 && (
             <motion.div
               key="success"

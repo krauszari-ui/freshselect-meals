@@ -26,3 +26,10 @@
 - [x] Mobile responsive design
 - [x] Write vitest tests for backend submission procedure
 - [x] Map referral parameter to ClickUp list ID 901414869527 for referral submissions
+- [x] Add 'sha' referral key routing to ClickUp list 901414869527
+- [x] Add conditional "Due date" field when Pregnant is checked
+- [x] Add conditional "Date of Miscarriage" field when Had a Miscarriage is checked
+- [x] Add conditional "Infant Name", "Infant Date of Birth", "Infant Medicaid ID (CIN)" fields when Postpartum is checked
+- [x] Add owner notification on each form submission
+- [x] Update backend to include new conditional fields in ClickUp task description
+- [x] Update tests for new fields and notification (19 tests passing)
