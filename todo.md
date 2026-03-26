@@ -1,0 +1,27 @@
+# Project TODO
+
+- [x] Set up warm Brooklyn/kosher color theme (earth tones, greens, oranges)
+- [x] Add Google Fonts for warm readable typography
+- [x] Create backend tRPC procedure for secure ClickUp API submission
+- [x] Store ClickUp API key as server-side secret
+- [x] Capture ?ref= URL parameter for referral routing
+- [x] Build 3-step wizard with progress indicator
+- [x] Step 1: Supermarket selection cards (Foodoo, Rosemary Kosher, Chestnut, Central Market)
+- [x] Step 2: Personal info (First Name, Last Name, DOB, Medicaid ID with validation)
+- [x] Step 2: Contact info (Phone, Email with validation)
+- [x] Step 2: Address fields pre-filled with Brooklyn/NY defaults
+- [x] Step 2: Health categories checkboxes
+- [x] Step 2: Benefits questions (Employed, Spouse Employed, WIC, SNAP)
+- [x] Step 2: New Applicant dropdown
+- [x] Step 2: Household members dropdown (1-9) with dynamic member fields
+- [x] Step 3: Meal focus multi-select (Breakfast, Lunch, Dinner, Snacks) with conditional text fields
+- [x] Step 3: Required text box for healthy meals from deli/counter
+- [x] Step 3: Optional specific items text box
+- [x] Step 3: Household appliances questions (Refrigerator, Microwave, Cooking Utensils)
+- [x] Form validation with real-time error messages
+- [x] Submit button with loading spinner and double-submit prevention
+- [x] Success confirmation page with reference number
+- [x] Hero section with headline, subheadline, and trust line
+- [x] Header with logo and CTA button
+- [x] Mobile responsive design
+- [x] Write vitest tests for backend submission procedure
