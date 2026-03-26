@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
-import { notifyOwner } from "./_core/notification";
+
 import { z } from "zod";
 
 // Referral -> ClickUp List ID mapping
@@ -77,8 +77,6 @@ export const appRouter = router({
           lunchItems: z.string().optional(),
           dinnerItems: z.string().optional(),
           snackItems: z.string().optional(),
-          healthyMealsRequest: z.string().min(1),
-          specificItems: z.string().optional(),
           needsRefrigerator: z.string().min(1),
           needsMicrowave: z.string().min(1),
           needsCookingUtensils: z.string().min(1),
@@ -181,11 +179,6 @@ export const appRouter = router({
           lines.push(`**Dinner Items:** ${input.dinnerItems}`);
         if (input.snackItems)
           lines.push(`**Snack Items:** ${input.snackItems}`);
-        lines.push(
-          `**Healthy Meals from Deli/Counter:** ${input.healthyMealsRequest}`
-        );
-        if (input.specificItems)
-          lines.push(`**Specific Items:** ${input.specificItems}`);
         lines.push("");
 
         lines.push("## Household Appliances / Cooking Needs");
@@ -227,17 +220,6 @@ export const appRouter = router({
             const errorText = await response.text();
             console.error("[ClickUp API] Error:", response.status, errorText);
             throw new Error(`ClickUp API returned ${response.status}`);
-          }
-
-          // Send owner notification about new submission
-          try {
-            await notifyOwner({
-              title: `New Meal Application: ${input.firstName} ${input.lastName}`,
-              content: `A new food assistance application has been submitted.\n\n**Applicant:** ${input.firstName} ${input.lastName}\n**Email:** ${input.email}\n**Phone:** ${input.cellPhone}\n**Supermarket:** ${input.supermarket}\n**Reference:** ${refNumber}${input.ref ? `\n**Referral Source:** ${input.ref}` : ""}`,
-            });
-          } catch (notifError) {
-            // Notification failure should not block the submission
-            console.warn("[Notification] Failed to notify owner:", notifError);
           }
 
           return {

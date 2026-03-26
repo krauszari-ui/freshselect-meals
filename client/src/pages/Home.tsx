@@ -71,8 +71,6 @@ interface FormData {
   lunchItems: string;
   dinnerItems: string;
   snackItems: string;
-  healthyMealsRequest: string;
-  specificItems: string;
   needsRefrigerator: string;
   needsMicrowave: string;
   needsCookingUtensils: string;
@@ -209,8 +207,6 @@ function validateStep2(data: FormData): FormErrors {
 
 function validateStep3(data: FormData): FormErrors {
   const errors: FormErrors = {};
-  if (!data.healthyMealsRequest.trim())
-    errors.healthyMealsRequest = "This field is required";
   if (!data.needsRefrigerator) errors.needsRefrigerator = "Please select";
   if (!data.needsMicrowave) errors.needsMicrowave = "Please select";
   if (!data.needsCookingUtensils) errors.needsCookingUtensils = "Please select";
@@ -303,8 +299,6 @@ const INITIAL_FORM: FormData = {
   lunchItems: "",
   dinnerItems: "",
   snackItems: "",
-  healthyMealsRequest: "",
-  specificItems: "",
   needsRefrigerator: "",
   needsMicrowave: "",
   needsCookingUtensils: "",
@@ -454,7 +448,6 @@ export default function Home() {
       lunchItems: formData.lunchItems || undefined,
       dinnerItems: formData.dinnerItems || undefined,
       snackItems: formData.snackItems || undefined,
-      specificItems: formData.specificItems || undefined,
     });
   };
 
@@ -1492,50 +1485,6 @@ export default function Home() {
                           </motion.div>
                         )}
                       </AnimatePresence>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-border/50">
-                    <CardContent className="p-6 space-y-4">
-                      <h3 className="font-semibold text-foreground text-base">
-                        Deli / Counter Selections
-                      </h3>
-                      <div>
-                        <Label htmlFor="healthyMeals">
-                          What healthy meals would you like this week from the
-                          deli/breakfast/lunch counter?{" "}
-                          <span className="text-destructive">*</span>
-                        </Label>
-                        <Textarea
-                          id="healthyMeals"
-                          placeholder="Tell us what you'd like prepared from the deli or counter..."
-                          value={formData.healthyMealsRequest}
-                          onChange={(e) =>
-                            updateField("healthyMealsRequest", e.target.value)
-                          }
-                          rows={3}
-                          className={
-                            errors.healthyMealsRequest
-                              ? "border-destructive"
-                              : ""
-                          }
-                        />
-                        <FieldError error={errors.healthyMealsRequest} />
-                      </div>
-                      <div>
-                        <Label htmlFor="specificItems">
-                          Any specific items you want? (Optional)
-                        </Label>
-                        <Textarea
-                          id="specificItems"
-                          placeholder="List any specific brands, products, or items..."
-                          value={formData.specificItems}
-                          onChange={(e) =>
-                            updateField("specificItems", e.target.value)
-                          }
-                          rows={2}
-                        />
-                      </div>
                     </CardContent>
                   </Card>
 

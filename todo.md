@@ -33,3 +33,7 @@
 - [x] Add owner notification on each form submission
 - [x] Update backend to include new conditional fields in ClickUp task description
 - [x] Update tests for new fields and notification (19 tests passing)
+- [x] Removed owner notification; applicant email included in ClickUp task for ClickUp Automation-based email
+- [x] Remove Deli / Counter Selections section from Step 3
+- [x] Remove healthyMealsRequest and specificItems fields from backend and frontend
+- [x] Update tests for removed fields and email notification change (19 tests passing)
