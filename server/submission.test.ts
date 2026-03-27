@@ -27,6 +27,7 @@ function validInput() {
     needsRefrigerator: "No",
     needsMicrowave: "No",
     needsCookingUtensils: "No",
+    hipaaConsent: true,
   };
 }
 
@@ -318,5 +319,42 @@ describe("submission.submit", () => {
     const body = JSON.parse(options.body as string);
     expect(body.markdown_description).not.toContain("Deli/Counter");
     expect(body.markdown_description).not.toContain("Specific Items");
+  });
+
+  it("includes Legal & Compliance section with HIPAA consent and timestamp", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.submission.submit(validInput());
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+    expect(body.markdown_description).toContain("## Legal & Compliance");
+    expect(body.markdown_description).toContain("**HIPAA Consent:** Granted");
+    expect(body.markdown_description).toContain("**Consent Timestamp:**");
+    expect(body.markdown_description).toContain(
+      '**Consent Text:** "I authorize FreshSelect Meals to securely process my health and household information to coordinate my SCN food benefits, and I agree to the Privacy Policy."'
+    );
+  });
+
+  it("rejects submission when HIPAA consent is false", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = { ...validInput(), hipaaConsent: false };
+
+    await expect(caller.submission.submit(input)).rejects.toThrow();
+  });
+
+  it("uses Mother's Personal Information heading in ClickUp description", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.submission.submit(validInput());
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+    expect(body.markdown_description).toContain("## Mother's Personal Information");
+    expect(body.markdown_description).not.toMatch(/## Personal Information[^\n]/);
   });
 });

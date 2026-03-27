@@ -74,6 +74,7 @@ interface FormData {
   needsRefrigerator: string;
   needsMicrowave: string;
   needsCookingUtensils: string;
+  hipaaConsent: boolean;
 }
 
 type FormErrors = Partial<Record<string, string>>;
@@ -210,6 +211,7 @@ function validateStep3(data: FormData): FormErrors {
   if (!data.needsRefrigerator) errors.needsRefrigerator = "Please select";
   if (!data.needsMicrowave) errors.needsMicrowave = "Please select";
   if (!data.needsCookingUtensils) errors.needsCookingUtensils = "Please select";
+  if (!data.hipaaConsent) errors.hipaaConsent = "You must agree to the HIPAA consent to submit this application";
   return errors;
 }
 
@@ -302,6 +304,7 @@ const INITIAL_FORM: FormData = {
   needsRefrigerator: "",
   needsMicrowave: "",
   needsCookingUtensils: "",
+  hipaaConsent: false,
 };
 
 export default function Home() {
@@ -435,6 +438,7 @@ export default function Home() {
   const handleSubmit = () => {
     submitMutation.mutate({
       ...formData,
+      hipaaConsent: formData.hipaaConsent,
       ref: refParam || undefined,
       homePhone: formData.homePhone || undefined,
       aptUnit: formData.aptUnit || undefined,
@@ -656,7 +660,7 @@ export default function Home() {
                         <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
                           <Store className="w-4 h-4 text-primary" />
                         </div>
-                        Personal Information
+                        Mother's Personal Information
                       </h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
@@ -1579,6 +1583,41 @@ export default function Home() {
                     </CardContent>
                   </Card>
                 </div>
+              )}
+
+              {/* HIPAA Consent - Step 3 only */}
+              {step === 3 && (
+                <Card className={`mt-6 ${errors.hipaaConsent ? 'border-destructive/50 bg-destructive/5' : 'border-primary/20 bg-primary/5'}`}>
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="hipaaConsent"
+                        checked={formData.hipaaConsent}
+                        onCheckedChange={(checked) =>
+                          updateField("hipaaConsent", checked === true)
+                        }
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <Label
+                          htmlFor="hipaaConsent"
+                          className="text-sm leading-relaxed cursor-pointer font-normal"
+                        >
+                          I authorize FreshSelect Meals to securely process my
+                          health and household information to coordinate my SCN
+                          food benefits, and I agree to the{" "}
+                          <span className="text-primary underline">Privacy Policy</span>.
+                          <span className="text-destructive ml-1">*</span>
+                        </Label>
+                        <FieldError error={errors.hipaaConsent} />
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      HIPAA-compliant data handling
+                    </div>
+                  </CardContent>
+                </Card>
               )}
 
               {/* Navigation */}

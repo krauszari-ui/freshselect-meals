@@ -37,3 +37,7 @@
 - [x] Remove Deli / Counter Selections section from Step 3
 - [x] Remove healthyMealsRequest and specificItems fields from backend and frontend
 - [x] Update tests for removed fields and email notification change (19 tests passing)
+- [x] Add required HIPAA consent checkbox at bottom of Step 3 above Submit button
+- [x] Add Zod validation for consent (z.boolean().refine(val => val === true))
+- [x] Record consent with timestamp in ClickUp task under "Legal & Compliance" heading
+- [x] Rename "Personal Information" heading to "Mother's Personal Information" in Step 2

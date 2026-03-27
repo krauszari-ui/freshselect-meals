@@ -80,6 +80,9 @@ export const appRouter = router({
           needsRefrigerator: z.string().min(1),
           needsMicrowave: z.string().min(1),
           needsCookingUtensils: z.string().min(1),
+          hipaaConsent: z.boolean().refine((val) => val === true, {
+            message: "HIPAA consent is required",
+          }),
           ref: z.string().optional(),
         })
       )
@@ -91,7 +94,7 @@ export const appRouter = router({
         const taskName = `${input.firstName} ${input.lastName} \u2014 ${input.supermarket}`;
 
         const lines: string[] = [];
-        lines.push("## Personal Information");
+        lines.push("## Mother's Personal Information");
         lines.push(`**Name:** ${input.firstName} ${input.lastName}`);
         lines.push(`**Date of Birth:** ${input.dateOfBirth}`);
         lines.push(`**Medicaid ID:** ${input.medicaidId}`);
@@ -191,6 +194,14 @@ export const appRouter = router({
           lines.push(`## Referral`);
           lines.push(`**Source:** ${input.ref}`);
         }
+
+        lines.push("");
+        lines.push("## Legal & Compliance");
+        lines.push(`**HIPAA Consent:** Granted`);
+        lines.push(`**Consent Timestamp:** ${new Date().toISOString()}`);
+        lines.push(
+          `**Consent Text:** "I authorize FreshSelect Meals to securely process my health and household information to coordinate my SCN food benefits, and I agree to the Privacy Policy."`
+        );
 
         const description = lines.join("\n");
 
