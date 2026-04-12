@@ -41,3 +41,15 @@
 - [x] Add Zod validation for consent (z.boolean().refine(val => val === true))
 - [x] Record consent with timestamp in ClickUp task under "Legal & Compliance" heading
 - [x] Rename "Personal Information" heading to "Mother's Personal Information" in Step 2
+
+## Login & Tracking System
+- [x] Create submissions table in database schema
+- [x] Run database migration for submissions table
+- [x] Store submissions in DB on form submit (alongside ClickUp, DB-first resilience)
+- [x] Add admin tRPC procedures: list submissions, get detail, update status
+- [x] Build admin login page (Manus OAuth)
+- [x] Build admin dashboard with submissions table (search, filter, sort)
+- [x] Build application detail view with full data and status management
+- [x] Add status workflow: New → In Review → Approved → Rejected → On Hold
+- [x] Add admin route protection (admin role only)
+- [x] Write tests for new admin procedures (12 admin tests + 34 total passing)

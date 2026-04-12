@@ -272,7 +272,8 @@ describe("submission.submit", () => {
     await expect(caller.submission.submit(input)).rejects.toThrow();
   });
 
-  it("throws when ClickUp API returns an error", async () => {
+  it("succeeds even when ClickUp API returns an error (DB-first resilience)", async () => {
+    // ClickUp returns 401 but submission is still saved to DB
     fetchSpy.mockResolvedValueOnce(
       new Response("Unauthorized", { status: 401 })
     );
@@ -280,9 +281,10 @@ describe("submission.submit", () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    await expect(caller.submission.submit(validInput())).rejects.toThrow(
-      "We could not submit your application at this time"
-    );
+    // Should still succeed — DB save happens before ClickUp call
+    const result = await caller.submission.submit(validInput());
+    expect(result.success).toBe(true);
+    expect(result.referenceNumber).toBeTruthy();
   });
 
   it("includes appliance needs in the description", async () => {

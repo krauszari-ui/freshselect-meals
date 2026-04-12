@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq, like, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertSubmission, InsertUser, Submission, submissions, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,135 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// ─── Submission helpers ────────────────────────────────────────────────────
+
+export async function createSubmission(data: InsertSubmission): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(submissions).values(data);
+}
+
+export async function getSubmissionByRef(referenceNumber: string): Promise<Submission | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db
+    .select()
+    .from(submissions)
+    .where(eq(submissions.referenceNumber, referenceNumber))
+    .limit(1);
+  return result[0];
+}
+
+export async function getSubmissionById(id: number): Promise<Submission | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db
+    .select()
+    .from(submissions)
+    .where(eq(submissions.id, id))
+    .limit(1);
+  return result[0];
+}
+
+export interface ListSubmissionsOptions {
+  search?: string;
+  status?: Submission["status"] | "all";
+  supermarket?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const { search, status, supermarket, page = 1, pageSize = 20 } = opts;
+  const offset = (page - 1) * pageSize;
+
+  const conditions = [];
+
+  if (search && search.trim()) {
+    const q = `%${search.trim()}%`;
+    conditions.push(
+      or(
+        like(submissions.firstName, q),
+        like(submissions.lastName, q),
+        like(submissions.email, q),
+        like(submissions.medicaidId, q),
+        like(submissions.referenceNumber, q),
+        like(submissions.cellPhone, q)
+      )
+    );
+  }
+
+  if (status && status !== "all") {
+    conditions.push(eq(submissions.status, status));
+  }
+
+  if (supermarket && supermarket !== "all") {
+    conditions.push(eq(submissions.supermarket, supermarket));
+  }
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [rows, countResult] = await Promise.all([
+    db
+      .select()
+      .from(submissions)
+      .where(where)
+      .orderBy(desc(submissions.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(submissions)
+      .where(where),
+  ]);
+
+  const total = Number(countResult[0]?.count ?? 0);
+
+  return { rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+}
+
+export async function updateSubmissionStatus(
+  id: number,
+  status: Submission["status"],
+  adminNotes?: string
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const updateData: Partial<InsertSubmission> = { status };
+  if (adminNotes !== undefined) updateData.adminNotes = adminNotes;
+
+  await db.update(submissions).set(updateData).where(eq(submissions.id, id));
+}
+
+export async function getSubmissionStats() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db
+    .select({
+      status: submissions.status,
+      count: sql<number>`count(*)`,
+    })
+    .from(submissions)
+    .groupBy(submissions.status);
+
+  const stats: Record<string, number> = {
+    total: 0,
+    new: 0,
+    in_review: 0,
+    approved: 0,
+    rejected: 0,
+    on_hold: 0,
+  };
+
+  for (const row of result) {
+    stats[row.status] = Number(row.count);
+    stats.total += Number(row.count);
+  }
+
+  return stats;
+}
