@@ -6,11 +6,21 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
 import {
   createSubmission,
+  getAllSubmissions,
   getSubmissionById,
   getSubmissionStats,
+  listAllUsers,
   listSubmissions,
+  listWorkers,
+  setUserRole,
+  toggleWorkerActive,
+  updateSubmissionEmailSent,
   updateSubmissionStatus,
+  updateWorkerPermissions,
+  type WorkerPermissions,
 } from "./db";
+import { sendAdminNotification, sendApplicantConfirmation } from "./email";
+import { storagePut } from "./storage";
 import { z } from "zod";
 
 // Referral -> ClickUp List ID mapping
@@ -31,6 +41,39 @@ const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
     throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
   }
   return next({ ctx });
+});
+
+// Worker or Admin guard
+const staffProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin" && ctx.user.role !== "worker") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Staff access required" });
+  }
+  return next({ ctx });
+});
+
+const householdMemberSchema = z.object({
+  name: z.string(),
+  dateOfBirth: z.string(),
+  medicaidId: z.string(),
+});
+
+const screeningQuestionsSchema = z.object({
+  livingSituation: z.string().optional(),
+  utilityShutoff: z.string().optional(),
+  receivesSnap: z.string().optional(),
+  receivesWic: z.string().optional(),
+  receivesTanf: z.string().optional(),
+  enrolledHealthHome: z.string().optional(),
+  householdMembersCount: z.string().optional(),
+  householdMembersWithMedicaid: z.string().optional(),
+  needsWorkAssistance: z.string().optional(),
+  wantsSchoolHelp: z.string().optional(),
+  transportationBarrier: z.string().optional(),
+  hasChronicIllness: z.string().optional(),
+  otherHealthIssues: z.string().optional(),
+  medicationsRequireRefrigeration: z.string().optional(),
+  pregnantOrPostpartum: z.string().optional(),
+  breastmilkRefrigeration: z.string().optional(),
 });
 
 const submissionInputSchema = z.object({
@@ -60,14 +103,10 @@ const submissionInputSchema = z.object({
   hasWic: z.string().min(1),
   hasSnap: z.string().min(1),
   foodAllergies: z.string().optional(),
+  foodAllergiesDetails: z.string().optional(),
+  dietaryRestrictions: z.string().optional(),
   newApplicant: z.string().min(1),
-  householdMembers: z.array(
-    z.object({
-      name: z.string(),
-      dateOfBirth: z.string(),
-      medicaidId: z.string(),
-    })
-  ),
+  householdMembers: z.array(householdMemberSchema),
   mealFocus: z.array(z.string()),
   breakfastItems: z.string().optional(),
   lunchItems: z.string().optional(),
@@ -80,6 +119,10 @@ const submissionInputSchema = z.object({
     message: "HIPAA consent is required",
   }),
   ref: z.string().optional(),
+  // SCN Screening Questions
+  screeningQuestions: screeningQuestionsSchema.optional(),
+  // Document upload URLs (stored after upload)
+  uploadedDocuments: z.record(z.string(), z.string()).optional(),
 });
 
 function buildClickUpDescription(input: z.infer<typeof submissionInputSchema>): string {
@@ -105,6 +148,29 @@ function buildClickUpDescription(input: z.infer<typeof submissionInputSchema>): 
   lines.push(`**Selected:** ${input.supermarket}`);
   lines.push("");
 
+  // SCN Screening Questions
+  if (input.screeningQuestions) {
+    const sq = input.screeningQuestions;
+    lines.push("## SCN Screening Questions");
+    if (sq.livingSituation) lines.push(`1. **Current Living Situation:** ${sq.livingSituation}`);
+    if (sq.utilityShutoff) lines.push(`2. **Utility Shutoff Threat:** ${sq.utilityShutoff}`);
+    if (sq.receivesSnap) lines.push(`3. **Receives SNAP:** ${sq.receivesSnap}`);
+    if (sq.receivesWic) lines.push(`4. **Receives WIC:** ${sq.receivesWic}`);
+    if (sq.receivesTanf) lines.push(`5. **Receives TANF:** ${sq.receivesTanf}`);
+    if (sq.enrolledHealthHome) lines.push(`6. **Enrolled in Health Home:** ${sq.enrolledHealthHome}`);
+    if (sq.householdMembersCount) lines.push(`7. **Household Members:** ${sq.householdMembersCount}`);
+    if (sq.householdMembersWithMedicaid) lines.push(`8. **Members with Medicaid:** ${sq.householdMembersWithMedicaid}`);
+    if (sq.needsWorkAssistance) lines.push(`9. **Needs Work Assistance:** ${sq.needsWorkAssistance}`);
+    if (sq.wantsSchoolHelp) lines.push(`10. **Wants School/Training Help:** ${sq.wantsSchoolHelp}`);
+    if (sq.transportationBarrier) lines.push(`11. **Transportation Barrier:** ${sq.transportationBarrier}`);
+    if (sq.hasChronicIllness) lines.push(`12. **Has Chronic Illness:** ${sq.hasChronicIllness}`);
+    if (sq.otherHealthIssues) lines.push(`13. **Other Health Issues:** ${sq.otherHealthIssues}`);
+    if (sq.medicationsRequireRefrigeration) lines.push(`14. **Medications Require Refrigeration:** ${sq.medicationsRequireRefrigeration}`);
+    if (sq.pregnantOrPostpartum) lines.push(`15. **Pregnant or Postpartum:** ${sq.pregnantOrPostpartum}`);
+    if (sq.breastmilkRefrigeration) lines.push(`16. **Breastmilk Refrigeration:** ${sq.breastmilkRefrigeration}`);
+    lines.push("");
+  }
+
   if (input.healthCategories.length > 0) {
     lines.push("## Health Categories");
     input.healthCategories.forEach((c) => lines.push(`- ${c}`));
@@ -125,9 +191,19 @@ function buildClickUpDescription(input: z.infer<typeof submissionInputSchema>): 
   lines.push(`**Spouse Employed:** ${input.spouseEmployed}`);
   lines.push(`**WIC:** ${input.hasWic}`);
   lines.push(`**SNAP:** ${input.hasSnap}`);
-  if (input.foodAllergies) lines.push(`**Food Allergies / Dietary Restrictions:** ${input.foodAllergies}`);
   lines.push(`**New Applicant:** ${input.newApplicant}`);
   lines.push("");
+
+  // Food Allergies / Dietary Restrictions
+  if (input.foodAllergies || input.dietaryRestrictions) {
+    lines.push("## Food Allergies / Dietary Restrictions");
+    if (input.foodAllergies) {
+      lines.push(`**Food Allergies:** ${input.foodAllergies}`);
+      if (input.foodAllergiesDetails) lines.push(`**Details:** ${input.foodAllergiesDetails}`);
+    }
+    if (input.dietaryRestrictions) lines.push(`**Dietary Restrictions:** ${input.dietaryRestrictions}`);
+    lines.push("");
+  }
 
   if (input.householdMembers.length > 0) {
     lines.push("## Additional Household Members");
@@ -152,6 +228,16 @@ function buildClickUpDescription(input: z.infer<typeof submissionInputSchema>): 
   lines.push(`**Needs Refrigerator:** ${input.needsRefrigerator}`);
   lines.push(`**Needs Microwave:** ${input.needsMicrowave}`);
   lines.push(`**Needs Cooking Utensils:** ${input.needsCookingUtensils}`);
+
+  // Uploaded documents
+  if (input.uploadedDocuments && Object.keys(input.uploadedDocuments).length > 0) {
+    lines.push("");
+    lines.push("## Uploaded Documents");
+    for (const [key, url] of Object.entries(input.uploadedDocuments)) {
+      const label = key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
+      lines.push(`**${label}:** ${url}`);
+    }
+  }
 
   if (input.ref) {
     lines.push("");
@@ -181,6 +267,28 @@ export const appRouter = router({
     }),
   }),
 
+  // ─── File Upload ──────────────────────────────────────────────────────────
+  upload: router({
+    document: publicProcedure
+      .input(
+        z.object({
+          fileName: z.string(),
+          fileData: z.string(), // base64 encoded
+          contentType: z.string(),
+          category: z.string(), // e.g. "motherMedicaidCard", "childBirthCertificate_0"
+        })
+      )
+      .mutation(async ({ input }) => {
+        const buffer = Buffer.from(input.fileData, "base64");
+        const suffix = Math.random().toString(36).substring(2, 8);
+        const ext = input.fileName.split(".").pop() || "file";
+        const key = `documents/${input.category}-${suffix}.${ext}`;
+        const { url } = await storagePut(key, buffer, input.contentType);
+        return { url, key };
+      }),
+  }),
+
+  // ─── Submission ───────────────────────────────────────────────────────────
   submission: router({
     submit: publicProcedure
       .input(submissionInputSchema)
@@ -209,7 +317,36 @@ export const appRouter = router({
           clickupTaskId: null,
         });
 
-        // 2. Try to send to ClickUp (non-blocking — don't fail if ClickUp is down)
+        // 2. Send emails (non-blocking)
+        const emailData = {
+          referenceNumber: refNumber,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email,
+          cellPhone: input.cellPhone,
+          medicaidId: input.medicaidId,
+          supermarket: input.supermarket,
+          formData: input as unknown as Record<string, unknown>,
+        };
+
+        // Fire and forget - don't block submission on email
+        Promise.all([
+          sendApplicantConfirmation(emailData),
+          sendAdminNotification(emailData),
+        ]).then(([applicantSent, adminSent]) => {
+          if (applicantSent || adminSent) {
+            // Update email sent timestamp
+            listSubmissions({ search: refNumber, pageSize: 1 }).then((res) => {
+              if (res.rows[0]) {
+                updateSubmissionEmailSent(res.rows[0].id).catch(console.error);
+              }
+            });
+          }
+          if (!applicantSent) console.warn("[Email] Failed to send applicant confirmation for", refNumber);
+          if (!adminSent) console.warn("[Email] Failed to send admin notification for", refNumber);
+        }).catch(console.error);
+
+        // 3. Try to send to ClickUp (non-blocking)
         try {
           const response = await fetch(`https://api.clickup.com/api/v2/list/${listId}/task`, {
             method: "POST",
@@ -224,16 +361,7 @@ export const appRouter = router({
             }),
           });
 
-          if (response.ok) {
-            const data = (await response.json()) as { id?: string };
-            if (data.id) {
-              // Update the DB record with the ClickUp task ID
-              const saved = await listSubmissions({ search: refNumber, pageSize: 1 });
-              if (saved.rows[0]) {
-                await updateSubmissionStatus(saved.rows[0].id, "new");
-              }
-            }
-          } else {
+          if (!response.ok) {
             console.warn("[ClickUp] Non-OK response:", response.status);
           }
         } catch (err) {
@@ -244,7 +372,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── Admin procedures ────────────────────────────────────────────────────
+  // ─── Admin procedures ─────────────────────────────────────────────────────
   admin: router({
     stats: adminProcedure.query(async () => {
       return getSubmissionStats();
@@ -294,6 +422,171 @@ export const appRouter = router({
         await updateSubmissionStatus(input.id, input.status, input.adminNotes);
         return { success: true };
       }),
+
+    // CSV Export
+    exportCsv: adminProcedure
+      .input(
+        z.object({
+          status: z.string().optional(),
+          supermarket: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const rows = await getAllSubmissions({
+          status: input.status,
+          supermarket: input.supermarket,
+        });
+
+        const headers = [
+          "Reference #",
+          "First Name",
+          "Last Name",
+          "Email",
+          "Phone",
+          "Medicaid ID",
+          "Supermarket",
+          "Status",
+          "Referral Source",
+          "Submitted",
+        ];
+
+        const csvRows = rows.map((r) => [
+          r.referenceNumber,
+          r.firstName,
+          r.lastName,
+          r.email,
+          r.cellPhone,
+          r.medicaidId,
+          r.supermarket,
+          r.status,
+          r.referralSource || "",
+          r.createdAt.toISOString(),
+        ]);
+
+        const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+        const csv = [
+          headers.map(escape).join(","),
+          ...csvRows.map((row) => row.map(escape).join(",")),
+        ].join("\n");
+
+        return { csv, count: rows.length };
+      }),
+
+    // ─── Worker management ────────────────────────────────────────────────
+    workers: router({
+      list: adminProcedure.query(async () => {
+        return listWorkers();
+      }),
+
+      allUsers: adminProcedure.query(async () => {
+        return listAllUsers();
+      }),
+
+      promote: adminProcedure
+        .input(
+          z.object({
+            userId: z.number(),
+            permissions: z.object({
+              canView: z.boolean(),
+              canEdit: z.boolean(),
+              canExport: z.boolean(),
+            }),
+          })
+        )
+        .mutation(async ({ input }) => {
+          await setUserRole(input.userId, "worker");
+          await updateWorkerPermissions(input.userId, input.permissions);
+          return { success: true };
+        }),
+
+      updatePermissions: adminProcedure
+        .input(
+          z.object({
+            userId: z.number(),
+            permissions: z.object({
+              canView: z.boolean(),
+              canEdit: z.boolean(),
+              canExport: z.boolean(),
+            }),
+          })
+        )
+        .mutation(async ({ input }) => {
+          await updateWorkerPermissions(input.userId, input.permissions);
+          return { success: true };
+        }),
+
+      toggleActive: adminProcedure
+        .input(z.object({ userId: z.number(), isActive: z.boolean() }))
+        .mutation(async ({ input }) => {
+          await toggleWorkerActive(input.userId, input.isActive);
+          return { success: true };
+        }),
+
+      demote: adminProcedure
+        .input(z.object({ userId: z.number() }))
+        .mutation(async ({ input }) => {
+          await setUserRole(input.userId, "user");
+          return { success: true };
+        }),
+    }),
+  }),
+
+  // ─── Staff procedures (workers + admins) ──────────────────────────────────
+  staff: router({
+    list: staffProcedure
+      .input(
+        z.object({
+          search: z.string().optional(),
+          status: z
+            .enum(["all", "new", "in_review", "approved", "rejected", "on_hold"])
+            .optional(),
+          supermarket: z.string().optional(),
+          page: z.number().min(1).optional(),
+          pageSize: z.number().min(1).max(100).optional(),
+        })
+      )
+      .query(async ({ ctx, input }) => {
+        // Check worker permissions
+        if (ctx.user.role === "worker") {
+          const perms = (ctx.user as unknown as { permissions: WorkerPermissions | null }).permissions;
+          if (!perms?.canView) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "You do not have view permission" });
+          }
+        }
+        return listSubmissions({
+          search: input.search,
+          status: input.status as "all" | "new" | "in_review" | "approved" | "rejected" | "on_hold",
+          supermarket: input.supermarket,
+          page: input.page,
+          pageSize: input.pageSize,
+        });
+      }),
+
+    getById: staffProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role === "worker") {
+          const perms = (ctx.user as unknown as { permissions: WorkerPermissions | null }).permissions;
+          if (!perms?.canView) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "You do not have view permission" });
+          }
+        }
+        const submission = await getSubmissionById(input.id);
+        if (!submission) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Submission not found" });
+        }
+        return submission;
+      }),
+
+    stats: staffProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role === "worker") {
+        const perms = (ctx.user as unknown as { permissions: WorkerPermissions | null }).permissions;
+        if (!perms?.canView) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You do not have view permission" });
+        }
+      }
+      return getSubmissionStats();
+    }),
   }),
 });
 

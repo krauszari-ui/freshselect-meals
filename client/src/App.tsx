@@ -8,17 +8,21 @@ import Home from "./pages/Home";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminApplicationDetail from "./pages/AdminApplicationDetail";
+import AdminWorkers from "./pages/AdminWorkers";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 function Router() {
   return (
     <Switch>
       {/* Public */}
       <Route path={"/"} component={Home} />
+      <Route path={"/privacy"} component={PrivacyPolicy} />
 
       {/* Admin */}
       <Route path={"/admin"} component={AdminLogin} />
       <Route path={"/admin/dashboard"} component={AdminDashboard} />
       <Route path={"/admin/application/:id"} component={AdminApplicationDetail} />
+      <Route path={"/admin/workers"} component={AdminWorkers} />
 
       {/* Fallback */}
       <Route path={"/404"} component={NotFound} />

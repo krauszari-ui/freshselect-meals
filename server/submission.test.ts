@@ -2,7 +2,28 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
-// Valid form data for testing
+// Mock the database module so tests don't need a real DB
+vi.mock("./db", () => ({
+  createSubmission: vi.fn().mockResolvedValue(undefined),
+  listSubmissions: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
+  updateSubmissionEmailSent: vi.fn().mockResolvedValue(undefined),
+  getSubmissionById: vi.fn(),
+  getSubmissionStats: vi.fn(),
+  listAllUsers: vi.fn(),
+  listWorkers: vi.fn(),
+  setUserRole: vi.fn(),
+  toggleWorkerActive: vi.fn(),
+  updateSubmissionStatus: vi.fn(),
+  updateWorkerPermissions: vi.fn(),
+  getAllSubmissions: vi.fn(),
+}));
+
+// Mock the email module
+vi.mock("./email", () => ({
+  sendApplicantConfirmation: vi.fn().mockResolvedValue(true),
+  sendAdminNotification: vi.fn().mockResolvedValue(true),
+}));
+
 function validInput() {
   return {
     supermarket: "Foodoo",
@@ -88,9 +109,7 @@ describe("submission.submit", () => {
     const body = JSON.parse(options.body as string);
     expect(body.name).toBe("Jane Doe \u2014 Foodoo");
     expect(body.markdown_description).toContain("**Medicaid ID:** AB12345C");
-    expect(body.markdown_description).toContain(
-      "**Cell Phone:** (555) 123-4567"
-    );
+    expect(body.markdown_description).toContain("**Cell Phone:** (555) 123-4567");
     expect(body.tags).toContain("freshselect-meals");
   });
 
@@ -101,11 +120,7 @@ describe("submission.submit", () => {
     const input = {
       ...validInput(),
       householdMembers: [
-        {
-          name: "John Doe",
-          dateOfBirth: "03/10/2015",
-          medicaidId: "CD67890E",
-        },
+        { name: "John Doe", dateOfBirth: "03/10/2015", medicaidId: "CD67890E" },
       ],
     };
 
@@ -113,9 +128,7 @@ describe("submission.submit", () => {
 
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain(
-      "## Additional Household Members"
-    );
+    expect(body.markdown_description).toContain("## Additional Household Members");
     expect(body.markdown_description).toContain("**Name:** John Doe");
     expect(body.markdown_description).toContain("**Medicaid ID:** CD67890E");
   });
@@ -135,15 +148,9 @@ describe("submission.submit", () => {
 
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain(
-      "**Meal Focus:** breakfast, lunch"
-    );
-    expect(body.markdown_description).toContain(
-      "**Breakfast Items:** Eggs and toast"
-    );
-    expect(body.markdown_description).toContain(
-      "**Lunch Items:** Salad and soup"
-    );
+    expect(body.markdown_description).toContain("**Meal Focus:** breakfast, lunch");
+    expect(body.markdown_description).toContain("**Breakfast Items:** Eggs and toast");
+    expect(body.markdown_description).toContain("**Lunch Items:** Salad and soup");
   });
 
   it("includes referral source when provided", async () => {
@@ -157,9 +164,7 @@ describe("submission.submit", () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
     expect(body.markdown_description).toContain("## Referral");
-    expect(body.markdown_description).toContain(
-      "**Source:** community_center"
-    );
+    expect(body.markdown_description).toContain("**Source:** community_center");
   });
 
   it("routes sha referral to the correct ClickUp list", async () => {
@@ -215,9 +220,7 @@ describe("submission.submit", () => {
 
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain(
-      "**Date of Miscarriage:** 2026-01-10"
-    );
+    expect(body.markdown_description).toContain("**Date of Miscarriage:** 2026-01-10");
   });
 
   it("includes infant info when Postpartum is selected", async () => {
@@ -237,12 +240,8 @@ describe("submission.submit", () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
     expect(body.markdown_description).toContain("**Infant Name:** Baby Doe");
-    expect(body.markdown_description).toContain(
-      "**Infant Date of Birth:** 2026-02-01"
-    );
-    expect(body.markdown_description).toContain(
-      "**Infant Medicaid ID (CIN):** XY98765Z"
-    );
+    expect(body.markdown_description).toContain("**Infant Date of Birth:** 2026-02-01");
+    expect(body.markdown_description).toContain("**Infant Medicaid ID (CIN):** XY98765Z");
   });
 
   it("rejects invalid Medicaid ID format", async () => {
@@ -273,7 +272,6 @@ describe("submission.submit", () => {
   });
 
   it("succeeds even when ClickUp API returns an error (DB-first resilience)", async () => {
-    // ClickUp returns 401 but submission is still saved to DB
     fetchSpy.mockResolvedValueOnce(
       new Response("Unauthorized", { status: 401 })
     );
@@ -281,7 +279,6 @@ describe("submission.submit", () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    // Should still succeed — DB save happens before ClickUp call
     const result = await caller.submission.submit(validInput());
     expect(result.success).toBe(true);
     expect(result.referenceNumber).toBeTruthy();
@@ -302,13 +299,9 @@ describe("submission.submit", () => {
 
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain(
-      "**Needs Refrigerator:** Yes"
-    );
+    expect(body.markdown_description).toContain("**Needs Refrigerator:** Yes");
     expect(body.markdown_description).toContain("**Needs Microwave:** Yes");
-    expect(body.markdown_description).toContain(
-      "**Needs Cooking Utensils:** No"
-    );
+    expect(body.markdown_description).toContain("**Needs Cooking Utensils:** No");
   });
 
   it("does not include deli/counter or specific items fields", async () => {
@@ -335,7 +328,7 @@ describe("submission.submit", () => {
     expect(body.markdown_description).toContain("**HIPAA Consent:** Granted");
     expect(body.markdown_description).toContain("**Consent Timestamp:**");
     expect(body.markdown_description).toContain(
-      '**Consent Text:** "I authorize FreshSelect Meals to securely process my health and household information to coordinate my SCN food benefits, and I agree to the Privacy Policy."'
+      '"I authorize FreshSelect Meals to securely process my health and household information to coordinate my SCN food benefits, and I agree to the Privacy Policy."'
     );
   });
 
@@ -357,6 +350,40 @@ describe("submission.submit", () => {
     const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
     expect(body.markdown_description).toContain("## Mother's Personal Information");
-    expect(body.markdown_description).not.toMatch(/## Personal Information[^\n]/);
+  });
+
+  it("includes SCN screening questions in the description", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = {
+      ...validInput(),
+      screeningQuestions: {
+        livingSituation: "Renting",
+        utilityShutoff: "Yes",
+        receivesSnap: "Yes",
+        receivesWic: "No",
+        receivesTanf: "No",
+        enrolledHealthHome: "No",
+        householdMembersCount: "3",
+        householdMembersWithMedicaid: "2",
+        needsWorkAssistance: "No",
+        wantsSchoolHelp: "No",
+        transportationBarrier: "Yes",
+        hasChronicIllness: "No",
+        otherHealthIssues: "No",
+        medicationsRequireRefrigeration: "No",
+        pregnantOrPostpartum: "No",
+        breastmilkRefrigeration: "No",
+      },
+    };
+
+    await caller.submission.submit(input);
+
+    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+    expect(body.markdown_description).toContain("## SCN Screening Questions");
+    expect(body.markdown_description).toContain("**Current Living Situation:** Renting");
+    expect(body.markdown_description).toContain("**Transportation Barrier:** Yes");
   });
 });

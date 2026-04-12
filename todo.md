@@ -53,3 +53,20 @@
 - [x] Add status workflow: New → In Review → Approved → Rejected → On Hold
 - [x] Add admin route protection (admin role only)
 - [x] Write tests for new admin procedures (12 admin tests + 34 total passing)
+
+## Major Update - Landing Page, Form Restructure, Workers, Email
+- [x] Restructure form flow: Landing page → Form (with screening questions + uploads) → Grocery selection
+- [x] Build landing page from pasted SCN content (eligibility, programs, how it works, contact info)
+- [x] Add all 16 SCN screening questions to form (from image)
+- [x] Add Food Allergies / Dietary Restrictions section to form
+- [x] Add document upload fields: mother's Medicaid card, birth certificate, marriage license
+- [x] Add per-child document uploads: Medicaid card, birth certificate for each child
+- [x] Move grocery/supermarket selection to AFTER the form
+- [x] Add worker login system with admin-controlled permissions
+- [x] Add CSV export button on admin dashboard
+- [x] Create Privacy Policy page based on NYS HIPAA laws
+- [x] Link HIPAA consent checkbox to Privacy Policy page
+- [x] Set up email notifications: send form copy to applicant's email
+- [x] Set up email notifications: send every application to info@freshselectmeals.com
+- [x] Update contact information to info@freshselectmeals.com
+- [x] Update DB schema for file uploads and worker roles

@@ -2,6 +2,7 @@ import { int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "driz
 
 /**
  * Core user table backing auth flow.
+ * role: admin (full access), worker (limited access), user (public)
  */
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
@@ -9,7 +10,11 @@ export const users = mysqlTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: mysqlEnum("role", ["user", "admin", "worker"]).default("user").notNull(),
+  /** Worker-specific: permissions JSON (e.g. { canView: true, canEdit: false, canExport: false }) */
+  permissions: json("permissions"),
+  /** Worker-specific: whether the worker account is active */
+  isActive: int("isActive").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -25,27 +30,25 @@ export type InsertUser = typeof users.$inferInsert;
 export const submissions = mysqlTable("submissions", {
   id: int("id").autoincrement().primaryKey(),
   referenceNumber: varchar("referenceNumber", { length: 16 }).notNull().unique(),
-  // Core identifiers (indexed for fast search)
   firstName: varchar("firstName", { length: 128 }).notNull(),
   lastName: varchar("lastName", { length: 128 }).notNull(),
   email: varchar("email", { length: 320 }).notNull(),
   cellPhone: varchar("cellPhone", { length: 32 }).notNull(),
   medicaidId: varchar("medicaidId", { length: 32 }).notNull(),
   supermarket: varchar("supermarket", { length: 128 }).notNull(),
-  // Referral source (from ?ref= query param)
   referralSource: varchar("referralSource", { length: 128 }),
-  // Application status workflow
   status: mysqlEnum("status", ["new", "in_review", "approved", "rejected", "on_hold"])
     .default("new")
     .notNull(),
-  // Admin notes
   adminNotes: text("adminNotes"),
-  // Full form payload stored as JSON
+  /** Full form payload stored as JSON (includes screening answers, uploads, etc.) */
   formData: json("formData").notNull(),
-  // HIPAA consent timestamp
   hipaaConsentAt: timestamp("hipaaConsentAt").notNull(),
-  // ClickUp task ID (if successfully sent)
   clickupTaskId: varchar("clickupTaskId", { length: 64 }),
+  /** Whether confirmation email was sent */
+  emailSentAt: timestamp("emailSentAt"),
+  /** Assigned worker ID */
+  assignedTo: int("assignedTo"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

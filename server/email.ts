@@ -1,0 +1,226 @@
+import { Resend } from "resend";
+import { ENV } from "./_core/env";
+
+let _resend: Resend | null = null;
+
+function getResend(): Resend {
+  if (!_resend) {
+    _resend = new Resend(ENV.resendApiKey);
+  }
+  return _resend;
+}
+
+const FROM_EMAIL = "FreshSelect Meals <onboarding@resend.dev>";
+const ADMIN_EMAIL = "info@freshselectmeals.com";
+
+interface SubmissionEmailData {
+  referenceNumber: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  cellPhone: string;
+  medicaidId: string;
+  supermarket: string;
+  formData: Record<string, unknown>;
+}
+
+function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
+  const fd = data.formData as Record<string, unknown>;
+  const screeningQuestions = fd.screeningQuestions as Record<string, unknown> | undefined;
+  const householdMembers = fd.householdMembers as Array<Record<string, string>> | undefined;
+  const healthCategories = fd.healthCategories as string[] | undefined;
+  const mealFocus = fd.mealFocus as string[] | undefined;
+
+  let html = `
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-family: 'Georgia', serif; color: #2d2d2d; background: #faf8f5; margin: 0; padding: 20px; }
+  .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 32px; border: 1px solid #e8e0d4; }
+  .header { text-align: center; border-bottom: 2px solid #2d5a27; padding-bottom: 16px; margin-bottom: 24px; }
+  .header h1 { color: #2d5a27; font-size: 24px; margin: 0; }
+  .header p { color: #6b7280; font-size: 14px; margin: 4px 0 0; }
+  .section { margin-bottom: 20px; }
+  .section h3 { color: #2d5a27; font-size: 16px; border-bottom: 1px solid #e8e0d4; padding-bottom: 6px; margin-bottom: 12px; }
+  .field { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f3f0eb; }
+  .field-label { color: #6b7280; font-size: 13px; }
+  .field-value { color: #2d2d2d; font-size: 13px; font-weight: 600; }
+  .ref-box { background: #f0f7ef; border: 1px solid #2d5a27; border-radius: 8px; padding: 16px; text-align: center; margin-bottom: 20px; }
+  .ref-box .ref { font-size: 24px; font-weight: bold; color: #2d5a27; letter-spacing: 2px; }
+  .footer { text-align: center; color: #9ca3af; font-size: 12px; margin-top: 24px; padding-top: 16px; border-top: 1px solid #e8e0d4; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>FreshSelect Meals</h1>
+    <p>${isAdmin ? "New Application Received" : "Your Application Confirmation"}</p>
+  </div>
+  <div class="ref-box">
+    <div style="font-size:12px;color:#6b7280;">Reference Number</div>
+    <div class="ref">${data.referenceNumber}</div>
+  </div>
+
+  <div class="section">
+    <h3>Mother's Personal Information</h3>
+    <div class="field"><span class="field-label">Name</span><span class="field-value">${data.firstName} ${data.lastName}</span></div>
+    <div class="field"><span class="field-label">Date of Birth</span><span class="field-value">${fd.dateOfBirth || "N/A"}</span></div>
+    <div class="field"><span class="field-label">Medicaid ID</span><span class="field-value">${data.medicaidId}</span></div>
+  </div>
+
+  <div class="section">
+    <h3>Contact Information</h3>
+    <div class="field"><span class="field-label">Phone</span><span class="field-value">${data.cellPhone}</span></div>
+    <div class="field"><span class="field-label">Email</span><span class="field-value">${data.email}</span></div>
+    <div class="field"><span class="field-label">Address</span><span class="field-value">${fd.streetAddress || ""}, ${fd.city || "Brooklyn"}, ${fd.state || "NY"} ${fd.zipcode || ""}</span></div>
+  </div>
+
+  <div class="section">
+    <h3>Supermarket</h3>
+    <div class="field"><span class="field-label">Selected Store</span><span class="field-value">${data.supermarket}</span></div>
+  </div>`;
+
+  if (screeningQuestions && Object.keys(screeningQuestions).length > 0) {
+    html += `
+  <div class="section">
+    <h3>SCN Screening Questions</h3>`;
+    const labels: Record<string, string> = {
+      livingSituation: "Current Living Situation",
+      utilityShutoff: "Utility Shutoff Threat",
+      receivesSnap: "Receives SNAP",
+      receivesWic: "Receives WIC",
+      receivesTanf: "Receives TANF",
+      enrolledHealthHome: "Enrolled in Health Home",
+      householdMembers: "Household Members",
+      householdMembersWithMedicaid: "Members with Medicaid",
+      needsWorkAssistance: "Needs Work Assistance",
+      wantsSchoolHelp: "Wants School/Training Help",
+      transportationBarrier: "Transportation Barrier",
+      hasChronicIllness: "Has Chronic Illness",
+      otherHealthIssues: "Other Health Issues",
+      medicationsRequireRefrigeration: "Medications Require Refrigeration",
+      pregnantOrPostpartum: "Pregnant or Postpartum",
+      breastmilkRefrigeration: "Breastmilk Refrigeration Needed",
+    };
+    for (const [key, label] of Object.entries(labels)) {
+      const val = (screeningQuestions as Record<string, unknown>)[key];
+      if (val !== undefined && val !== null && val !== "") {
+        html += `<div class="field"><span class="field-label">${label}</span><span class="field-value">${val}</span></div>`;
+      }
+    }
+    html += `</div>`;
+  }
+
+  if (healthCategories && healthCategories.length > 0) {
+    html += `
+  <div class="section">
+    <h3>Health Categories</h3>
+    <div class="field"><span class="field-label">Selected</span><span class="field-value">${healthCategories.join(", ")}</span></div>`;
+    if (fd.dueDate) html += `<div class="field"><span class="field-label">Due Date</span><span class="field-value">${fd.dueDate}</span></div>`;
+    if (fd.miscarriageDate) html += `<div class="field"><span class="field-label">Miscarriage Date</span><span class="field-value">${fd.miscarriageDate}</span></div>`;
+    if (fd.infantName) html += `<div class="field"><span class="field-label">Infant Name</span><span class="field-value">${fd.infantName}</span></div>`;
+    html += `</div>`;
+  }
+
+  if (fd.foodAllergies || fd.dietaryRestrictions) {
+    html += `
+  <div class="section">
+    <h3>Food Allergies / Dietary Restrictions</h3>`;
+    if (fd.foodAllergies) html += `<div class="field"><span class="field-label">Food Allergies</span><span class="field-value">${fd.foodAllergiesDetails || fd.foodAllergies}</span></div>`;
+    if (fd.dietaryRestrictions) html += `<div class="field"><span class="field-label">Dietary Restrictions</span><span class="field-value">${fd.dietaryRestrictions}</span></div>`;
+    html += `</div>`;
+  }
+
+  if (householdMembers && householdMembers.length > 0) {
+    html += `
+  <div class="section">
+    <h3>Household Members</h3>`;
+    householdMembers.forEach((m, i) => {
+      html += `<div class="field"><span class="field-label">Member ${i + 1}</span><span class="field-value">${m.name || "N/A"} (DOB: ${m.dob || "N/A"}, CIN: ${m.medicaidId || "N/A"})</span></div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (mealFocus && mealFocus.length > 0) {
+    html += `
+  <div class="section">
+    <h3>Meal Preferences</h3>
+    <div class="field"><span class="field-label">Meal Focus</span><span class="field-value">${mealFocus.join(", ")}</span></div>
+  </div>`;
+  }
+
+  html += `
+  <div class="section">
+    <h3>Household Appliances</h3>
+    <div class="field"><span class="field-label">Needs Refrigerator</span><span class="field-value">${fd.needsRefrigerator || "N/A"}</span></div>
+    <div class="field"><span class="field-label">Needs Microwave</span><span class="field-value">${fd.needsMicrowave || "N/A"}</span></div>
+    <div class="field"><span class="field-label">Needs Cooking Utensils</span><span class="field-value">${fd.needsCookingUtensils || "N/A"}</span></div>
+  </div>`;
+
+  if (isAdmin) {
+    const uploadUrls = fd.uploadedDocuments as Record<string, string> | undefined;
+    if (uploadUrls && Object.keys(uploadUrls).length > 0) {
+      html += `
+  <div class="section">
+    <h3>Uploaded Documents</h3>`;
+      for (const [key, url] of Object.entries(uploadUrls)) {
+        const label = key.replace(/([A-Z])/g, " $1").replace(/^./, (s: string) => s.toUpperCase());
+        html += `<div class="field"><span class="field-label">${label}</span><span class="field-value"><a href="${url}" style="color:#2d5a27;">View Document</a></span></div>`;
+      }
+      html += `</div>`;
+    }
+  }
+
+  html += `
+  <div class="footer">
+    <p>${isAdmin ? "This is an automated notification from FreshSelect Meals." : "Thank you for your application. Our team will review it and contact you within 5 business days."}</p>
+    <p>FreshSelect Meals &mdash; SCN Approved Vendor</p>
+    <p>Contact: info@freshselectmeals.com</p>
+  </div>
+</div>
+</body>
+</html>`;
+
+  return html;
+}
+
+export async function sendApplicantConfirmation(data: SubmissionEmailData): Promise<boolean> {
+  try {
+    const resend = getResend();
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [data.email],
+      subject: `FreshSelect Meals - Application Received (Ref: ${data.referenceNumber})`,
+      html: buildEmailHtml(data, false),
+    });
+    if (error) {
+      console.error("[Email] Failed to send applicant confirmation:", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[Email] Error sending applicant confirmation:", err);
+    return false;
+  }
+}
+
+export async function sendAdminNotification(data: SubmissionEmailData): Promise<boolean> {
+  try {
+    const resend = getResend();
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [ADMIN_EMAIL],
+      subject: `New Application: ${data.firstName} ${data.lastName} (Ref: ${data.referenceNumber})`,
+      html: buildEmailHtml(data, true),
+    });
+    if (error) {
+      console.error("[Email] Failed to send admin notification:", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[Email] Error sending admin notification:", err);
+    return false;
+  }
+}

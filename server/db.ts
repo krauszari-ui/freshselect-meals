@@ -1,11 +1,10 @@
-import { and, desc, eq, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, like, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertSubmission, InsertUser, Submission, submissions, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -179,6 +178,22 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   return { rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
 }
 
+export async function getAllSubmissions(opts: { status?: string; supermarket?: string } = {}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const conditions = [];
+  if (opts.status && opts.status !== "all") {
+    conditions.push(eq(submissions.status, opts.status as Submission["status"]));
+  }
+  if (opts.supermarket && opts.supermarket !== "all") {
+    conditions.push(eq(submissions.supermarket, opts.supermarket));
+  }
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  return db.select().from(submissions).where(where).orderBy(desc(submissions.createdAt));
+}
+
 export async function updateSubmissionStatus(
   id: number,
   status: Submission["status"],
@@ -191,6 +206,12 @@ export async function updateSubmissionStatus(
   if (adminNotes !== undefined) updateData.adminNotes = adminNotes;
 
   await db.update(submissions).set(updateData).where(eq(submissions.id, id));
+}
+
+export async function updateSubmissionEmailSent(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(submissions).set({ emailSentAt: new Date() }).where(eq(submissions.id, id));
 }
 
 export async function getSubmissionStats() {
@@ -220,4 +241,55 @@ export async function getSubmissionStats() {
   }
 
   return stats;
+}
+
+// ─── Worker management helpers ────────────────────────────────────────────
+
+export interface WorkerPermissions {
+  canView: boolean;
+  canEdit: boolean;
+  canExport: boolean;
+}
+
+export async function listWorkers() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db
+    .select()
+    .from(users)
+    .where(eq(users.role, "worker"))
+    .orderBy(desc(users.createdAt));
+}
+
+export async function updateWorkerPermissions(
+  userId: number,
+  permissions: WorkerPermissions
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(users)
+    .set({ permissions: permissions as unknown as null })
+    .where(eq(users.id, userId));
+}
+
+export async function toggleWorkerActive(userId: number, isActive: boolean): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(users)
+    .set({ isActive: isActive ? 1 : 0 })
+    .where(eq(users.id, userId));
+}
+
+export async function setUserRole(userId: number, role: "user" | "admin" | "worker"): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ role }).where(eq(users.id, userId));
+}
+
+export async function listAllUsers() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(users).orderBy(desc(users.createdAt));
 }

@@ -17,6 +17,7 @@ import {
   ChevronRight,
   ClipboardList,
   Clock,
+  Download,
   Eye,
   Loader2,
   LogOut,
@@ -26,10 +27,11 @@ import {
   ShieldCheck,
   Store,
   Users,
+  UserCog,
   XCircle,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 
 type StatusKey = "all" | "new" | "in_review" | "approved" | "rejected" | "on_hold";
 type SupermarketKey = "all" | "Foodoo" | "Rosemary Kosher Supermarket" | "Chestnut Supermarket" | "Central Market";
@@ -111,6 +113,20 @@ export default function AdminDashboard() {
     supermarket: supermarketFilter === "all" ? undefined : supermarketFilter,
     page,
     pageSize: 15,
+  });
+
+  const exportCsvMutation = trpc.admin.exportCsv.useMutation({
+    onSuccess: (data) => {
+      const blob = new Blob([data.csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `freshselect-submissions-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
   });
 
   type ListData = {
@@ -200,6 +216,10 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <Link href="/admin/workers" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+              <UserCog className="w-4 h-4" />
+              <span className="hidden sm:inline">Workers</span>
+            </Link>
             <span className="hidden sm:block text-xs text-muted-foreground">
               {user?.name || user?.email}
             </span>
@@ -239,15 +259,36 @@ export default function AdminDashboard() {
           <CardHeader className="pb-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <CardTitle className="text-base font-semibold">Applications</CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => listQuery.refetch()}
-                className="gap-1.5 text-muted-foreground self-start sm:self-auto"
-              >
-                <RefreshCw className={`w-4 h-4 ${listQuery.isFetching ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    exportCsvMutation.mutate({
+                      status: statusFilter !== "all" ? statusFilter : undefined,
+                      supermarket: supermarketFilter !== "all" ? supermarketFilter : undefined,
+                    });
+                  }}
+                  disabled={exportCsvMutation.isPending}
+                  className="gap-1.5"
+                >
+                  {exportCsvMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  Export CSV
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => listQuery.refetch()}
+                  className="gap-1.5 text-muted-foreground"
+                >
+                  <RefreshCw className={`w-4 h-4 ${listQuery.isFetching ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </div>
             </div>
 
             {/* Filters */}

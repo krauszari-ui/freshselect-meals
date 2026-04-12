@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,13 +29,40 @@ import {
   AlertCircle,
   Baby,
   Calendar,
+  Upload,
+  FileText,
+  X,
+  Users,
+  ClipboardList,
+  Apple,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+/* ─── Types ──────────────────────────────────────────────────────────────── */
 
 interface HouseholdMember {
   name: string;
   dateOfBirth: string;
   medicaidId: string;
+}
+
+interface ScreeningQuestions {
+  livingSituation: string;
+  utilityShutoff: string;
+  receivesSnap: string;
+  receivesWic: string;
+  receivesTanf: string;
+  enrolledHealthHome: string;
+  householdMembersCount: string;
+  householdMembersWithMedicaid: string;
+  needsWorkAssistance: string;
+  wantsSchoolHelp: string;
+  transportationBarrier: string;
+  hasChronicIllness: string;
+  otherHealthIssues: string;
+  medicationsRequireRefrigeration: string;
+  pregnantOrPostpartum: string;
+  breastmilkRefrigeration: string;
 }
 
 interface FormData {
@@ -63,6 +90,8 @@ interface FormData {
   hasWic: string;
   hasSnap: string;
   foodAllergies: string;
+  foodAllergiesDetails: string;
+  dietaryRestrictions: string;
   newApplicant: string;
   additionalMembersCount: string;
   householdMembers: HouseholdMember[];
@@ -75,198 +104,36 @@ interface FormData {
   needsMicrowave: string;
   needsCookingUtensils: string;
   hipaaConsent: boolean;
+  screeningQuestions: ScreeningQuestions;
 }
 
 type FormErrors = Partial<Record<string, string>>;
 
-const SUPERMARKETS = [
-  {
-    name: "Foodoo",
-    address: "249 Wallabout St.",
-    color: "from-green-50 to-emerald-50",
-    borderColor: "border-green-200",
-    selectedBorder: "border-green-500 ring-2 ring-green-200",
-  },
-  {
-    name: "Rosemary Kosher Supermarket",
-    address: "392 Flushing Ave.",
-    color: "from-amber-50 to-orange-50",
-    borderColor: "border-amber-200",
-    selectedBorder: "border-amber-500 ring-2 ring-amber-200",
-  },
-  {
-    name: "Chestnut Supermarket",
-    address: "700 Myrtle Ave.",
-    color: "from-orange-50 to-red-50",
-    borderColor: "border-orange-200",
-    selectedBorder: "border-orange-500 ring-2 ring-orange-200",
-  },
-  {
-    name: "Central Market",
-    address: "50-54 Division Ave.",
-    color: "from-blue-50 to-indigo-50",
-    borderColor: "border-blue-200",
-    selectedBorder: "border-blue-500 ring-2 ring-blue-200",
-  },
-];
-
-const HEALTH_CATEGORIES = [
-  "Enrolled in Health Home Care Management",
-  "Pregnant",
-  "Had a Miscarriage",
-  "Postpartum (Within the last 12 months)",
-  "Substance Use Disorder diagnosis",
-  "Serious Mental Illness diagnosis",
-  "Child under the age of 18 diagnosed with a chronic condition",
-  "Any other health condition",
-];
-
-const MEAL_OPTIONS = [
-  { id: "breakfast", label: "Breakfast" },
-  { id: "lunch", label: "Lunch" },
-  { id: "dinner", label: "Dinner" },
-  { id: "snacks", label: "Snacks" },
-];
-
-function validateStep1(data: FormData): FormErrors {
-  const errors: FormErrors = {};
-  if (!data.supermarket) errors.supermarket = "Please select a supermarket";
-  return errors;
+interface UploadedDoc {
+  url: string;
+  fileName: string;
 }
 
-function validateStep2(data: FormData): FormErrors {
-  const errors: FormErrors = {};
-  if (!data.firstName.trim()) errors.firstName = "First name is required";
-  if (!data.lastName.trim()) errors.lastName = "Last name is required";
-  if (!data.dateOfBirth.trim())
-    errors.dateOfBirth = "Date of birth is required";
-  if (!data.medicaidId.trim()) {
-    errors.medicaidId = "Medicaid ID is required";
-  } else if (!/^[A-Za-z]{2}\d{5}[A-Za-z]$/.test(data.medicaidId)) {
-    errors.medicaidId =
-      "Must be 2 letters, 5 numbers, 1 letter (e.g. AB12345C)";
-  }
-  if (!data.cellPhone.trim()) {
-    errors.cellPhone = "Cell phone is required";
-  } else if (!/^[\d\s\-\(\)\+]{7,}$/.test(data.cellPhone)) {
-    errors.cellPhone = "Please enter a valid phone number";
-  }
-  if (!data.email.trim()) {
-    errors.email = "Email is required";
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
-    errors.email = "Please enter a valid email address";
-  }
-  if (!data.streetAddress.trim())
-    errors.streetAddress = "Street address is required";
-  if (!data.city.trim()) errors.city = "City is required";
-  if (!data.state.trim()) errors.state = "State is required";
-  if (!data.zipcode.trim()) errors.zipcode = "Zipcode is required";
+/* ─── Constants ──────────────────────────────────────────────────────────── */
 
-  // Conditional health field validations
-  if (
-    data.healthCategories.includes("Pregnant") &&
-    !data.dueDate.trim()
-  ) {
-    errors.dueDate = "Due date is required when Pregnant is selected";
-  }
-  if (
-    data.healthCategories.includes("Had a Miscarriage") &&
-    !data.miscarriageDate.trim()
-  ) {
-    errors.miscarriageDate =
-      "Date of miscarriage is required when Had a Miscarriage is selected";
-  }
-  if (
-    data.healthCategories.includes("Postpartum (Within the last 12 months)")
-  ) {
-    if (!data.infantName.trim())
-      errors.infantName = "Infant name is required when Postpartum is selected";
-    if (!data.infantDateOfBirth.trim())
-      errors.infantDateOfBirth =
-        "Infant date of birth is required when Postpartum is selected";
-    if (!data.infantMedicaidId.trim())
-      errors.infantMedicaidId =
-        "Infant Medicaid ID is required when Postpartum is selected";
-  }
-
-  if (!data.employed) errors.employed = "Please select";
-  if (!data.spouseEmployed) errors.spouseEmployed = "Please select";
-  if (!data.hasWic) errors.hasWic = "Please select";
-  if (!data.hasSnap) errors.hasSnap = "Please select";
-  if (!data.newApplicant) errors.newApplicant = "Please select";
-  const count = parseInt(data.additionalMembersCount) || 0;
-  for (let i = 0; i < count; i++) {
-    const m = data.householdMembers[i];
-    if (!m || !m.name.trim()) errors[`member_${i}_name`] = "Name is required";
-    if (!m || !m.dateOfBirth.trim())
-      errors[`member_${i}_dob`] = "DOB is required";
-    if (!m || !m.medicaidId.trim())
-      errors[`member_${i}_medicaidId`] = "Medicaid ID is required";
-  }
-  return errors;
-}
-
-function validateStep3(data: FormData): FormErrors {
-  const errors: FormErrors = {};
-  if (!data.needsRefrigerator) errors.needsRefrigerator = "Please select";
-  if (!data.needsMicrowave) errors.needsMicrowave = "Please select";
-  if (!data.needsCookingUtensils) errors.needsCookingUtensils = "Please select";
-  if (!data.hipaaConsent) errors.hipaaConsent = "You must agree to the HIPAA consent to submit this application";
-  return errors;
-}
-
-function FieldError({ error }: { error?: string }) {
-  if (!error) return null;
-  return (
-    <p className="text-destructive text-sm mt-1 flex items-center gap-1">
-      <AlertCircle className="w-3.5 h-3.5" />
-      {error}
-    </p>
-  );
-}
-
-function ProgressBar({ step }: { step: number }) {
-  const steps = [
-    { num: 1, label: "Supermarket" },
-    { num: 2, label: "Household" },
-    { num: 3, label: "Meals" },
-  ];
-  return (
-    <div className="flex items-center justify-center gap-0 mb-8 px-4">
-      {steps.map((s, i) => (
-        <div key={s.num} className="flex items-center">
-          <div className="flex flex-col items-center">
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 ${
-                step > s.num
-                  ? "bg-primary text-primary-foreground"
-                  : step === s.num
-                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {step > s.num ? <CheckCircle2 className="w-5 h-5" /> : s.num}
-            </div>
-            <span
-              className={`text-xs mt-1.5 font-medium ${
-                step >= s.num ? "text-foreground" : "text-muted-foreground"
-              }`}
-            >
-              {s.label}
-            </span>
-          </div>
-          {i < steps.length - 1 && (
-            <div
-              className={`w-16 sm:w-24 h-0.5 mx-2 mb-5 transition-colors duration-300 ${
-                step > s.num ? "bg-primary" : "bg-muted"
-              }`}
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
+const INITIAL_SCREENING: ScreeningQuestions = {
+  livingSituation: "",
+  utilityShutoff: "",
+  receivesSnap: "",
+  receivesWic: "",
+  receivesTanf: "",
+  enrolledHealthHome: "",
+  householdMembersCount: "",
+  householdMembersWithMedicaid: "",
+  needsWorkAssistance: "",
+  wantsSchoolHelp: "",
+  transportationBarrier: "",
+  hasChronicIllness: "",
+  otherHealthIssues: "",
+  medicationsRequireRefrigeration: "",
+  pregnantOrPostpartum: "",
+  breastmilkRefrigeration: "",
+};
 
 const INITIAL_FORM: FormData = {
   supermarket: "",
@@ -293,6 +160,8 @@ const INITIAL_FORM: FormData = {
   hasWic: "",
   hasSnap: "",
   foodAllergies: "",
+  foodAllergiesDetails: "",
+  dietaryRestrictions: "",
   newApplicant: "",
   additionalMembersCount: "0",
   householdMembers: [],
@@ -305,1432 +174,1517 @@ const INITIAL_FORM: FormData = {
   needsMicrowave: "",
   needsCookingUtensils: "",
   hipaaConsent: false,
+  screeningQuestions: { ...INITIAL_SCREENING },
 };
 
-export default function Home() {
-  const [step, setStep] = useState(0);
-  const [refParam, setRefParam] = useState("");
-  const [referenceNumber, setReferenceNumber] = useState("");
-  const [errors, setErrors] = useState<FormErrors>({});
-  const [formData, setFormData] = useState<FormData>({ ...INITIAL_FORM });
+const SUPERMARKETS = [
+  { name: "Foodoo", address: "4814 13th Ave, Brooklyn, NY 11219", icon: "🛒" },
+  { name: "Rosemary Kosher", address: "4901 13th Ave, Brooklyn, NY 11219", icon: "🌿" },
+  { name: "Chestnut", address: "1506 62nd St, Brooklyn, NY 11219", icon: "🌰" },
+  { name: "Central Market", address: "4220 13th Ave, Brooklyn, NY 11219", icon: "🏪" },
+];
 
-  useEffect(() => {
+const HEALTH_CATEGORIES = [
+  "Pregnant",
+  "Had a Miscarriage",
+  "Postpartum (Within the last 12 months)",
+  "Enrolled in Health Home Care Management",
+  "Substance Use Disorder",
+  "HIV / AIDS",
+  "Diabetes",
+  "Hypertension",
+  "Serious Mental Illness (SMI)",
+  "Chronic Condition",
+];
+
+const STEP_LABELS = [
+  "Personal Info",
+  "Screening & Health",
+  "Meals & Preferences",
+  "Grocery Selection",
+];
+
+/* ─── Helpers ────────────────────────────────────────────────────────────── */
+
+function validateStep1(form: FormData): FormErrors {
+  const e: FormErrors = {};
+  if (!form.firstName.trim()) e.firstName = "First name is required";
+  if (!form.lastName.trim()) e.lastName = "Last name is required";
+  if (!form.dateOfBirth) e.dateOfBirth = "Date of birth is required";
+  if (!form.medicaidId.trim()) e.medicaidId = "Medicaid ID is required";
+  else if (!/^[A-Za-z]{2}\d{5}[A-Za-z]$/.test(form.medicaidId))
+    e.medicaidId = "Format: 2 letters, 5 digits, 1 letter (e.g. AB12345C)";
+  if (!form.cellPhone.trim()) e.cellPhone = "Phone number is required";
+  else if (!/^\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}$/.test(form.cellPhone.trim()))
+    e.cellPhone = "Enter a valid 10-digit phone number";
+  if (!form.email.trim()) e.email = "Email is required";
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
+    e.email = "Enter a valid email address";
+  if (!form.streetAddress.trim()) e.streetAddress = "Street address is required";
+  if (!form.city.trim()) e.city = "City is required";
+  if (!form.state.trim()) e.state = "State is required";
+  if (!form.zipcode.trim()) e.zipcode = "Zipcode is required";
+  return e;
+}
+
+function validateStep2(form: FormData): FormErrors {
+  const e: FormErrors = {};
+  const sq = form.screeningQuestions;
+  if (!sq.livingSituation) e["sq.livingSituation"] = "Required";
+  if (!sq.utilityShutoff) e["sq.utilityShutoff"] = "Required";
+  if (!sq.receivesSnap) e["sq.receivesSnap"] = "Required";
+  if (!sq.receivesWic) e["sq.receivesWic"] = "Required";
+  if (!sq.receivesTanf) e["sq.receivesTanf"] = "Required";
+  if (!sq.enrolledHealthHome) e["sq.enrolledHealthHome"] = "Required";
+  if (!sq.householdMembersCount) e["sq.householdMembersCount"] = "Required";
+  if (!sq.householdMembersWithMedicaid) e["sq.householdMembersWithMedicaid"] = "Required";
+  if (!sq.needsWorkAssistance) e["sq.needsWorkAssistance"] = "Required";
+  if (!sq.wantsSchoolHelp) e["sq.wantsSchoolHelp"] = "Required";
+  if (!sq.transportationBarrier) e["sq.transportationBarrier"] = "Required";
+  if (!sq.hasChronicIllness) e["sq.hasChronicIllness"] = "Required";
+  if (!sq.otherHealthIssues) e["sq.otherHealthIssues"] = "Required";
+  if (!sq.medicationsRequireRefrigeration) e["sq.medicationsRequireRefrigeration"] = "Required";
+  if (!sq.pregnantOrPostpartum) e["sq.pregnantOrPostpartum"] = "Required";
+  if (!sq.breastmilkRefrigeration) e["sq.breastmilkRefrigeration"] = "Required";
+  if (!form.employed) e.employed = "Required";
+  if (!form.spouseEmployed) e.spouseEmployed = "Required";
+  if (!form.hasWic) e.hasWic = "Required";
+  if (!form.hasSnap) e.hasSnap = "Required";
+  if (!form.newApplicant) e.newApplicant = "Required";
+  // Conditional health fields
+  if (form.healthCategories.includes("Pregnant") && !form.dueDate)
+    e.dueDate = "Due date is required";
+  if (form.healthCategories.includes("Had a Miscarriage") && !form.miscarriageDate)
+    e.miscarriageDate = "Date of miscarriage is required";
+  if (form.healthCategories.includes("Postpartum (Within the last 12 months)")) {
+    if (!form.infantName.trim()) e.infantName = "Infant name is required";
+    if (!form.infantDateOfBirth) e.infantDateOfBirth = "Infant DOB is required";
+    if (!form.infantMedicaidId.trim()) e.infantMedicaidId = "Infant Medicaid ID is required";
+  }
+  return e;
+}
+
+function validateStep3(form: FormData): FormErrors {
+  const e: FormErrors = {};
+  if (form.mealFocus.length === 0) e.mealFocus = "Select at least one meal type";
+  if (!form.needsRefrigerator) e.needsRefrigerator = "Required";
+  if (!form.needsMicrowave) e.needsMicrowave = "Required";
+  if (!form.needsCookingUtensils) e.needsCookingUtensils = "Required";
+  if (!form.hipaaConsent) e.hipaaConsent = "You must agree to the HIPAA consent";
+  return e;
+}
+
+function validateStep4(form: FormData): FormErrors {
+  const e: FormErrors = {};
+  if (!form.supermarket) e.supermarket = "Please select a supermarket";
+  return e;
+}
+
+/* ─── Components ─────────────────────────────────────────────────────────── */
+
+function YesNoSelect({
+  value,
+  onChange,
+  error,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  error?: string;
+}) {
+  return (
+    <div>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={error ? "border-red-400" : ""}>
+          <SelectValue placeholder="Select..." />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="Yes">Yes</SelectItem>
+          <SelectItem value="No">No</SelectItem>
+        </SelectContent>
+      </Select>
+      {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+    </div>
+  );
+}
+
+function FileUploadField({
+  label,
+  category,
+  uploads,
+  setUploads,
+  uploading,
+  setUploading,
+}: {
+  label: string;
+  category: string;
+  uploads: Record<string, UploadedDoc>;
+  setUploads: React.Dispatch<React.SetStateAction<Record<string, UploadedDoc>>>;
+  uploading: Record<string, boolean>;
+  setUploading: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+}) {
+  const uploadMutation = trpc.upload.document.useMutation();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File must be under 10MB");
+      return;
+    }
+
+    setUploading((prev) => ({ ...prev, [category]: true }));
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(",")[1]);
+        };
+        reader.readAsDataURL(file);
+      });
+
+      const result = await uploadMutation.mutateAsync({
+        fileName: file.name,
+        fileData: base64,
+        contentType: file.type,
+        category,
+      });
+
+      setUploads((prev) => ({
+        ...prev,
+        [category]: { url: result.url, fileName: file.name },
+      }));
+    } catch (err) {
+      console.error("Upload failed:", err);
+      alert("Upload failed. Please try again.");
+    } finally {
+      setUploading((prev) => ({ ...prev, [category]: false }));
+    }
+  };
+
+  const uploaded = uploads[category];
+  const isUploading = uploading[category];
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium text-stone-700">{label}</Label>
+      {uploaded ? (
+        <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <FileText className="w-4 h-4 text-green-600" />
+          <span className="text-sm text-green-700 truncate flex-1">{uploaded.fileName}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setUploads((prev) => {
+                const next = { ...prev };
+                delete next[category];
+                return next;
+              });
+            }}
+            className="text-red-400 hover:text-red-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      ) : (
+        <div
+          onClick={() => inputRef.current?.click()}
+          className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-stone-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-50/50 transition-colors"
+        >
+          {isUploading ? (
+            <Loader2 className="w-5 h-5 animate-spin text-green-600" />
+          ) : (
+            <>
+              <Upload className="w-5 h-5 text-stone-400" />
+              <span className="text-sm text-stone-500">Click to upload (max 10MB)</span>
+            </>
+          )}
+        </div>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*,.pdf"
+        onChange={handleFile}
+        className="hidden"
+      />
+    </div>
+  );
+}
+
+/* ─── Landing Page ───────────────────────────────────────────────────────── */
+
+function LandingPage({ onStart }: { onStart: () => void }) {
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-stone-50 to-white">
+      {/* Header */}
+      <header className="bg-white/80 backdrop-blur-sm border-b border-stone-200 sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-700 rounded-xl flex items-center justify-center">
+              <Leaf className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-green-800 font-serif">FreshSelect Meals</h1>
+              <p className="text-xs text-stone-500">SCN Approved Vendor</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-sm text-stone-600">
+            <a href="mailto:info@freshselectmeals.com" className="hidden sm:flex items-center gap-1 hover:text-green-700">
+              <Mail className="w-4 h-4" /> info@freshselectmeals.com
+            </a>
+          </div>
+        </div>
+      </header>
+
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-green-800 via-green-700 to-green-900" />
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-10 left-10 w-64 h-64 bg-yellow-400 rounded-full blur-3xl" />
+          <div className="absolute bottom-10 right-10 w-80 h-80 bg-green-400 rounded-full blur-3xl" />
+        </div>
+        <div className="relative max-w-5xl mx-auto px-4 py-20 md:py-28 text-center">
+          <h2 className="text-3xl md:text-5xl font-bold text-white font-serif leading-tight mb-6">
+            Free Nutritious Meals and Food Support for Our Community
+          </h2>
+          <p className="text-lg md:text-xl text-green-100 max-w-3xl mx-auto mb-8 leading-relaxed">
+            If you are struggling to put healthy food on the table or have a medical condition that makes preparing meals difficult, we are here to help. Through the <strong className="text-white">New York Social Care Network (SCN)</strong> program, we provide free, home-delivered meals and grocery support to eligible Medicaid members.
+          </p>
+          <Button
+            onClick={onStart}
+            size="lg"
+            className="bg-amber-500 hover:bg-amber-600 text-white text-lg px-10 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all font-semibold"
+          >
+            Start My Free Screening <ChevronRight className="w-5 h-5 ml-2" />
+          </Button>
+          <p className="text-green-200 text-sm mt-4">
+            100% voluntary. Will not affect your Medicaid eligibility.
+          </p>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="max-w-5xl mx-auto px-4 py-16">
+        <h3 className="text-2xl md:text-3xl font-bold text-green-800 font-serif text-center mb-12">How the Program Works</h3>
+        <div className="grid md:grid-cols-4 gap-6">
+          {[
+            { step: "1", title: "Screening", desc: "Take a quick survey to identify your food needs.", icon: ClipboardList },
+            { step: "2", title: "Eligibility Check", desc: "We verify your Medicaid status and clinical needs.", icon: ShieldCheck },
+            { step: "3", title: "Nutrition Plan", desc: "We refer you to the food program that fits your life.", icon: Apple },
+            { step: "4", title: "Delivery", desc: "Begin receiving meals or grocery vouchers at no cost.", icon: Store },
+          ].map((item) => (
+            <Card key={item.step} className="border-stone-200 hover:border-green-300 hover:shadow-md transition-all">
+              <CardContent className="p-6 text-center">
+                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <item.icon className="w-6 h-6 text-green-700" />
+                </div>
+                <div className="text-xs font-bold text-amber-600 mb-1">STEP {item.step}</div>
+                <h4 className="font-bold text-stone-800 mb-2">{item.title}</h4>
+                <p className="text-sm text-stone-600">{item.desc}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Eligibility */}
+      <section className="bg-stone-50 py-16">
+        <div className="max-w-5xl mx-auto px-4">
+          <h3 className="text-2xl md:text-3xl font-bold text-green-800 font-serif text-center mb-8">Who is Eligible?</h3>
+          <p className="text-center text-stone-600 mb-10 max-w-3xl mx-auto">
+            To receive Enhanced Nutrition Services, you must meet the following criteria:
+          </p>
+          <div className="grid md:grid-cols-2 gap-6">
+            {[
+              { title: "Medicaid Status", desc: "Enrolled in Medicaid Managed Care (mainstream plans, HIV-SNPs, or HARP)." },
+              { title: "Identified Need", desc: "Screen positive for an unmet need regarding food security." },
+              { title: "Priority Group", desc: "Pregnant/Postpartum, High-Risk Children, Chronic Conditions, SUD, SMI, or High Utilizers." },
+              { title: "Clinical Necessity", desc: "For certain programs, a medical provider confirms services are medically appropriate." },
+            ].map((item) => (
+              <Card key={item.title} className="border-stone-200">
+                <CardContent className="p-6">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="font-bold text-stone-800 mb-1">{item.title}</h4>
+                      <p className="text-sm text-stone-600">{item.desc}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Programs */}
+      <section className="max-w-5xl mx-auto px-4 py-16">
+        <h3 className="text-2xl md:text-3xl font-bold text-green-800 font-serif text-center mb-12">Our Nutrition Programs</h3>
+        <div className="space-y-4">
+          {[
+            { title: "Medically Tailored Meals (MTM)", desc: "Meals designed by a Registered Dietitian for your specific medical needs, delivered to your home." },
+            { title: "Clinically Appropriate Home-Delivered Meals", desc: "For those who cannot prepare meals but do not require specific medical tailoring." },
+            { title: "Food Prescriptions", desc: "Weekly food boxes or vouchers for produce, meat, and grains at local markets." },
+            { title: "Pantry Stocking", desc: "Fresh produce and healthy groceries delivered to your home (pregnant/postpartum and high-risk children)." },
+            { title: "Cooking Supplies", desc: "Essential kitchenware (pots, pans, utensils) or even a refrigerator if needed." },
+          ].map((item) => (
+            <div key={item.title} className="flex items-start gap-4 p-4 rounded-lg hover:bg-stone-50 transition-colors">
+              <Heart className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+              <div>
+                <h4 className="font-bold text-stone-800">{item.title}</h4>
+                <p className="text-sm text-stone-600">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="bg-green-800 py-16">
+        <div className="max-w-3xl mx-auto px-4 text-center">
+          <h3 className="text-2xl md:text-3xl font-bold text-white font-serif mb-4">Get Started Today</h3>
+          <p className="text-green-100 mb-8">Ready to see if you qualify? Take our secure Self-Screening Survey.</p>
+          <Button
+            onClick={onStart}
+            size="lg"
+            className="bg-amber-500 hover:bg-amber-600 text-white text-lg px-10 py-6 rounded-xl shadow-lg"
+          >
+            Start My Free Screening <ChevronRight className="w-5 h-5 ml-2" />
+          </Button>
+          <p className="text-green-200 text-sm mt-4">
+            Your information is protected by strict privacy and security laws.
+          </p>
+        </div>
+      </section>
+
+      {/* Contact */}
+      <section className="max-w-5xl mx-auto px-4 py-12">
+        <h3 className="text-xl font-bold text-green-800 font-serif text-center mb-6">Contact Us</h3>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-6 text-stone-600">
+          <a href="mailto:info@freshselectmeals.com" className="flex items-center gap-2 hover:text-green-700">
+            <Mail className="w-5 h-5" /> info@freshselectmeals.com
+          </a>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-stone-200 py-6">
+        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-stone-500">
+          <div className="flex items-center gap-2">
+            <Leaf className="w-4 h-4 text-green-600" />
+            <span>FreshSelect Meals</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <a href="/privacy" className="hover:text-green-700">Privacy Policy</a>
+            <span>&copy; {new Date().getFullYear()} FreshSelect Meals</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+/* ─── Progress Bar ───────────────────────────────────────────────────────── */
+
+function ProgressBar({ step, totalSteps }: { step: number; totalSteps: number }) {
+  return (
+    <div className="w-full max-w-2xl mx-auto mb-8">
+      <div className="flex items-center justify-between mb-3">
+        {STEP_LABELS.map((label, i) => (
+          <div key={i} className="flex flex-col items-center flex-1">
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                i + 1 < step
+                  ? "bg-green-600 text-white"
+                  : i + 1 === step
+                  ? "bg-amber-500 text-white ring-4 ring-amber-200"
+                  : "bg-stone-200 text-stone-500"
+              }`}
+            >
+              {i + 1 < step ? <CheckCircle2 className="w-5 h-5" /> : i + 1}
+            </div>
+            <span className={`text-xs mt-1 hidden sm:block ${i + 1 === step ? "text-amber-600 font-semibold" : "text-stone-500"}`}>
+              {label}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-green-600 to-green-500 rounded-full transition-all duration-500"
+          style={{ width: `${((step - 1) / (totalSteps - 1)) * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main Component ─────────────────────────────────────────────────────── */
+
+export default function Home() {
+  const [showForm, setShowForm] = useState(false);
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState<FormData>({ ...INITIAL_FORM });
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [refNumber, setRefNumber] = useState("");
+  const [uploads, setUploads] = useState<Record<string, UploadedDoc>>({});
+  const [uploading, setUploading] = useState<Record<string, boolean>>({});
+  const formRef = useRef<HTMLDivElement>(null);
+
+  const [ref] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    const ref = params.get("ref");
-    if (ref) setRefParam(ref);
-  }, []);
+    return params.get("ref") || "";
+  });
 
   const submitMutation = trpc.submission.submit.useMutation({
     onSuccess: (data) => {
-      setReferenceNumber(data.referenceNumber);
-      setStep(4);
+      setRefNumber(data.referenceNumber);
+      setSubmitted(true);
     },
   });
 
-  const updateField = useCallback(
-    <K extends keyof FormData>(key: K, value: FormData[K]) => {
-      setFormData((prev) => ({ ...prev, [key]: value }));
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-    },
-    []
-  );
-
-  const handleMembersCountChange = useCallback(
-    (val: string) => {
-      const count = parseInt(val) || 0;
-      updateField("additionalMembersCount", val);
-      setFormData((prev) => {
-        const members = [...prev.householdMembers];
-        while (members.length < count)
-          members.push({ name: "", dateOfBirth: "", medicaidId: "" });
-        return { ...prev, householdMembers: members.slice(0, count) };
-      });
-    },
-    [updateField]
-  );
-
-  const updateMember = useCallback(
-    (index: number, field: keyof HouseholdMember, value: string) => {
-      setFormData((prev) => {
-        const members = [...prev.householdMembers];
-        members[index] = { ...members[index], [field]: value };
-        return { ...prev, householdMembers: members };
-      });
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[
-          `member_${index}_${field === "dateOfBirth" ? "dob" : field}`
-        ];
-        return next;
-      });
-    },
-    []
-  );
-
-  const toggleHealthCategory = useCallback((category: string) => {
-    setFormData((prev) => {
-      const cats = prev.healthCategories.includes(category)
-        ? prev.healthCategories.filter((c) => c !== category)
-        : [...prev.healthCategories, category];
-      // Clear conditional fields when unchecking
-      const updates: Partial<FormData> = { healthCategories: cats };
-      if (!cats.includes("Pregnant")) {
-        updates.dueDate = "";
-      }
-      if (!cats.includes("Had a Miscarriage")) {
-        updates.miscarriageDate = "";
-      }
-      if (!cats.includes("Postpartum (Within the last 12 months)")) {
-        updates.infantName = "";
-        updates.infantDateOfBirth = "";
-        updates.infantMedicaidId = "";
-      }
-      return { ...prev, ...updates };
-    });
+  const update = <K extends keyof FormData>(key: K, value: FormData[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => {
       const next = { ...prev };
-      delete next.dueDate;
-      delete next.miscarriageDate;
-      delete next.infantName;
-      delete next.infantDateOfBirth;
-      delete next.infantMedicaidId;
+      delete next[key];
       return next;
     });
-  }, []);
+  };
 
-  const toggleMealFocus = useCallback((meal: string) => {
-    setFormData((prev) => {
-      const meals = prev.mealFocus.includes(meal)
-        ? prev.mealFocus.filter((m) => m !== meal)
-        : [...prev.mealFocus, meal];
-      return { ...prev, mealFocus: meals };
+  const updateScreening = (key: keyof ScreeningQuestions, value: string) => {
+    setForm((prev) => ({
+      ...prev,
+      screeningQuestions: { ...prev.screeningQuestions, [key]: value },
+    }));
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[`sq.${key}`];
+      return next;
     });
-  }, []);
+  };
+
+  useEffect(() => {
+    const count = parseInt(form.additionalMembersCount) || 0;
+    setForm((prev) => {
+      const current = [...prev.householdMembers];
+      while (current.length < count) current.push({ name: "", dateOfBirth: "", medicaidId: "" });
+      return { ...prev, householdMembers: current.slice(0, count) };
+    });
+  }, [form.additionalMembersCount]);
+
+  const scrollToTop = () => {
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const goNext = () => {
-    let stepErrors: FormErrors = {};
-    if (step === 1) stepErrors = validateStep1(formData);
-    if (step === 2) stepErrors = validateStep2(formData);
-    if (step === 3) stepErrors = validateStep3(formData);
-    if (Object.keys(stepErrors).length > 0) {
-      setErrors(stepErrors);
+    let errs: FormErrors = {};
+    if (step === 1) errs = validateStep1(form);
+    else if (step === 2) errs = validateStep2(form);
+    else if (step === 3) errs = validateStep3(form);
+    else if (step === 4) errs = validateStep4(form);
+
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      scrollToTop();
       return;
     }
-    setErrors({});
-    if (step === 3) {
+
+    if (step === 4) {
       handleSubmit();
     } else {
       setStep((s) => s + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      scrollToTop();
     }
   };
 
   const goBack = () => {
-    setErrors({});
-    setStep((s) => s - 1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (step > 1) {
+      setStep((s) => s - 1);
+      scrollToTop();
+    }
   };
 
   const handleSubmit = () => {
+    const uploadedDocuments: Record<string, string> = {};
+    for (const [key, doc] of Object.entries(uploads)) {
+      uploadedDocuments[key] = doc.url;
+    }
+
     submitMutation.mutate({
-      ...formData,
-      hipaaConsent: formData.hipaaConsent,
-      ref: refParam || undefined,
-      homePhone: formData.homePhone || undefined,
-      aptUnit: formData.aptUnit || undefined,
-      foodAllergies: formData.foodAllergies || undefined,
-      dueDate: formData.dueDate || undefined,
-      miscarriageDate: formData.miscarriageDate || undefined,
-      infantName: formData.infantName || undefined,
-      infantDateOfBirth: formData.infantDateOfBirth || undefined,
-      infantMedicaidId: formData.infantMedicaidId || undefined,
-      breakfastItems: formData.breakfastItems || undefined,
-      lunchItems: formData.lunchItems || undefined,
-      dinnerItems: formData.dinnerItems || undefined,
-      snackItems: formData.snackItems || undefined,
+      ...form,
+      ref: ref || undefined,
+      uploadedDocuments: Object.keys(uploadedDocuments).length > 0 ? uploadedDocuments : undefined,
     });
   };
 
-  return (
-    <div className="min-h-screen flex flex-col bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-border/50">
-        <div className="container flex items-center justify-between h-16">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-              <Leaf className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="font-serif text-xl text-foreground tracking-tight">
-              FreshSelect Meals
-            </span>
+  // ─── Render ─────────────────────────────────────────────────────────────
+
+  if (!showForm) {
+    return <LandingPage onStart={() => setShowForm(true)} />;
+  }
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-stone-50 to-white flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-lg w-full text-center"
+        >
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <CheckCircle2 className="w-10 h-10 text-green-600" />
           </div>
-          {step === 0 && (
-            <Button
-              onClick={() => setStep(1)}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-md"
-            >
-              Start Meal Selection
-              <ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
-          )}
+          <h2 className="text-3xl font-bold text-green-800 font-serif mb-4">Application Submitted!</h2>
+          <Card className="border-green-200 bg-green-50 mb-6">
+            <CardContent className="p-6">
+              <p className="text-sm text-stone-600 mb-2">Your Reference Number</p>
+              <p className="text-3xl font-bold text-green-800 tracking-widest">{refNumber}</p>
+            </CardContent>
+          </Card>
+          <div className="space-y-3 text-left bg-white rounded-xl border border-stone-200 p-6 mb-6">
+            <h3 className="font-bold text-stone-800">What Happens Next?</h3>
+            <div className="space-y-2 text-sm text-stone-600">
+              <p>1. A confirmation email has been sent to your email address.</p>
+              <p>2. Our Social Care Navigator will review your application within 5 business days.</p>
+              <p>3. We will contact you to schedule a follow-up conversation.</p>
+              <p>4. Once approved, you will begin receiving your food benefits.</p>
+            </div>
+          </div>
+          <div className="text-sm text-stone-500 mb-6">
+            <p>Questions? Contact us at <a href="mailto:info@freshselectmeals.com" className="text-green-700 underline">info@freshselectmeals.com</a></p>
+          </div>
+          <Button
+            onClick={() => {
+              setShowForm(false);
+              setSubmitted(false);
+              setStep(1);
+              setForm({ ...INITIAL_FORM });
+              setUploads({});
+              setErrors({});
+            }}
+            variant="outline"
+            className="border-green-600 text-green-700"
+          >
+            Return to Home
+          </Button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-stone-50 to-white">
+      {/* Form Header */}
+      <header className="bg-white/80 backdrop-blur-sm border-b border-stone-200 sticky top-0 z-50">
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-green-700 rounded-lg flex items-center justify-center">
+              <Leaf className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-bold text-green-800 font-serif">FreshSelect Meals</span>
+          </div>
+          <button
+            onClick={() => setShowForm(false)}
+            className="text-sm text-stone-500 hover:text-stone-700"
+          >
+            Back to Home
+          </button>
         </div>
       </header>
 
-      <main className="flex-1">
-        <AnimatePresence mode="wait">
-          {/* Hero */}
-          {step === 0 && (
-            <motion.div
-              key="hero"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <section className="relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-green-50 via-amber-50/30 to-orange-50/40" />
-                <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/3" />
-                <div className="absolute bottom-0 left-0 w-72 h-72 bg-accent/10 rounded-full translate-y-1/3 -translate-x-1/4" />
-                <div className="relative container py-20 sm:py-28 lg:py-36">
-                  <div className="max-w-3xl mx-auto text-center">
-                    <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-6">
-                      <ShieldCheck className="w-4 h-4" />
-                      SCN Approved Vendor
-                    </div>
-                    <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl text-foreground leading-tight mb-6">
-                      Choose Your Healthy
-                      <br />
-                      <span className="text-primary">Weekly Meals</span>
-                    </h1>
-                    <p className="text-lg sm:text-xl text-muted-foreground mb-4 max-w-2xl mx-auto leading-relaxed">
-                      As an SCN vendor, pick fresh meals from the best local
-                      supermarkets in Williamsburg.{" "}
-                      <span className="font-semibold text-foreground">
-                        You choose &mdash; no fixed boxes.
-                      </span>
-                    </p>
-                    <div className="flex items-center justify-center gap-3 text-sm text-muted-foreground mb-10 flex-wrap">
-                      <span className="flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-primary" />
-                        Confidential
-                      </span>
-                      <span className="text-border">&bull;</span>
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-primary" />
-                        SCN Approved
-                      </span>
-                      <span className="text-border">&bull;</span>
-                      <span className="flex items-center gap-1.5">
-                        <Heart className="w-4 h-4 text-primary" />
-                        Local & Fresh
-                      </span>
-                    </div>
-                    <Button
-                      size="lg"
-                      onClick={() => setStep(1)}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-lg px-8 py-6 shadow-xl shadow-primary/20 hover:shadow-2xl hover:shadow-primary/30 transition-all"
-                    >
-                      Start Meal Selection
-                      <ChevronRight className="w-5 h-5 ml-2" />
-                    </Button>
-                  </div>
-                </div>
-              </section>
+      <div ref={formRef} className="max-w-3xl mx-auto px-4 py-8">
+        <ProgressBar step={step} totalSteps={4} />
 
-              <section className="container py-16">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-                  {[
-                    {
-                      icon: Store,
-                      title: "Choose Your Store",
-                      desc: "Pick from 4 trusted local kosher supermarkets in Williamsburg.",
-                    },
-                    {
-                      icon: UtensilsCrossed,
-                      title: "Select Your Meals",
-                      desc: "Tell us exactly what your family wants for breakfast, lunch, dinner, and snacks.",
-                    },
-                    {
-                      icon: Heart,
-                      title: "We Handle the Rest",
-                      desc: "We coordinate with your supermarket and confirm within 2 business days.",
-                    },
-                  ].map((f) => (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {/* ─── STEP 1: Personal Info ─────────────────────────────── */}
+            {step === 1 && (
+              <div className="space-y-8">
+                <div className="text-center mb-6">
+                  <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Users className="w-7 h-7 text-green-700" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-green-800 font-serif">Mother's Personal Information</h2>
+                  <p className="text-stone-500 text-sm mt-1">Please provide your personal details and contact information.</p>
+                </div>
+
+                {Object.keys(errors).length > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-red-700">Please fix the following errors:</p>
+                      <ul className="text-sm text-red-600 mt-1 list-disc list-inside">
+                        {Object.values(errors).map((e, i) => (
+                          <li key={i}>{e}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                {/* Personal Info */}
+                <Card className="border-stone-200">
+                  <CardContent className="p-6 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-stone-700">First Name *</Label>
+                        <Input
+                          value={form.firstName}
+                          onChange={(e) => update("firstName", e.target.value)}
+                          className={errors.firstName ? "border-red-400" : ""}
+                          placeholder="First Name"
+                        />
+                        {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
+                      </div>
+                      <div>
+                        <Label className="text-stone-700">Last Name *</Label>
+                        <Input
+                          value={form.lastName}
+                          onChange={(e) => update("lastName", e.target.value)}
+                          className={errors.lastName ? "border-red-400" : ""}
+                          placeholder="Last Name"
+                        />
+                        {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-stone-700">Date of Birth *</Label>
+                        <Input
+                          type="date"
+                          value={form.dateOfBirth}
+                          onChange={(e) => update("dateOfBirth", e.target.value)}
+                          className={errors.dateOfBirth ? "border-red-400" : ""}
+                        />
+                        {errors.dateOfBirth && <p className="text-red-500 text-xs mt-1">{errors.dateOfBirth}</p>}
+                      </div>
+                      <div>
+                        <Label className="text-stone-700">Medicaid ID (CIN) *</Label>
+                        <Input
+                          value={form.medicaidId}
+                          onChange={(e) => update("medicaidId", e.target.value.toUpperCase())}
+                          className={errors.medicaidId ? "border-red-400" : ""}
+                          placeholder="AB12345C"
+                          maxLength={8}
+                        />
+                        {errors.medicaidId && <p className="text-red-500 text-xs mt-1">{errors.medicaidId}</p>}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Contact */}
+                <Card className="border-stone-200">
+                  <CardContent className="p-6 space-y-4">
+                    <h3 className="font-bold text-stone-800 flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-green-600" /> Contact Information
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-stone-700">Cell Phone *</Label>
+                        <Input
+                          value={form.cellPhone}
+                          onChange={(e) => update("cellPhone", e.target.value)}
+                          className={errors.cellPhone ? "border-red-400" : ""}
+                          placeholder="(718) 555-0123"
+                        />
+                        {errors.cellPhone && <p className="text-red-500 text-xs mt-1">{errors.cellPhone}</p>}
+                      </div>
+                      <div>
+                        <Label className="text-stone-700">Home Phone</Label>
+                        <Input
+                          value={form.homePhone}
+                          onChange={(e) => update("homePhone", e.target.value)}
+                          placeholder="(718) 555-0456"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-stone-700">Email Address *</Label>
+                      <Input
+                        type="email"
+                        value={form.email}
+                        onChange={(e) => update("email", e.target.value)}
+                        className={errors.email ? "border-red-400" : ""}
+                        placeholder="your@email.com"
+                      />
+                      {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Address */}
+                <Card className="border-stone-200">
+                  <CardContent className="p-6 space-y-4">
+                    <h3 className="font-bold text-stone-800 flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-green-600" /> Address
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="sm:col-span-2">
+                        <Label className="text-stone-700">Street Address *</Label>
+                        <Input
+                          value={form.streetAddress}
+                          onChange={(e) => update("streetAddress", e.target.value)}
+                          className={errors.streetAddress ? "border-red-400" : ""}
+                          placeholder="123 Main Street"
+                        />
+                        {errors.streetAddress && <p className="text-red-500 text-xs mt-1">{errors.streetAddress}</p>}
+                      </div>
+                      <div>
+                        <Label className="text-stone-700">Apt/Unit</Label>
+                        <Input
+                          value={form.aptUnit}
+                          onChange={(e) => update("aptUnit", e.target.value)}
+                          placeholder="Apt 2B"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <Label className="text-stone-700">City *</Label>
+                        <Input
+                          value={form.city}
+                          onChange={(e) => update("city", e.target.value)}
+                          className={errors.city ? "border-red-400" : ""}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-stone-700">State *</Label>
+                        <Input
+                          value={form.state}
+                          onChange={(e) => update("state", e.target.value)}
+                          className={errors.state ? "border-red-400" : ""}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-stone-700">Zipcode *</Label>
+                        <Input
+                          value={form.zipcode}
+                          onChange={(e) => update("zipcode", e.target.value)}
+                          className={errors.zipcode ? "border-red-400" : ""}
+                          placeholder="11219"
+                        />
+                        {errors.zipcode && <p className="text-red-500 text-xs mt-1">{errors.zipcode}</p>}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Document Uploads */}
+                <Card className="border-stone-200">
+                  <CardContent className="p-6 space-y-4">
+                    <h3 className="font-bold text-stone-800 flex items-center gap-2">
+                      <Upload className="w-4 h-4 text-green-600" /> Required Documents
+                    </h3>
+                    <p className="text-sm text-stone-500">Please upload photos or scans of the following documents.</p>
+
+                    <FileUploadField
+                      label="Mother's Medicaid Card *"
+                      category="motherMedicaidCard"
+                      uploads={uploads}
+                      setUploads={setUploads}
+                      uploading={uploading}
+                      setUploading={setUploading}
+                    />
+                    <FileUploadField
+                      label="Mother's Birth Certificate *"
+                      category="motherBirthCertificate"
+                      uploads={uploads}
+                      setUploads={setUploads}
+                      uploading={uploading}
+                      setUploading={setUploading}
+                    />
+                    <FileUploadField
+                      label="Marriage License"
+                      category="marriageLicense"
+                      uploads={uploads}
+                      setUploads={setUploads}
+                      uploading={uploading}
+                      setUploading={setUploading}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* ─── STEP 2: Screening & Health ────────────────────────── */}
+            {step === 2 && (
+              <div className="space-y-8">
+                <div className="text-center mb-6">
+                  <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <ClipboardList className="w-7 h-7 text-green-700" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-green-800 font-serif">SCN Screening & Health</h2>
+                  <p className="text-stone-500 text-sm mt-1">Answer the screening questions and provide health information.</p>
+                </div>
+
+                {Object.keys(errors).length > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                    <p className="text-sm text-red-700">Please answer all required questions before continuing.</p>
+                  </div>
+                )}
+
+                {/* SCN Screening Questions */}
+                <Card className="border-stone-200">
+                  <CardContent className="p-6 space-y-5">
+                    <h3 className="font-bold text-stone-800 text-lg">SCN Screening Questionnaire</h3>
+
+                    {/* Q1 - Living Situation */}
+                    <div>
+                      <Label className="text-stone-700">1. Current living situation *</Label>
+                      <Select
+                        value={form.screeningQuestions.livingSituation}
+                        onValueChange={(v) => updateScreening("livingSituation", v)}
+                      >
+                        <SelectTrigger className={errors["sq.livingSituation"] ? "border-red-400" : ""}>
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["Renting", "Own Home", "Shelter", "Homeless", "Living with Family/Friends", "Other"].map((v) => (
+                            <SelectItem key={v} value={v}>{v}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors["sq.livingSituation"] && <p className="text-red-500 text-xs mt-1">{errors["sq.livingSituation"]}</p>}
+                    </div>
+
+                    {/* Q2-Q6 Yes/No */}
+                    {[
+                      { key: "utilityShutoff" as const, label: "2. Utility shutoff threat (past 12 months) *" },
+                      { key: "receivesSnap" as const, label: "3. Receives SNAP (Food Stamps) *" },
+                      { key: "receivesWic" as const, label: "4. Receives WIC *" },
+                      { key: "receivesTanf" as const, label: "5. Receives TANF *" },
+                      { key: "enrolledHealthHome" as const, label: "6. Enrolled in Health Home *" },
+                    ].map(({ key, label }) => (
+                      <div key={key}>
+                        <Label className="text-stone-700">{label}</Label>
+                        <YesNoSelect
+                          value={form.screeningQuestions[key]}
+                          onChange={(v) => updateScreening(key, v)}
+                          error={errors[`sq.${key}`]}
+                        />
+                      </div>
+                    ))}
+
+                    {/* Q7-Q8 Number inputs */}
+                    <div>
+                      <Label className="text-stone-700">7. Household members *</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="20"
+                        value={form.screeningQuestions.householdMembersCount}
+                        onChange={(e) => updateScreening("householdMembersCount", e.target.value)}
+                        className={errors["sq.householdMembersCount"] ? "border-red-400" : ""}
+                        placeholder="Enter number"
+                      />
+                      {errors["sq.householdMembersCount"] && <p className="text-red-500 text-xs mt-1">{errors["sq.householdMembersCount"]}</p>}
+                    </div>
+                    <div>
+                      <Label className="text-stone-700">8. Household members with Medicaid *</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="20"
+                        value={form.screeningQuestions.householdMembersWithMedicaid}
+                        onChange={(e) => updateScreening("householdMembersWithMedicaid", e.target.value)}
+                        className={errors["sq.householdMembersWithMedicaid"] ? "border-red-400" : ""}
+                        placeholder="Enter number"
+                      />
+                      {errors["sq.householdMembersWithMedicaid"] && <p className="text-red-500 text-xs mt-1">{errors["sq.householdMembersWithMedicaid"]}</p>}
+                    </div>
+
+                    {/* Q9-Q16 Yes/No */}
+                    {[
+                      { key: "needsWorkAssistance" as const, label: "9. Needs work assistance *" },
+                      { key: "wantsSchoolHelp" as const, label: "10. Wants school or training help *" },
+                      { key: "transportationBarrier" as const, label: "11. Transportation barrier (past 12 months) *" },
+                      { key: "hasChronicIllness" as const, label: "12. Has chronic illness *" },
+                      { key: "otherHealthIssues" as const, label: "13. Other known health issues *" },
+                      { key: "medicationsRequireRefrigeration" as const, label: "14. Medications require refrigeration *" },
+                      { key: "pregnantOrPostpartum" as const, label: "15. Pregnant or postpartum *" },
+                      { key: "breastmilkRefrigeration" as const, label: "16. Breastmilk refrigeration needed *" },
+                    ].map(({ key, label }) => (
+                      <div key={key}>
+                        <Label className="text-stone-700">{label}</Label>
+                        <YesNoSelect
+                          value={form.screeningQuestions[key]}
+                          onChange={(v) => updateScreening(key, v)}
+                          error={errors[`sq.${key}`]}
+                        />
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                {/* Health Categories */}
+                <Card className="border-stone-200">
+                  <CardContent className="p-6 space-y-4">
+                    <h3 className="font-bold text-stone-800 flex items-center gap-2">
+                      <Heart className="w-4 h-4 text-green-600" /> Health Categories
+                    </h3>
+                    <p className="text-sm text-stone-500">Select all that apply to you.</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {HEALTH_CATEGORIES.map((cat) => (
+                        <label
+                          key={cat}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                            form.healthCategories.includes(cat)
+                              ? "border-green-400 bg-green-50"
+                              : "border-stone-200 hover:border-green-300"
+                          }`}
+                        >
+                          <Checkbox
+                            checked={form.healthCategories.includes(cat)}
+                            onCheckedChange={(checked) => {
+                              update(
+                                "healthCategories",
+                                checked
+                                  ? [...form.healthCategories, cat]
+                                  : form.healthCategories.filter((c) => c !== cat)
+                              );
+                            }}
+                          />
+                          <span className="text-sm text-stone-700">{cat}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* Conditional: Pregnant -> Due Date */}
+                    {form.healthCategories.includes("Pregnant") && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-3">
+                        <Label className="text-stone-700 flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-amber-600" /> Due Date *
+                        </Label>
+                        <Input
+                          type="date"
+                          value={form.dueDate}
+                          onChange={(e) => update("dueDate", e.target.value)}
+                          className={errors.dueDate ? "border-red-400 mt-2" : "mt-2"}
+                        />
+                        {errors.dueDate && <p className="text-red-500 text-xs mt-1">{errors.dueDate}</p>}
+                      </div>
+                    )}
+
+                    {/* Conditional: Miscarriage -> Date */}
+                    {form.healthCategories.includes("Had a Miscarriage") && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-3">
+                        <Label className="text-stone-700 flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-amber-600" /> Date of Miscarriage *
+                        </Label>
+                        <Input
+                          type="date"
+                          value={form.miscarriageDate}
+                          onChange={(e) => update("miscarriageDate", e.target.value)}
+                          className={errors.miscarriageDate ? "border-red-400 mt-2" : "mt-2"}
+                        />
+                        {errors.miscarriageDate && <p className="text-red-500 text-xs mt-1">{errors.miscarriageDate}</p>}
+                      </div>
+                    )}
+
+                    {/* Conditional: Postpartum -> Infant Info */}
+                    {form.healthCategories.includes("Postpartum (Within the last 12 months)") && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-3 space-y-3">
+                        <h4 className="font-semibold text-stone-700 flex items-center gap-2">
+                          <Baby className="w-4 h-4 text-blue-600" /> Infant Information
+                        </h4>
+                        <div>
+                          <Label className="text-stone-700">Infant Name *</Label>
+                          <Input
+                            value={form.infantName}
+                            onChange={(e) => update("infantName", e.target.value)}
+                            className={errors.infantName ? "border-red-400" : ""}
+                            placeholder="Baby's full name"
+                          />
+                          {errors.infantName && <p className="text-red-500 text-xs mt-1">{errors.infantName}</p>}
+                        </div>
+                        <div>
+                          <Label className="text-stone-700">Infant Date of Birth *</Label>
+                          <Input
+                            type="date"
+                            value={form.infantDateOfBirth}
+                            onChange={(e) => update("infantDateOfBirth", e.target.value)}
+                            className={errors.infantDateOfBirth ? "border-red-400" : ""}
+                          />
+                          {errors.infantDateOfBirth && <p className="text-red-500 text-xs mt-1">{errors.infantDateOfBirth}</p>}
+                        </div>
+                        <div>
+                          <Label className="text-stone-700">Infant Medicaid ID (CIN) *</Label>
+                          <Input
+                            value={form.infantMedicaidId}
+                            onChange={(e) => update("infantMedicaidId", e.target.value.toUpperCase())}
+                            className={errors.infantMedicaidId ? "border-red-400" : ""}
+                            placeholder="AB12345C"
+                            maxLength={8}
+                          />
+                          {errors.infantMedicaidId && <p className="text-red-500 text-xs mt-1">{errors.infantMedicaidId}</p>}
+                        </div>
+
+                        {/* Child document uploads */}
+                        <FileUploadField
+                          label="Child's Medicaid Card *"
+                          category="childMedicaidCard_0"
+                          uploads={uploads}
+                          setUploads={setUploads}
+                          uploading={uploading}
+                          setUploading={setUploading}
+                        />
+                        <FileUploadField
+                          label="Child's Birth Certificate *"
+                          category="childBirthCertificate_0"
+                          uploads={uploads}
+                          setUploads={setUploads}
+                          uploading={uploading}
+                          setUploading={setUploading}
+                        />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Benefits & Employment */}
+                <Card className="border-stone-200">
+                  <CardContent className="p-6 space-y-4">
+                    <h3 className="font-bold text-stone-800">Benefits & Employment</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {[
+                        { key: "employed" as const, label: "Employed *" },
+                        { key: "spouseEmployed" as const, label: "Spouse Employed *" },
+                        { key: "hasWic" as const, label: "Receives WIC *" },
+                        { key: "hasSnap" as const, label: "Receives SNAP *" },
+                      ].map(({ key, label }) => (
+                        <div key={key}>
+                          <Label className="text-stone-700">{label}</Label>
+                          <YesNoSelect
+                            value={form[key]}
+                            onChange={(v) => update(key, v)}
+                            error={errors[key]}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <Label className="text-stone-700">New Applicant *</Label>
+                      <Select value={form.newApplicant} onValueChange={(v) => update("newApplicant", v)}>
+                        <SelectTrigger className={errors.newApplicant ? "border-red-400" : ""}>
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Yes">Yes - New Applicant</SelectItem>
+                          <SelectItem value="No">No - Returning Applicant</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {errors.newApplicant && <p className="text-red-500 text-xs mt-1">{errors.newApplicant}</p>}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Food Allergies / Dietary Restrictions */}
+                <Card className="border-stone-200">
+                  <CardContent className="p-6 space-y-4">
+                    <h3 className="font-bold text-stone-800">Food Allergies / Dietary Restrictions</h3>
+                    <div>
+                      <Label className="text-stone-700">Food Allergies</Label>
+                      <Select value={form.foodAllergies} onValueChange={(v) => update("foodAllergies", v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="No">No</SelectItem>
+                          <SelectItem value="Yes">Yes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {form.foodAllergies === "Yes" && (
+                      <div>
+                        <Label className="text-stone-700">Please specify allergies</Label>
+                        <Textarea
+                          value={form.foodAllergiesDetails}
+                          onChange={(e) => update("foodAllergiesDetails", e.target.value)}
+                          placeholder="List your food allergies..."
+                          rows={3}
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <Label className="text-stone-700">Dietary Restrictions</Label>
+                      <Select value={form.dietaryRestrictions} onValueChange={(v) => update("dietaryRestrictions", v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["None", "Kosher", "Halal", "Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free", "Other"].map((v) => (
+                            <SelectItem key={v} value={v}>{v}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Household Members */}
+                <Card className="border-stone-200">
+                  <CardContent className="p-6 space-y-4">
+                    <h3 className="font-bold text-stone-800 flex items-center gap-2">
+                      <Users className="w-4 h-4 text-green-600" /> Additional Household Members
+                    </h3>
+                    <div>
+                      <Label className="text-stone-700">Number of additional household members</Label>
+                      <Select
+                        value={form.additionalMembersCount}
+                        onValueChange={(v) => update("additionalMembersCount", v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 10 }, (_, i) => (
+                            <SelectItem key={i} value={String(i)}>
+                              {i === 0 ? "None" : `${i} additional member${i > 1 ? "s" : ""}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {form.householdMembers.map((member, idx) => (
+                      <div key={idx} className="bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-3">
+                        <h4 className="font-semibold text-stone-700">Member {idx + 1}</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <Label className="text-stone-600 text-xs">Full Name</Label>
+                            <Input
+                              value={member.name}
+                              onChange={(e) => {
+                                const members = [...form.householdMembers];
+                                members[idx] = { ...members[idx], name: e.target.value };
+                                update("householdMembers", members);
+                              }}
+                              placeholder="Full Name"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-stone-600 text-xs">Date of Birth</Label>
+                            <Input
+                              type="date"
+                              value={member.dateOfBirth}
+                              onChange={(e) => {
+                                const members = [...form.householdMembers];
+                                members[idx] = { ...members[idx], dateOfBirth: e.target.value };
+                                update("householdMembers", members);
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-stone-600 text-xs">Medicaid ID</Label>
+                            <Input
+                              value={member.medicaidId}
+                              onChange={(e) => {
+                                const members = [...form.householdMembers];
+                                members[idx] = { ...members[idx], medicaidId: e.target.value.toUpperCase() };
+                                update("householdMembers", members);
+                              }}
+                              placeholder="AB12345C"
+                              maxLength={8}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Per-child document uploads */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                          <FileUploadField
+                            label={`Member ${idx + 1} Medicaid Card`}
+                            category={`memberMedicaidCard_${idx}`}
+                            uploads={uploads}
+                            setUploads={setUploads}
+                            uploading={uploading}
+                            setUploading={setUploading}
+                          />
+                          <FileUploadField
+                            label={`Member ${idx + 1} Birth Certificate`}
+                            category={`memberBirthCertificate_${idx}`}
+                            uploads={uploads}
+                            setUploads={setUploads}
+                            uploading={uploading}
+                            setUploading={setUploading}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* ─── STEP 3: Meals & Preferences ───────────────────────── */}
+            {step === 3 && (
+              <div className="space-y-8">
+                <div className="text-center mb-6">
+                  <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <UtensilsCrossed className="w-7 h-7 text-green-700" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-green-800 font-serif">Meal Preferences</h2>
+                  <p className="text-stone-500 text-sm mt-1">Tell us about your meal needs and kitchen setup.</p>
+                </div>
+
+                {Object.keys(errors).length > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                    <p className="text-sm text-red-700">Please complete all required fields.</p>
+                  </div>
+                )}
+
+                {/* Meal Focus */}
+                <Card className="border-stone-200">
+                  <CardContent className="p-6 space-y-4">
+                    <h3 className="font-bold text-stone-800">Meal Focus *</h3>
+                    <p className="text-sm text-stone-500">Select the meals you need help with.</p>
+                    {errors.mealFocus && <p className="text-red-500 text-xs">{errors.mealFocus}</p>}
+                    <div className="grid grid-cols-2 gap-3">
+                      {["Breakfast", "Lunch", "Dinner", "Snacks"].map((meal) => (
+                        <label
+                          key={meal}
+                          className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${
+                            form.mealFocus.includes(meal)
+                              ? "border-green-400 bg-green-50"
+                              : "border-stone-200 hover:border-green-300"
+                          }`}
+                        >
+                          <Checkbox
+                            checked={form.mealFocus.includes(meal)}
+                            onCheckedChange={(checked) => {
+                              update(
+                                "mealFocus",
+                                checked
+                                  ? [...form.mealFocus, meal]
+                                  : form.mealFocus.filter((m) => m !== meal)
+                              );
+                            }}
+                          />
+                          <span className="text-sm font-medium text-stone-700">{meal}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    {form.mealFocus.includes("Breakfast") && (
+                      <div>
+                        <Label className="text-stone-700">Preferred Breakfast Items</Label>
+                        <Textarea
+                          value={form.breakfastItems}
+                          onChange={(e) => update("breakfastItems", e.target.value)}
+                          placeholder="e.g., eggs, oatmeal, fruit, cereal..."
+                          rows={2}
+                        />
+                      </div>
+                    )}
+                    {form.mealFocus.includes("Lunch") && (
+                      <div>
+                        <Label className="text-stone-700">Preferred Lunch Items</Label>
+                        <Textarea
+                          value={form.lunchItems}
+                          onChange={(e) => update("lunchItems", e.target.value)}
+                          placeholder="e.g., sandwiches, salads, soup..."
+                          rows={2}
+                        />
+                      </div>
+                    )}
+                    {form.mealFocus.includes("Dinner") && (
+                      <div>
+                        <Label className="text-stone-700">Preferred Dinner Items</Label>
+                        <Textarea
+                          value={form.dinnerItems}
+                          onChange={(e) => update("dinnerItems", e.target.value)}
+                          placeholder="e.g., chicken, rice, vegetables..."
+                          rows={2}
+                        />
+                      </div>
+                    )}
+                    {form.mealFocus.includes("Snacks") && (
+                      <div>
+                        <Label className="text-stone-700">Preferred Snack Items</Label>
+                        <Textarea
+                          value={form.snackItems}
+                          onChange={(e) => update("snackItems", e.target.value)}
+                          placeholder="e.g., crackers, fruit, yogurt..."
+                          rows={2}
+                        />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Appliances */}
+                <Card className="border-stone-200">
+                  <CardContent className="p-6 space-y-4">
+                    <h3 className="font-bold text-stone-800">Household Appliances / Cooking Needs</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <Label className="text-stone-700">Needs Refrigerator *</Label>
+                        <YesNoSelect
+                          value={form.needsRefrigerator}
+                          onChange={(v) => update("needsRefrigerator", v)}
+                          error={errors.needsRefrigerator}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-stone-700">Needs Microwave *</Label>
+                        <YesNoSelect
+                          value={form.needsMicrowave}
+                          onChange={(v) => update("needsMicrowave", v)}
+                          error={errors.needsMicrowave}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-stone-700">Needs Cooking Utensils *</Label>
+                        <YesNoSelect
+                          value={form.needsCookingUtensils}
+                          onChange={(v) => update("needsCookingUtensils", v)}
+                          error={errors.needsCookingUtensils}
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* HIPAA Consent */}
+                <Card className="border-amber-200 bg-amber-50/50">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-3">
+                      <ShieldCheck className="w-6 h-6 text-amber-600 mt-0.5 shrink-0" />
+                      <div className="space-y-3">
+                        <h3 className="font-bold text-stone-800">HIPAA Authorization & Privacy</h3>
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <Checkbox
+                            checked={form.hipaaConsent}
+                            onCheckedChange={(checked) => update("hipaaConsent", checked === true)}
+                            className="mt-0.5"
+                          />
+                          <span className="text-sm text-stone-700 leading-relaxed">
+                            I authorize FreshSelect Meals to securely process my health and household information to coordinate my SCN food benefits, and I agree to the{" "}
+                            <a href="/privacy" target="_blank" className="text-green-700 underline font-medium">
+                              Privacy Policy
+                            </a>
+                            . *
+                          </span>
+                        </label>
+                        {errors.hipaaConsent && (
+                          <p className="text-red-500 text-sm">{errors.hipaaConsent}</p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* ─── STEP 4: Grocery Selection ─────────────────────────── */}
+            {step === 4 && (
+              <div className="space-y-8">
+                <div className="text-center mb-6">
+                  <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Store className="w-7 h-7 text-green-700" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-green-800 font-serif">Choose Your Supermarket</h2>
+                  <p className="text-stone-500 text-sm mt-1">Select your preferred grocery store for pickup or delivery.</p>
+                </div>
+
+                {errors.supermarket && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                    <p className="text-sm text-red-700">{errors.supermarket}</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {SUPERMARKETS.map((store) => (
                     <Card
-                      key={f.title}
-                      className="border-border/50 bg-card shadow-sm hover:shadow-md transition-shadow"
+                      key={store.name}
+                      className={`cursor-pointer transition-all hover:shadow-md ${
+                        form.supermarket === store.name
+                          ? "border-green-500 bg-green-50 ring-2 ring-green-200"
+                          : "border-stone-200 hover:border-green-300"
+                      }`}
+                      onClick={() => update("supermarket", store.name)}
                     >
                       <CardContent className="p-6 text-center">
-                        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                          <f.icon className="w-6 h-6 text-primary" />
-                        </div>
-                        <h3 className="font-semibold text-foreground mb-2">
-                          {f.title}
-                        </h3>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                          {f.desc}
+                        <div className="text-4xl mb-3">{store.icon}</div>
+                        <h3 className="font-bold text-stone-800 text-lg">{store.name}</h3>
+                        <p className="text-sm text-stone-500 flex items-center justify-center gap-1 mt-2">
+                          <MapPin className="w-3 h-3" /> {store.address}
                         </p>
+                        {form.supermarket === store.name && (
+                          <div className="mt-3">
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-3 py-1 rounded-full">
+                              <CheckCircle2 className="w-3 h-3" /> Selected
+                            </span>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
                 </div>
-              </section>
-            </motion.div>
-          )}
-
-          {/* Wizard Steps */}
-          {step >= 1 && step <= 3 && (
-            <motion.div
-              key={`step-${step}`}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.25 }}
-              className="container py-8 max-w-3xl mx-auto"
-            >
-              <ProgressBar step={step} />
-
-              {/* Step 1 */}
-              {step === 1 && (
-                <div>
-                  <div className="text-center mb-8">
-                    <h2 className="font-serif text-2xl sm:text-3xl text-foreground mb-2">
-                      Choose Your Supermarket
-                    </h2>
-                    <p className="text-muted-foreground">
-                      Select the local supermarket you'd like to order from
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {SUPERMARKETS.map((s) => (
-                      <button
-                        key={s.name}
-                        type="button"
-                        onClick={() => updateField("supermarket", s.name)}
-                        className={`relative p-5 rounded-xl border-2 text-left transition-all duration-200 bg-gradient-to-br ${
-                          s.color
-                        } ${
-                          formData.supermarket === s.name
-                            ? s.selectedBorder + " shadow-lg"
-                            : s.borderColor + " hover:shadow-md"
-                        }`}
-                      >
-                        {formData.supermarket === s.name && (
-                          <div className="absolute top-3 right-3">
-                            <CheckCircle2 className="w-5 h-5 text-primary" />
-                          </div>
-                        )}
-                        <div className="w-10 h-10 rounded-lg bg-white/70 flex items-center justify-center mb-3">
-                          <Store className="w-5 h-5 text-primary" />
-                        </div>
-                        <h3 className="font-semibold text-foreground text-base mb-1">
-                          {s.name}
-                        </h3>
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5" />
-                          {s.address}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                  <FieldError error={errors.supermarket} />
-                </div>
-              )}
-
-              {/* Step 2 */}
-              {step === 2 && (
-                <div className="space-y-8">
-                  <div className="text-center mb-2">
-                    <h2 className="font-serif text-2xl sm:text-3xl text-foreground mb-2">
-                      Your Household & Needs
-                    </h2>
-                    <p className="text-muted-foreground">
-                      Tell us about yourself and your household
-                    </p>
-                  </div>
-
-                  {/* Personal Info */}
-                  <Card className="border-border/50">
-                    <CardContent className="p-6 space-y-4">
-                      <h3 className="font-semibold text-foreground flex items-center gap-2 text-base">
-                        <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
-                          <Store className="w-4 h-4 text-primary" />
-                        </div>
-                        Mother's Personal Information
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="firstName">
-                            First Name{" "}
-                            <span className="text-destructive">*</span>
-                          </Label>
-                          <Input
-                            id="firstName"
-                            placeholder="Enter first name"
-                            value={formData.firstName}
-                            onChange={(e) =>
-                              updateField("firstName", e.target.value)
-                            }
-                            className={
-                              errors.firstName ? "border-destructive" : ""
-                            }
-                          />
-                          <FieldError error={errors.firstName} />
-                        </div>
-                        <div>
-                          <Label htmlFor="lastName">
-                            Last Name{" "}
-                            <span className="text-destructive">*</span>
-                          </Label>
-                          <Input
-                            id="lastName"
-                            placeholder="Enter last name"
-                            value={formData.lastName}
-                            onChange={(e) =>
-                              updateField("lastName", e.target.value)
-                            }
-                            className={
-                              errors.lastName ? "border-destructive" : ""
-                            }
-                          />
-                          <FieldError error={errors.lastName} />
-                        </div>
-                        <div>
-                          <Label htmlFor="dob">
-                            Date of Birth{" "}
-                            <span className="text-destructive">*</span>
-                          </Label>
-                          <Input
-                            id="dob"
-                            placeholder="MM/DD/YYYY"
-                            value={formData.dateOfBirth}
-                            onChange={(e) =>
-                              updateField("dateOfBirth", e.target.value)
-                            }
-                            className={
-                              errors.dateOfBirth ? "border-destructive" : ""
-                            }
-                          />
-                          <FieldError error={errors.dateOfBirth} />
-                        </div>
-                        <div>
-                          <Label htmlFor="medicaidId">
-                            Medicaid ID{" "}
-                            <span className="text-destructive">*</span>
-                          </Label>
-                          <Input
-                            id="medicaidId"
-                            placeholder="E.g. AB12345C"
-                            value={formData.medicaidId}
-                            onChange={(e) =>
-                              updateField(
-                                "medicaidId",
-                                e.target.value.toUpperCase()
-                              )
-                            }
-                            className={
-                              errors.medicaidId ? "border-destructive" : ""
-                            }
-                          />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            2 letters + 5 numbers + 1 letter (found on your
-                            Medicaid/insurance card)
-                          </p>
-                          <FieldError error={errors.medicaidId} />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Contact Info */}
-                  <Card className="border-border/50">
-                    <CardContent className="p-6 space-y-4">
-                      <h3 className="font-semibold text-foreground flex items-center gap-2 text-base">
-                        <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
-                          <Phone className="w-4 h-4 text-primary" />
-                        </div>
-                        Contact Information
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="cellPhone">
-                            Cell Phone{" "}
-                            <span className="text-destructive">*</span>
-                          </Label>
-                          <Input
-                            id="cellPhone"
-                            type="tel"
-                            placeholder="(555) 123-4567"
-                            value={formData.cellPhone}
-                            onChange={(e) =>
-                              updateField("cellPhone", e.target.value)
-                            }
-                            className={
-                              errors.cellPhone ? "border-destructive" : ""
-                            }
-                          />
-                          <FieldError error={errors.cellPhone} />
-                        </div>
-                        <div>
-                          <Label htmlFor="homePhone">Home Phone</Label>
-                          <Input
-                            id="homePhone"
-                            type="tel"
-                            placeholder="(555) 123-4567"
-                            value={formData.homePhone}
-                            onChange={(e) =>
-                              updateField("homePhone", e.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <Label htmlFor="email">
-                            Email Address{" "}
-                            <span className="text-destructive">*</span>
-                          </Label>
-                          <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                            <Input
-                              id="email"
-                              type="email"
-                              placeholder="your@email.com"
-                              value={formData.email}
-                              onChange={(e) =>
-                                updateField("email", e.target.value)
-                              }
-                              className={`pl-10 ${
-                                errors.email ? "border-destructive" : ""
-                              }`}
-                            />
-                          </div>
-                          <FieldError error={errors.email} />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Address */}
-                  <Card className="border-border/50">
-                    <CardContent className="p-6 space-y-4">
-                      <h3 className="font-semibold text-foreground flex items-center gap-2 text-base">
-                        <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
-                          <MapPin className="w-4 h-4 text-primary" />
-                        </div>
-                        Address
-                      </h3>
-                      <p className="text-sm text-muted-foreground -mt-2">
-                        Your address must be in New York to be eligible.
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="sm:col-span-2">
-                          <Label htmlFor="street">
-                            Street Address{" "}
-                            <span className="text-destructive">*</span>
-                          </Label>
-                          <Input
-                            id="street"
-                            placeholder="e.g., 123 Main St"
-                            value={formData.streetAddress}
-                            onChange={(e) =>
-                              updateField("streetAddress", e.target.value)
-                            }
-                            className={
-                              errors.streetAddress ? "border-destructive" : ""
-                            }
-                          />
-                          <FieldError error={errors.streetAddress} />
-                        </div>
-                        <div>
-                          <Label htmlFor="apt">Apt/Unit/Suite</Label>
-                          <Input
-                            id="apt"
-                            placeholder="e.g., Apt 7A"
-                            value={formData.aptUnit}
-                            onChange={(e) =>
-                              updateField("aptUnit", e.target.value)
-                            }
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="city">
-                            City <span className="text-destructive">*</span>
-                          </Label>
-                          <Input
-                            id="city"
-                            value={formData.city}
-                            onChange={(e) =>
-                              updateField("city", e.target.value)
-                            }
-                            className={errors.city ? "border-destructive" : ""}
-                          />
-                          <FieldError error={errors.city} />
-                        </div>
-                        <div>
-                          <Label htmlFor="state">
-                            State <span className="text-destructive">*</span>
-                          </Label>
-                          <Input
-                            id="state"
-                            value={formData.state}
-                            onChange={(e) =>
-                              updateField("state", e.target.value)
-                            }
-                            className={
-                              errors.state ? "border-destructive" : ""
-                            }
-                          />
-                          <FieldError error={errors.state} />
-                        </div>
-                        <div>
-                          <Label htmlFor="zip">
-                            Zipcode <span className="text-destructive">*</span>
-                          </Label>
-                          <Input
-                            id="zip"
-                            placeholder="e.g., 11206"
-                            value={formData.zipcode}
-                            onChange={(e) =>
-                              updateField("zipcode", e.target.value)
-                            }
-                            className={
-                              errors.zipcode ? "border-destructive" : ""
-                            }
-                          />
-                          <FieldError error={errors.zipcode} />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Health Categories */}
-                  <Card className="border-border/50">
-                    <CardContent className="p-6 space-y-4">
-                      <h3 className="font-semibold text-foreground flex items-center gap-2 text-base">
-                        <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
-                          <Heart className="w-4 h-4 text-primary" />
-                        </div>
-                        Health Categories
-                      </h3>
-                      <p className="text-sm text-muted-foreground -mt-2">
-                        Check off any category that applies to you or a family
-                        member
-                      </p>
-                      <div className="space-y-3">
-                        {HEALTH_CATEGORIES.map((cat) => (
-                          <div key={cat}>
-                            <label className="flex items-start gap-3 cursor-pointer group">
-                              <Checkbox
-                                checked={formData.healthCategories.includes(cat)}
-                                onCheckedChange={() =>
-                                  toggleHealthCategory(cat)
-                                }
-                                className="mt-0.5"
-                              />
-                              <span className="text-sm text-foreground group-hover:text-primary transition-colors">
-                                {cat}
-                              </span>
-                            </label>
-
-                            {/* Pregnant -> Due Date */}
-                            {cat === "Pregnant" &&
-                              formData.healthCategories.includes(
-                                "Pregnant"
-                              ) && (
-                                <motion.div
-                                  initial={{ opacity: 0, height: 0 }}
-                                  animate={{ opacity: 1, height: "auto" }}
-                                  exit={{ opacity: 0, height: 0 }}
-                                  transition={{ duration: 0.2 }}
-                                  className="ml-8 mt-2 mb-1"
-                                >
-                                  <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
-                                    <Label
-                                      htmlFor="dueDate"
-                                      className="text-sm flex items-center gap-1.5"
-                                    >
-                                      <Calendar className="w-3.5 h-3.5 text-primary" />
-                                      Due Date{" "}
-                                      <span className="text-destructive">
-                                        *
-                                      </span>
-                                    </Label>
-                                    <Input
-                                      id="dueDate"
-                                      type="date"
-                                      value={formData.dueDate}
-                                      onChange={(e) =>
-                                        updateField("dueDate", e.target.value)
-                                      }
-                                      className={`mt-1 max-w-xs ${
-                                        errors.dueDate
-                                          ? "border-destructive"
-                                          : ""
-                                      }`}
-                                    />
-                                    <FieldError error={errors.dueDate} />
-                                  </div>
-                                </motion.div>
-                              )}
-
-                            {/* Had a Miscarriage -> Date of Miscarriage */}
-                            {cat === "Had a Miscarriage" &&
-                              formData.healthCategories.includes(
-                                "Had a Miscarriage"
-                              ) && (
-                                <motion.div
-                                  initial={{ opacity: 0, height: 0 }}
-                                  animate={{ opacity: 1, height: "auto" }}
-                                  exit={{ opacity: 0, height: 0 }}
-                                  transition={{ duration: 0.2 }}
-                                  className="ml-8 mt-2 mb-1"
-                                >
-                                  <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
-                                    <Label
-                                      htmlFor="miscarriageDate"
-                                      className="text-sm flex items-center gap-1.5"
-                                    >
-                                      <Calendar className="w-3.5 h-3.5 text-primary" />
-                                      Date of Miscarriage{" "}
-                                      <span className="text-destructive">
-                                        *
-                                      </span>
-                                    </Label>
-                                    <Input
-                                      id="miscarriageDate"
-                                      type="date"
-                                      value={formData.miscarriageDate}
-                                      onChange={(e) =>
-                                        updateField(
-                                          "miscarriageDate",
-                                          e.target.value
-                                        )
-                                      }
-                                      className={`mt-1 max-w-xs ${
-                                        errors.miscarriageDate
-                                          ? "border-destructive"
-                                          : ""
-                                      }`}
-                                    />
-                                    <FieldError
-                                      error={errors.miscarriageDate}
-                                    />
-                                  </div>
-                                </motion.div>
-                              )}
-
-                            {/* Postpartum -> Infant Name, DOB, Medicaid ID */}
-                            {cat ===
-                              "Postpartum (Within the last 12 months)" &&
-                              formData.healthCategories.includes(
-                                "Postpartum (Within the last 12 months)"
-                              ) && (
-                                <motion.div
-                                  initial={{ opacity: 0, height: 0 }}
-                                  animate={{ opacity: 1, height: "auto" }}
-                                  exit={{ opacity: 0, height: 0 }}
-                                  transition={{ duration: 0.2 }}
-                                  className="ml-8 mt-2 mb-1"
-                                >
-                                  <div className="p-4 rounded-lg bg-primary/5 border border-primary/10 space-y-3">
-                                    <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                                      <Baby className="w-4 h-4 text-primary" />
-                                      Infant Information
-                                    </p>
-                                    <div>
-                                      <Label
-                                        htmlFor="infantName"
-                                        className="text-sm"
-                                      >
-                                        Infant Name{" "}
-                                        <span className="text-destructive">
-                                          *
-                                        </span>
-                                      </Label>
-                                      <Input
-                                        id="infantName"
-                                        placeholder="Enter infant's full name"
-                                        value={formData.infantName}
-                                        onChange={(e) =>
-                                          updateField(
-                                            "infantName",
-                                            e.target.value
-                                          )
-                                        }
-                                        className={`mt-1 ${
-                                          errors.infantName
-                                            ? "border-destructive"
-                                            : ""
-                                        }`}
-                                      />
-                                      <FieldError error={errors.infantName} />
-                                    </div>
-                                    <div>
-                                      <Label
-                                        htmlFor="infantDob"
-                                        className="text-sm flex items-center gap-1.5"
-                                      >
-                                        <Calendar className="w-3.5 h-3.5 text-primary" />
-                                        Infant Date of Birth{" "}
-                                        <span className="text-destructive">
-                                          *
-                                        </span>
-                                      </Label>
-                                      <Input
-                                        id="infantDob"
-                                        type="date"
-                                        value={formData.infantDateOfBirth}
-                                        onChange={(e) =>
-                                          updateField(
-                                            "infantDateOfBirth",
-                                            e.target.value
-                                          )
-                                        }
-                                        className={`mt-1 max-w-xs ${
-                                          errors.infantDateOfBirth
-                                            ? "border-destructive"
-                                            : ""
-                                        }`}
-                                      />
-                                      <FieldError
-                                        error={errors.infantDateOfBirth}
-                                      />
-                                    </div>
-                                    <div>
-                                      <Label
-                                        htmlFor="infantMedicaidId"
-                                        className="text-sm"
-                                      >
-                                        Infant Medicaid ID (CIN){" "}
-                                        <span className="text-destructive">
-                                          *
-                                        </span>
-                                      </Label>
-                                      <Input
-                                        id="infantMedicaidId"
-                                        placeholder="Enter infant's Medicaid ID"
-                                        value={formData.infantMedicaidId}
-                                        onChange={(e) =>
-                                          updateField(
-                                            "infantMedicaidId",
-                                            e.target.value
-                                          )
-                                        }
-                                        className={`mt-1 ${
-                                          errors.infantMedicaidId
-                                            ? "border-destructive"
-                                            : ""
-                                        }`}
-                                      />
-                                      <FieldError
-                                        error={errors.infantMedicaidId}
-                                      />
-                                    </div>
-                                  </div>
-                                </motion.div>
-                              )}
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Benefits & Employment */}
-                  <Card className="border-border/50">
-                    <CardContent className="p-6 space-y-4">
-                      <h3 className="font-semibold text-foreground text-base">
-                        Benefits & Employment
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {(
-                          [
-                            {
-                              id: "employed",
-                              label: "Are you Employed?",
-                              key: "employed",
-                            },
-                            {
-                              id: "spouseEmployed",
-                              label: "Is the Spouse Employed?",
-                              key: "spouseEmployed",
-                            },
-                            {
-                              id: "hasWic",
-                              label: "Do you have WIC?",
-                              key: "hasWic",
-                            },
-                            {
-                              id: "hasSnap",
-                              label: "Do you have SNAP?",
-                              key: "hasSnap",
-                            },
-                          ] as const
-                        ).map((q) => (
-                          <div key={q.id}>
-                            <Label>
-                              {q.label}{" "}
-                              <span className="text-destructive">*</span>
-                            </Label>
-                            <Select
-                              value={formData[q.key]}
-                              onValueChange={(val) => updateField(q.key, val)}
-                            >
-                              <SelectTrigger
-                                className={
-                                  errors[q.key] ? "border-destructive" : ""
-                                }
-                              >
-                                <SelectValue placeholder="Select..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Yes">Yes</SelectItem>
-                                <SelectItem value="No">No</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FieldError error={errors[q.key]} />
-                          </div>
-                        ))}
-                        <div>
-                          <Label>Food Allergies / Dietary Restrictions</Label>
-                          <Input
-                            placeholder="e.g., Nut allergy, Gluten-free"
-                            value={formData.foodAllergies}
-                            onChange={(e) =>
-                              updateField("foodAllergies", e.target.value)
-                            }
-                          />
-                        </div>
-                        <div>
-                          <Label>
-                            New Applicant?{" "}
-                            <span className="text-destructive">*</span>
-                          </Label>
-                          <Select
-                            value={formData.newApplicant}
-                            onValueChange={(val) =>
-                              updateField("newApplicant", val)
-                            }
-                          >
-                            <SelectTrigger
-                              className={
-                                errors.newApplicant ? "border-destructive" : ""
-                              }
-                            >
-                              <SelectValue placeholder="Select..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Yes">Yes</SelectItem>
-                              <SelectItem value="Transfer">Transfer</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FieldError error={errors.newApplicant} />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Household Members */}
-                  <Card className="border-border/50">
-                    <CardContent className="p-6 space-y-4">
-                      <h3 className="font-semibold text-foreground text-base">
-                        Additional Household Members
-                      </h3>
-                      <p className="text-sm text-muted-foreground -mt-2">
-                        List spouse, children, and infants (do NOT enter the
-                        applicant again). Only include those currently active on
-                        Medicaid.
-                      </p>
-                      <div>
-                        <Label>Number of Additional Members</Label>
-                        <Select
-                          value={formData.additionalMembersCount}
-                          onValueChange={handleMembersCountChange}
-                        >
-                          <SelectTrigger className="w-full sm:w-48">
-                            <SelectValue placeholder="Select..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="0">None</SelectItem>
-                            {Array.from({ length: 9 }, (_, i) => (
-                              <SelectItem key={i + 1} value={String(i + 1)}>
-                                {i + 1} member{i > 0 ? "s" : ""}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <AnimatePresence>
-                        {formData.householdMembers.map((member, i) => (
-                          <motion.div
-                            key={i}
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="border border-border rounded-lg p-4 space-y-3 bg-muted/30"
-                          >
-                            <h4 className="text-sm font-semibold text-foreground">
-                              Member {i + 1}
-                            </h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              <div>
-                                <Label className="text-xs">
-                                  Name{" "}
-                                  <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                  placeholder="Full name"
-                                  value={member.name}
-                                  onChange={(e) =>
-                                    updateMember(i, "name", e.target.value)
-                                  }
-                                  className={
-                                    errors[`member_${i}_name`]
-                                      ? "border-destructive"
-                                      : ""
-                                  }
-                                />
-                                <FieldError
-                                  error={errors[`member_${i}_name`]}
-                                />
-                              </div>
-                              <div>
-                                <Label className="text-xs">
-                                  Date of Birth{" "}
-                                  <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                  placeholder="MM/DD/YYYY"
-                                  value={member.dateOfBirth}
-                                  onChange={(e) =>
-                                    updateMember(
-                                      i,
-                                      "dateOfBirth",
-                                      e.target.value
-                                    )
-                                  }
-                                  className={
-                                    errors[`member_${i}_dob`]
-                                      ? "border-destructive"
-                                      : ""
-                                  }
-                                />
-                                <FieldError
-                                  error={errors[`member_${i}_dob`]}
-                                />
-                              </div>
-                              <div>
-                                <Label className="text-xs">
-                                  Medicaid ID{" "}
-                                  <span className="text-destructive">*</span>
-                                </Label>
-                                <Input
-                                  placeholder="AB12345C"
-                                  value={member.medicaidId}
-                                  onChange={(e) =>
-                                    updateMember(
-                                      i,
-                                      "medicaidId",
-                                      e.target.value.toUpperCase()
-                                    )
-                                  }
-                                  className={
-                                    errors[`member_${i}_medicaidId`]
-                                      ? "border-destructive"
-                                      : ""
-                                  }
-                                />
-                                <FieldError
-                                  error={errors[`member_${i}_medicaidId`]}
-                                />
-                              </div>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* Step 3 */}
-              {step === 3 && (
-                <div className="space-y-8">
-                  <div className="text-center mb-2">
-                    <h2 className="font-serif text-2xl sm:text-3xl text-foreground mb-2">
-                      Meal Preferences
-                    </h2>
-                    <p className="text-muted-foreground">
-                      Tell us what meals your family would like this week
-                    </p>
-                  </div>
-
-                  <Card className="border-border/50">
-                    <CardContent className="p-6 space-y-4">
-                      <h3 className="font-semibold text-foreground flex items-center gap-2 text-base">
-                        <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
-                          <UtensilsCrossed className="w-4 h-4 text-primary" />
-                        </div>
-                        Meal Focus
-                      </h3>
-                      <p className="text-sm text-muted-foreground -mt-2">
-                        Select which meals you'd like to focus on (select all
-                        that apply)
-                      </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {MEAL_OPTIONS.map((meal) => (
-                          <button
-                            key={meal.id}
-                            type="button"
-                            onClick={() => toggleMealFocus(meal.id)}
-                            className={`p-4 rounded-xl border-2 text-center transition-all duration-200 ${
-                              formData.mealFocus.includes(meal.id)
-                                ? "border-primary bg-primary/5 shadow-md"
-                                : "border-border hover:border-primary/30 hover:bg-muted/50"
-                            }`}
-                          >
-                            <UtensilsCrossed className="w-6 h-6 mx-auto mb-1 text-primary/70" />
-                            <span className="text-sm font-medium text-foreground">
-                              {meal.label}
-                            </span>
-                            {formData.mealFocus.includes(meal.id) && (
-                              <CheckCircle2 className="w-4 h-4 text-primary mx-auto mt-1" />
-                            )}
-                          </button>
-                        ))}
-                      </div>
-
-                      <AnimatePresence>
-                        {formData.mealFocus.includes("breakfast") && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="pt-2"
-                          >
-                            <Label htmlFor="breakfastItems">
-                              What breakfast items would you like?
-                            </Label>
-                            <Textarea
-                              id="breakfastItems"
-                              placeholder="e.g., Eggs, cereal, yogurt, fresh fruit..."
-                              value={formData.breakfastItems}
-                              onChange={(e) =>
-                                updateField("breakfastItems", e.target.value)
-                              }
-                              rows={2}
-                            />
-                          </motion.div>
-                        )}
-                        {formData.mealFocus.includes("lunch") && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="pt-2"
-                          >
-                            <Label htmlFor="lunchItems">
-                              What lunch items would you like?
-                            </Label>
-                            <Textarea
-                              id="lunchItems"
-                              placeholder="e.g., Sandwiches, salads, soups..."
-                              value={formData.lunchItems}
-                              onChange={(e) =>
-                                updateField("lunchItems", e.target.value)
-                              }
-                              rows={2}
-                            />
-                          </motion.div>
-                        )}
-                        {formData.mealFocus.includes("dinner") && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="pt-2"
-                          >
-                            <Label htmlFor="dinnerItems">
-                              What dinner items would you like?
-                            </Label>
-                            <Textarea
-                              id="dinnerItems"
-                              placeholder="e.g., Chicken, rice, vegetables, pasta..."
-                              value={formData.dinnerItems}
-                              onChange={(e) =>
-                                updateField("dinnerItems", e.target.value)
-                              }
-                              rows={2}
-                            />
-                          </motion.div>
-                        )}
-                        {formData.mealFocus.includes("snacks") && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="pt-2"
-                          >
-                            <Label htmlFor="snackItems">
-                              What snack items would you like?
-                            </Label>
-                            <Textarea
-                              id="snackItems"
-                              placeholder="e.g., Granola bars, fruit, crackers..."
-                              value={formData.snackItems}
-                              onChange={(e) =>
-                                updateField("snackItems", e.target.value)
-                              }
-                              rows={2}
-                            />
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-border/50">
-                    <CardContent className="p-6 space-y-4">
-                      <h3 className="font-semibold text-foreground text-base">
-                        Household Appliances / Cooking Needs
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                          <Label>
-                            Needs Refrigerator?{" "}
-                            <span className="text-destructive">*</span>
-                          </Label>
-                          <Select
-                            value={formData.needsRefrigerator}
-                            onValueChange={(val) =>
-                              updateField("needsRefrigerator", val)
-                            }
-                          >
-                            <SelectTrigger
-                              className={
-                                errors.needsRefrigerator
-                                  ? "border-destructive"
-                                  : ""
-                              }
-                            >
-                              <SelectValue placeholder="Select..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Yes">Yes</SelectItem>
-                              <SelectItem value="No">No</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FieldError error={errors.needsRefrigerator} />
-                        </div>
-                        <div>
-                          <Label>
-                            Needs Microwave?{" "}
-                            <span className="text-destructive">*</span>
-                          </Label>
-                          <Select
-                            value={formData.needsMicrowave}
-                            onValueChange={(val) =>
-                              updateField("needsMicrowave", val)
-                            }
-                          >
-                            <SelectTrigger
-                              className={
-                                errors.needsMicrowave
-                                  ? "border-destructive"
-                                  : ""
-                              }
-                            >
-                              <SelectValue placeholder="Select..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Yes">Yes</SelectItem>
-                              <SelectItem value="No">No</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FieldError error={errors.needsMicrowave} />
-                        </div>
-                        <div>
-                          <Label>
-                            Needs Cooking Utensils?{" "}
-                            <span className="text-destructive">*</span>
-                          </Label>
-                          <Select
-                            value={formData.needsCookingUtensils}
-                            onValueChange={(val) =>
-                              updateField("needsCookingUtensils", val)
-                            }
-                          >
-                            <SelectTrigger
-                              className={
-                                errors.needsCookingUtensils
-                                  ? "border-destructive"
-                                  : ""
-                              }
-                            >
-                              <SelectValue placeholder="Select..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Yes">Yes</SelectItem>
-                              <SelectItem value="No">No</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FieldError error={errors.needsCookingUtensils} />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* HIPAA Consent - Step 3 only */}
-              {step === 3 && (
-                <Card className={`mt-6 ${errors.hipaaConsent ? 'border-destructive/50 bg-destructive/5' : 'border-primary/20 bg-primary/5'}`}>
-                  <CardContent className="p-6">
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        id="hipaaConsent"
-                        checked={formData.hipaaConsent}
-                        onCheckedChange={(checked) =>
-                          updateField("hipaaConsent", checked === true)
-                        }
-                        className="mt-1"
-                      />
-                      <div className="flex-1">
-                        <Label
-                          htmlFor="hipaaConsent"
-                          className="text-sm leading-relaxed cursor-pointer font-normal"
-                        >
-                          I authorize FreshSelect Meals to securely process my
-                          health and household information to coordinate my SCN
-                          food benefits, and I agree to the{" "}
-                          <span className="text-primary underline">Privacy Policy</span>.
-                          <span className="text-destructive ml-1">*</span>
-                        </Label>
-                        <FieldError error={errors.hipaaConsent} />
-                      </div>
-                    </div>
-                    <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      HIPAA-compliant data handling
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Navigation */}
-              <div className="flex items-center justify-between mt-8 pb-8">
-                <Button
-                  variant="outline"
-                  onClick={goBack}
-                  disabled={submitMutation.isPending}
-                  className="gap-1"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  {step === 1 ? "Back to Home" : "Previous"}
-                </Button>
-                <Button
-                  onClick={goNext}
-                  disabled={submitMutation.isPending}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-1 min-w-[140px]"
-                >
-                  {submitMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Submitting...
-                    </>
-                  ) : step === 3 ? (
-                    <>
-                      Submit Application
-                      <CheckCircle2 className="w-4 h-4 ml-1" />
-                    </>
-                  ) : (
-                    <>
-                      Next Step
-                      <ChevronRight className="w-4 h-4" />
-                    </>
-                  )}
-                </Button>
               </div>
-
-              {submitMutation.isError && (
-                <div className="mb-8 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-start gap-2">
-                  <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="font-medium">Submission Error</p>
-                    <p>
-                      {submitMutation.error?.message ||
-                        "Something went wrong. Please try again."}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* Success */}
-          {step === 4 && (
-            <motion.div
-              key="success"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.4 }}
-              className="container py-16 max-w-2xl mx-auto text-center"
-            >
-              <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                <CheckCircle2 className="w-10 h-10 text-primary" />
-              </div>
-              <h2 className="font-serif text-3xl sm:text-4xl text-foreground mb-4">
-                Thank You!
-              </h2>
-              <p className="text-lg text-muted-foreground mb-6 leading-relaxed">
-                Your weekly meal selection has been received. We will confirm
-                with your supermarket and contact you within{" "}
-                <span className="font-semibold text-foreground">
-                  2 business days
-                </span>
-                .
-              </p>
-              <div className="inline-block bg-muted rounded-xl px-8 py-4 mb-8">
-                <p className="text-sm text-muted-foreground mb-1">
-                  Your Reference Number
-                </p>
-                <p className="text-2xl font-mono font-bold text-primary tracking-widest">
-                  {referenceNumber}
-                </p>
-              </div>
-              <p className="text-sm text-muted-foreground mb-8">
-                Please save this reference number for your records.
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setStep(0);
-                  setFormData({ ...INITIAL_FORM });
-                }}
-                className="font-medium"
-              >
-                Start a New Selection
-              </Button>
-            </motion.div>
-          )}
+            )}
+          </motion.div>
         </AnimatePresence>
-      </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border/50 bg-muted/30">
-        <div className="container py-6 text-center text-sm text-muted-foreground">
-          <p>
-            &copy; {new Date().getFullYear()} FreshSelect Meals &mdash; An SCN
-            Approved Vendor serving Williamsburg families.
-          </p>
-          <p className="mt-1 text-xs">
-            Confidential &bull; SCN Approved &bull; Local & Fresh
-          </p>
+        {/* Navigation Buttons */}
+        <div className="flex items-center justify-between mt-8 pb-8">
+          <Button
+            variant="outline"
+            onClick={goBack}
+            disabled={step === 1}
+            className="border-stone-300 text-stone-600"
+          >
+            <ChevronLeft className="w-4 h-4 mr-2" /> Previous
+          </Button>
+
+          <span className="text-sm text-stone-500">
+            Step {step} of 4
+          </span>
+
+          <Button
+            onClick={goNext}
+            disabled={submitMutation.isPending}
+            className="bg-green-700 hover:bg-green-800 text-white"
+          >
+            {submitMutation.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting...
+              </>
+            ) : step === 4 ? (
+              <>
+                Submit Application <CheckCircle2 className="w-4 h-4 ml-2" />
+              </>
+            ) : (
+              <>
+                Next Step <ChevronRight className="w-4 h-4 ml-2" />
+              </>
+            )}
+          </Button>
         </div>
-      </footer>
+
+        {submitMutation.isError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+            <p className="text-sm text-red-700">
+              Something went wrong. Please try again. If the problem persists, contact us at info@freshselectmeals.com.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
