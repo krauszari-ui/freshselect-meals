@@ -16,6 +16,8 @@ vi.mock("./db", () => ({
   updateSubmissionStatus: vi.fn(),
   updateWorkerPermissions: vi.fn(),
   getAllSubmissions: vi.fn(),
+  incrementReferralUsage: vi.fn().mockResolvedValue(undefined),
+  getReferralLinkByCode: vi.fn().mockResolvedValue(null),
 }));
 
 // Mock the email module

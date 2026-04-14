@@ -106,3 +106,18 @@
 - [x] Fix grocery/supermarket address display (added Bingo Wholesale)
 - [x] Update "New Applicant" to "New application or transfer from different agency"
 - [x] Add phone number 718-307-4664 to the site (header, contact section, success page, error page, emails)
+
+## Round 2 - Fix All Broken Buttons & Referral System
+- [x] Audit and fix ALL broken buttons across Dashboard, Clients, Client Detail, Tasks, Documents, Agency pages
+- [x] Fix form-to-client-list connection (submissions appear correctly in admin client list)
+- [x] Fix Client Detail page: Edit button, delete button, stage outcome dropdown, all tab interactions
+- [x] Fix Client Detail: Add Household Member, Add Address, Add Phone, Add Email dialogs
+- [x] Fix Client Detail: Add Task, Add Note, Upload Document interactions
+- [x] Fix Client Detail: Services tab - Add Service dialog
+- [x] Fix Dashboard: clickable stat cards navigate to correct filtered views
+- [x] Fix Tasks page: create task, update task status, filter/search
+- [x] Fix Documents page: upload document, delete document, category filter
+- [x] Fix Agency page: all interactive elements
+- [x] Build referral link system: admin can create referral links for people
+- [x] Track which referrer brought each client (show on client list and detail)
+- [x] Referral management page or section in admin

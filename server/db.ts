@@ -6,6 +6,7 @@ import {
   caseNotes, InsertCaseNote, CaseNote,
   documents, InsertDocument, Document,
   services, InsertService, Service,
+  referralLinks, InsertReferralLink, ReferralLink,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -360,4 +361,71 @@ export async function listAllUsers() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.select().from(users).orderBy(desc(users.createdAt));
+}
+
+// ─── Submission update/delete helpers ────────────────────────────────────
+
+export async function updateSubmissionFields(id: number, data: Partial<InsertSubmission>): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(submissions).set(data).where(eq(submissions.id, id));
+}
+
+export async function deleteSubmission(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Delete related records first
+  await db.delete(tasks).where(eq(tasks.submissionId, id));
+  await db.delete(caseNotes).where(eq(caseNotes.submissionId, id));
+  await db.delete(documents).where(eq(documents.submissionId, id));
+  await db.delete(services).where(eq(services.submissionId, id));
+  await db.delete(submissions).where(eq(submissions.id, id));
+}
+
+// ─── Referral Link helpers ───────────────────────────────────────────────
+
+export async function createReferralLink(data: InsertReferralLink): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(referralLinks).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function listReferralLinks() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(referralLinks).orderBy(desc(referralLinks.createdAt));
+}
+
+export async function getReferralLinkByCode(code: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(referralLinks).where(eq(referralLinks.code, code)).limit(1);
+  return result[0];
+}
+
+export async function updateReferralLink(id: number, data: Partial<InsertReferralLink>): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(referralLinks).set(data).where(eq(referralLinks.id, id));
+}
+
+export async function deleteReferralLink(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(referralLinks).where(eq(referralLinks.id, id));
+}
+
+export async function incrementReferralUsage(code: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(referralLinks).set({ usageCount: sql`usageCount + 1` }).where(eq(referralLinks.code, code));
+}
+
+export async function getReferralStats() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const links = await db.select().from(referralLinks).orderBy(desc(referralLinks.usageCount));
+  const totalReferrals = links.reduce((sum, l) => sum + l.usageCount, 0);
+  return { links, totalReferrals, totalLinks: links.length };
 }

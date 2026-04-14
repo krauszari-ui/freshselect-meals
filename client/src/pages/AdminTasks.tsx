@@ -68,9 +68,14 @@ export default function AdminTasks() {
     <AdminLayout>
       <div className="p-6 space-y-5">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Tasks & Action Items</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{taskStats.total} total tasks</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Tasks & Action Items</h1>
+            <p className="text-slate-500 text-sm mt-0.5">{taskStats.total} total tasks</p>
+          </div>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 h-9" onClick={() => setShowCreate(true)}>
+            <Plus className="h-4 w-4" /> Create Task
+          </Button>
         </div>
 
         {/* Filters */}

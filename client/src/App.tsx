@@ -15,6 +15,7 @@ import AdminAgency from "./pages/AdminAgency";
 import AdminClients from "./pages/AdminClients";
 import AdminClientDetail from "./pages/AdminClientDetail";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import AdminReferrals from "./pages/AdminReferrals";
 
 function Router() {
   return (
@@ -33,6 +34,7 @@ function Router() {
       <Route path={"/admin/agency"} component={AdminAgency} />
       <Route path={"/admin/clients"} component={AdminClients} />
       <Route path={"/admin/clients/:id"} component={AdminClientDetail} />
+      <Route path={"/admin/referrals"} component={AdminReferrals} />
 
       {/* Fallback */}
       <Route path={"/404"} component={NotFound} />

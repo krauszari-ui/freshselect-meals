@@ -223,7 +223,7 @@ function AddClientDialog({
               <Select value={form.supermarket} onValueChange={(v) => update("supermarket", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["Foodoo", "Rosemary Kosher", "Chestnut", "Central Market"].map((s) => (
+                  {["Foodoo", "Rosemary Kosher", "Chestnut", "Central Market", "Bingo Wholesale"].map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>

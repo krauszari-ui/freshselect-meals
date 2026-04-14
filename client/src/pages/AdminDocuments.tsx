@@ -77,9 +77,14 @@ export default function AdminDocuments() {
     <AdminLayout>
       <div className="p-6 space-y-5">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Document Library</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{docs.length} documents available</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Document Library</h1>
+            <p className="text-slate-500 text-sm mt-0.5">{docs.length} documents available</p>
+          </div>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 h-9" onClick={() => setShowUpload(true)}>
+            <Upload className="h-4 w-4" /> Upload Document
+          </Button>
         </div>
 
         {/* Filter */}
@@ -147,6 +152,53 @@ export default function AdminDocuments() {
           </div>
         )}
       </div>
+
+      {/* Upload Document Dialog */}
+      <Dialog open={showUpload} onOpenChange={setShowUpload}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upload Document</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">Category</label>
+              <Select value={uploadData.category} onValueChange={(v) => setUploadData({ ...uploadData, category: v })}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">Document Name (optional)</label>
+              <Input
+                placeholder="Leave blank to use file name"
+                value={uploadData.fileName}
+                onChange={(e) => setUploadData({ ...uploadData, fileName: e.target.value })}
+                className="h-9 text-sm"
+              />
+            </div>
+            <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
+              <Upload className="h-8 w-8 text-slate-400 mb-2" />
+              <span className="text-sm text-slate-500">Click to select a file</span>
+              <span className="text-xs text-slate-400 mt-1">{fileRef.current?.files?.[0]?.name || "No file selected"}</span>
+              <input ref={fileRef} type="file" className="hidden" onChange={() => {}} />
+            </label>
+          </div>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" onClick={() => setShowUpload(false)}>Cancel</Button>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={handleFileUpload}
+              disabled={uploading || uploadMutation.isPending}
+            >
+              {(uploading || uploadMutation.isPending) ? <Loader2 className="h-4 w-4 animate-spin" /> : "Upload"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }

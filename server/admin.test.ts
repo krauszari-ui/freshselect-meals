@@ -101,6 +101,18 @@ vi.mock("./db", () => ({
   toggleWorkerActive: vi.fn().mockResolvedValue(undefined),
   updateWorkerPermissions: vi.fn().mockResolvedValue(undefined),
   updateSubmissionEmailSent: vi.fn().mockResolvedValue(undefined),
+  updateSubmission: vi.fn().mockResolvedValue(undefined),
+  updateSubmissionFields: vi.fn().mockResolvedValue(undefined),
+  deleteSubmission: vi.fn().mockResolvedValue(undefined),
+  listReferralLinks: vi.fn().mockResolvedValue([
+    { id: 1, code: "abc123", referrerName: "John Smith", description: "Community partner", isActive: 1, usageCount: 5, createdAt: new Date() },
+  ]),
+  getReferralLinkByCode: vi.fn().mockResolvedValue({ id: 1, code: "abc123", referrerName: "John Smith", isActive: 1, usageCount: 5 }),
+  createReferralLink: vi.fn().mockResolvedValue(1),
+  updateReferralLink: vi.fn().mockResolvedValue(undefined),
+  deleteReferralLink: vi.fn().mockResolvedValue(undefined),
+  incrementReferralUsage: vi.fn().mockResolvedValue(undefined),
+  getReferralStats: vi.fn().mockResolvedValue({ totalLinks: 3, totalReferrals: 12 }),
 }));
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
@@ -464,5 +476,99 @@ describe("admin.exportCsv", () => {
     expect(result.csv).toBeDefined();
     expect(typeof result.csv).toBe("string");
     expect(result.count).toBeDefined();
+  });
+});
+
+// ─── Update Client ────────────────────────────────────────────────────
+describe("admin.updateClient", () => {
+  it("updates client data for admin", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.updateClient({
+      id: 1,
+      firstName: "Sarah Updated",
+      lastName: "Cohen",
+      email: "sarah.updated@example.com",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("throws FORBIDDEN for non-staff", async () => {
+    const caller = appRouter.createCaller(createUserContext());
+    await expect(
+      caller.admin.updateClient({ id: 1, firstName: "Hacker" })
+    ).rejects.toThrow("Staff access required");
+  });
+});
+
+// ─── Delete Client ────────────────────────────────────────────────────
+describe("admin.deleteClient", () => {
+  it("deletes a client for admin", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.deleteClient({ id: 1 });
+    expect(result.success).toBe(true);
+  });
+
+  it("throws FORBIDDEN for non-admin users", async () => {
+    const caller = appRouter.createCaller(createUserContext());
+    await expect(
+      caller.admin.deleteClient({ id: 1 })
+    ).rejects.toThrow();
+  });
+
+  it("throws FORBIDDEN for worker users", async () => {
+    const caller = appRouter.createCaller(createWorkerContext());
+    await expect(
+      caller.admin.deleteClient({ id: 1 })
+    ).rejects.toThrow("Admin access required");
+  });
+});
+
+// ─── Referral Links ───────────────────────────────────────────────────
+describe("admin.referrals", () => {
+  it("lists all referral links", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.referrals.list();
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBe(1);
+    expect(result[0].referrerName).toBe("John Smith");
+  });
+
+  it("creates a referral link", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.referrals.create({
+      code: "newcode",
+      referrerName: "Jane Doe",
+      description: "New partner",
+    });
+    expect(result.success).toBe(true);
+    expect(result.id).toBe(1);
+  });
+
+  it("updates a referral link", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.referrals.update({
+      id: 1,
+      referrerName: "Updated Name",
+      isActive: 0,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("deletes a referral link", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.referrals.delete({ id: 1 });
+    expect(result.success).toBe(true);
+  });
+
+  it("returns referral stats", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.referrals.stats();
+    expect(result.totalLinks).toBe(3);
+    expect(result.totalReferrals).toBe(12);
+  });
+
+  it("throws FORBIDDEN for non-staff", async () => {
+    const caller = appRouter.createCaller(createUserContext());
+    await expect(caller.admin.referrals.list()).rejects.toThrow("Staff access required");
   });
 });

@@ -4,18 +4,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ArrowLeft, Loader2, FileText, Plus, ChevronDown, ChevronUp,
-  Pencil, Trash2, Upload, ExternalLink,
+  Pencil, Trash2, Upload, ExternalLink, Link2,
 } from "lucide-react";
 import { useState, useRef } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import { toast } from "sonner";
 
 const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
@@ -29,21 +34,13 @@ const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string }> 
   flagged: { label: "Flagged", bg: "bg-rose-100", text: "text-rose-700" },
 };
 
-const OUTCOME_OPTIONS = [
-  "Select Outcome",
-  "Level One Only",
-  "Level One (household)",
-  "Level 2 Active",
-  "Ineligible For SCN",
-  "Provider Attestation Required",
-];
-
 const DOCUMENT_TYPES = [
   { value: "provider_attestation", label: "Provider Attestation" },
   { value: "consent", label: "Consent" },
   { value: "supporting_documentation", label: "Supporting Documentation" },
   { value: "id_document", label: "ID" },
   { value: "medicaid_card", label: "Medicaid Card" },
+  { value: "birth_certificate", label: "Birth Certificate" },
 ];
 
 function InfoLine({ label, value }: { label: string; value: string | null | undefined }) {
@@ -75,12 +72,10 @@ function SectionCard({ title, count, onAdd, children }: {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{title}</h3>
-          {count !== undefined && (
-            <span className="text-xs text-slate-400">{count} total</span>
-          )}
+          {count !== undefined && <span className="text-xs text-slate-400">{count} total</span>}
         </div>
         {onAdd && (
-          <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 h-7 text-xs px-2.5">
+          <Button size="sm" onClick={onAdd} className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1 h-7 text-xs px-2.5">
             <Plus className="h-3 w-3" /> Add
           </Button>
         )}
@@ -96,10 +91,7 @@ function CollapsibleSection({ title, defaultOpen = true, children }: {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="border border-slate-200 rounded-lg">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-      >
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
         {title}
         {open ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
       </button>
@@ -112,6 +104,7 @@ export default function AdminClientDetail() {
   const params = useParams<{ id: string }>();
   const id = parseInt(params.id || "0");
   const utils = trpc.useUtils();
+  const [, navigate] = useLocation();
 
   const { data: client, isLoading } = trpc.admin.getById.useQuery({ id }, { enabled: id > 0 });
   const { data: notes } = trpc.admin.notes.byClient.useQuery({ submissionId: id }, { enabled: id > 0 });
@@ -122,11 +115,38 @@ export default function AdminClientDetail() {
 
   const [activeTab, setActiveTab] = useState<"overview" | "assessment" | "services">("overview");
   const [noteText, setNoteText] = useState("");
-  const [showAddService, setShowAddService] = useState(false);
-  const [newServiceName, setNewServiceName] = useState("");
   const [docType, setDocType] = useState("provider_attestation");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Dialog states
+  const [showEdit, setShowEdit] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [showAddHousehold, setShowAddHousehold] = useState(false);
+  const [showAddAddress, setShowAddAddress] = useState(false);
+  const [showAddPhone, setShowAddPhone] = useState(false);
+  const [showAddEmail, setShowAddEmail] = useState(false);
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [showAddService, setShowAddService] = useState(false);
+  const [taskArea, setTaskArea] = useState<"intake_rep" | "assigned_worker">("intake_rep");
+
+  // Form states for dialogs
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", cellPhone: "", medicaidId: "", language: "", program: "" });
+  const [householdForm, setHouseholdForm] = useState({ name: "", dateOfBirth: "", medicaidId: "" });
+  const [addressForm, setAddressForm] = useState({ street: "", apt: "", city: "", state: "NY", zip: "" });
+  const [phoneForm, setPhoneForm] = useState("");
+  const [emailForm, setEmailForm] = useState("");
+  const [taskForm, setTaskForm] = useState("");
+  const [newServiceName, setNewServiceName] = useState("");
+
+  // Mutations
+  const updateClientMutation = trpc.admin.updateClient.useMutation({
+    onSuccess: () => { utils.admin.getById.invalidate({ id }); setShowEdit(false); toast.success("Client updated"); },
+    onError: (err) => toast.error(err.message),
+  });
+  const deleteClientMutation = trpc.admin.deleteClient.useMutation({
+    onSuccess: () => { toast.success("Client deleted"); navigate("/admin/clients"); },
+    onError: (err) => toast.error(err.message),
+  });
   const updateStageMutation = trpc.admin.updateStage.useMutation({
     onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Stage updated"); },
   });
@@ -137,7 +157,7 @@ export default function AdminClientDetail() {
     onSuccess: () => { utils.admin.notes.byClient.invalidate({ submissionId: id }); setNoteText(""); toast.success("Note added"); },
   });
   const addTaskMutation = trpc.admin.tasks.create.useMutation({
-    onSuccess: () => { utils.admin.tasks.byClient.invalidate({ submissionId: id }); toast.success("Task added"); },
+    onSuccess: () => { utils.admin.tasks.byClient.invalidate({ submissionId: id }); setShowAddTask(false); setTaskForm(""); toast.success("Task added"); },
   });
   const addServiceMutation = trpc.admin.services.create.useMutation({
     onSuccess: () => { utils.admin.services.byClient.invalidate({ submissionId: id }); setShowAddService(false); setNewServiceName(""); toast.success("Service added"); },
@@ -145,9 +165,11 @@ export default function AdminClientDetail() {
   const uploadDocMutation = trpc.admin.documents.upload.useMutation({
     onSuccess: () => { utils.admin.documents.byClient.invalidate({ submissionId: id }); toast.success("Document uploaded"); },
   });
+  const updateTaskStatusMutation = trpc.admin.tasks.updateStatus.useMutation({
+    onSuccess: () => { utils.admin.tasks.byClient.invalidate({ submissionId: id }); toast.success("Task status updated"); },
+  });
 
   const staffList = (staffQuery.data ?? []) as any[];
-
   const getWorkerName = (wId: number | null) => {
     if (!wId) return null;
     const w = staffList.find((s: any) => s.id === wId);
@@ -155,38 +177,82 @@ export default function AdminClientDetail() {
   };
 
   if (isLoading) {
-    return (
-      <AdminLayout>
-        <div className="flex justify-center items-center h-96"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div>
-      </AdminLayout>
-    );
+    return <AdminLayout><div className="flex justify-center items-center h-96"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div></AdminLayout>;
   }
-
   if (!client) {
-    return (
-      <AdminLayout>
-        <div className="p-6 text-center">
-          <p className="text-slate-500">Client not found</p>
-          <Link href="/admin/clients"><Button variant="outline" className="mt-4">Back to Clients</Button></Link>
-        </div>
-      </AdminLayout>
-    );
+    return <AdminLayout><div className="p-6 text-center"><p className="text-slate-500">Client not found</p><Link href="/admin/clients"><Button variant="outline" className="mt-4">Back to Clients</Button></Link></div></AdminLayout>;
   }
 
   const fd = (client as any).formData as any || {};
-  const screening = fd.screening || {};
+  const screening = fd.screening || fd.screeningQuestions || {};
   const healthCategories = fd.healthCategories || [];
   const householdMembers = fd.householdMembers || [];
-  const documents = fd.documents || {};
+  const additionalAddresses = fd.additionalAddresses || [];
+  const additionalPhones = fd.additionalPhones || [];
+  const additionalEmails = fd.additionalEmails || [];
+  const documents = fd.documents || fd.uploadedDocuments || {};
 
   const stageInfo = STAGE_CONFIG[client.stage] || { label: client.stage, bg: "bg-slate-100", text: "text-slate-700" };
   const isReferral = client.stage === "referral";
   const isAssessment = ["assessment", "level_one_only", "level_one_household", "level_2_active"].includes(client.stage);
   const intakeRepName = getWorkerName(client.intakeRep);
-  const assignedWorkerName = getWorkerName(client.assignedTo);
 
   const intakeRepTasks = (tasks || []).filter((t: any) => t.area === "intake_rep");
   const workerTasks = (tasks || []).filter((t: any) => t.area === "assigned_worker");
+
+  const openEditDialog = () => {
+    setEditForm({
+      firstName: client.firstName || "",
+      lastName: client.lastName || "",
+      email: client.email || "",
+      cellPhone: client.cellPhone || "",
+      medicaidId: client.medicaidId || "",
+      language: (client as any).language || "English",
+      program: (client as any).program || "PHS",
+    });
+    setShowEdit(true);
+  };
+
+  const handleEditSave = () => {
+    updateClientMutation.mutate({ id, ...editForm });
+  };
+
+  const handleAddHousehold = () => {
+    if (!householdForm.name.trim()) { toast.error("Name is required"); return; }
+    const updated = [...householdMembers, { ...householdForm }];
+    updateClientMutation.mutate({ id, formData: { householdMembers: updated } }, {
+      onSuccess: () => { setShowAddHousehold(false); setHouseholdForm({ name: "", dateOfBirth: "", medicaidId: "" }); toast.success("Household member added"); utils.admin.getById.invalidate({ id }); },
+    });
+  };
+
+  const handleAddAddress = () => {
+    if (!addressForm.street.trim()) { toast.error("Street is required"); return; }
+    const updated = [...additionalAddresses, { ...addressForm }];
+    updateClientMutation.mutate({ id, formData: { additionalAddresses: updated } }, {
+      onSuccess: () => { setShowAddAddress(false); setAddressForm({ street: "", apt: "", city: "", state: "NY", zip: "" }); toast.success("Address added"); utils.admin.getById.invalidate({ id }); },
+    });
+  };
+
+  const handleAddPhone = () => {
+    if (!phoneForm.trim()) { toast.error("Phone number is required"); return; }
+    const updated = [...additionalPhones, phoneForm.trim()];
+    updateClientMutation.mutate({ id, formData: { additionalPhones: updated } }, {
+      onSuccess: () => { setShowAddPhone(false); setPhoneForm(""); toast.success("Phone added"); utils.admin.getById.invalidate({ id }); },
+    });
+  };
+
+  const handleAddEmail = () => {
+    if (!emailForm.trim()) { toast.error("Email is required"); return; }
+    const updated = [...additionalEmails, emailForm.trim()];
+    updateClientMutation.mutate({ id, formData: { additionalEmails: updated } }, {
+      onSuccess: () => { setShowAddEmail(false); setEmailForm(""); toast.success("Email added"); utils.admin.getById.invalidate({ id }); },
+    });
+  };
+
+  const handleAddTask = () => {
+    if (!taskForm.trim()) { toast.error("Task description is required"); return; }
+    addTaskMutation.mutate({ submissionId: id, description: taskForm.trim(), area: taskArea });
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -194,16 +260,15 @@ export default function AdminClientDetail() {
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = (reader.result as string).split(",")[1];
-      uploadDocMutation.mutate({
-        submissionId: id,
-        name: file.name,
-        category: docType as any,
-        fileData: base64,
-        contentType: file.type,
-      });
+      uploadDocMutation.mutate({ submissionId: id, name: file.name, category: docType as any, fileData: base64, contentType: file.type });
     };
     reader.readAsDataURL(file);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const cycleTaskStatus = (taskId: number, currentStatus: string) => {
+    const next = currentStatus === "open" ? "completed" : currentStatus === "completed" ? "verified" : "open";
+    updateTaskStatusMutation.mutate({ id: taskId, status: next as any });
   };
 
   return (
@@ -213,18 +278,20 @@ export default function AdminClientDetail() {
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-3">
             <Link href="/admin/clients">
-              <button className="mt-1.5 text-slate-400 hover:text-slate-600">
-                <ArrowLeft className="h-5 w-5" />
-              </button>
+              <button className="mt-1.5 text-slate-400 hover:text-slate-600"><ArrowLeft className="h-5 w-5" /></button>
             </Link>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold text-slate-900">{client.firstName} {client.lastName}</h1>
-                <Badge className={`${stageInfo.bg} ${stageInfo.text} text-xs font-medium border-0`}>
-                  {stageInfo.label}
-                </Badge>
+                <Badge className={`${stageInfo.bg} ${stageInfo.text} text-xs font-medium border-0`}>{stageInfo.label}</Badge>
               </div>
               <p className="text-sm text-slate-500 mt-0.5">Carebridge</p>
+              {client.referralSource && (
+                <div className="flex items-center gap-1 mt-0.5 text-xs text-blue-600">
+                  <Link2 className="h-3 w-3" />
+                  <span>Referred via: <strong>{client.referralSource}</strong></span>
+                </div>
+              )}
               <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
                 <span>Intake Rep: <strong className="text-slate-700">{intakeRepName || "—"}</strong></span>
                 <span className="flex items-center gap-1.5">
@@ -233,14 +300,10 @@ export default function AdminClientDetail() {
                     value={client.assignedTo ? String(client.assignedTo) : "unassigned"}
                     onValueChange={(v) => updateAssignmentMutation.mutate({ id, assignedTo: v === "unassigned" ? null : parseInt(v) })}
                   >
-                    <SelectTrigger className="h-7 w-[140px] text-xs border-slate-300">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger className="h-7 w-[140px] text-xs border-slate-300"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {staffList.map((s: any) => (
-                        <SelectItem key={s.id} value={String(s.id)}>{s.name || `User #${s.id}`}</SelectItem>
-                      ))}
+                      {staffList.map((s: any) => <SelectItem key={s.id} value={String(s.id)}>{s.name || `User #${s.id}`}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </span>
@@ -248,10 +311,10 @@ export default function AdminClientDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5 text-slate-600 h-8">
+            <Button variant="outline" size="sm" className="gap-1.5 text-slate-600 h-8" onClick={openEditDialog}>
               <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>
-            <Button variant="outline" size="sm" className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 w-8 p-0">
+            <Button variant="outline" size="sm" className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 w-8 p-0" onClick={() => setShowDelete(true)}>
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -261,55 +324,21 @@ export default function AdminClientDetail() {
         <div className="bg-white rounded-lg border border-slate-200 p-5">
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Intake Journey</h3>
           <div className="flex items-center">
-            {/* Step 1: Referral */}
             <div className="flex flex-col items-center">
-              <button
-                onClick={() => updateStageMutation.mutate({ id, stage: "referral" })}
-                className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-                  isReferral || isAssessment
-                    ? "bg-emerald-500 text-white"
-                    : "bg-slate-200 text-slate-500"
-                }`}
-              >
-                1
-              </button>
+              <button onClick={() => updateStageMutation.mutate({ id, stage: "referral" })} className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${isReferral || isAssessment ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-500"}`}>1</button>
               <span className={`text-xs mt-1.5 ${isReferral ? "font-semibold text-emerald-700" : "text-slate-500"}`}>Referral</span>
             </div>
-
-            {/* Line */}
             <div className={`flex-1 h-0.5 mx-2 ${isAssessment ? "bg-emerald-500" : "bg-slate-200"}`} />
-
-            {/* Step 2: Assessment */}
             <div className="flex flex-col items-center">
-              <button
-                onClick={() => updateStageMutation.mutate({ id, stage: "assessment" })}
-                className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-                  isAssessment
-                    ? "bg-emerald-500 text-white"
-                    : "bg-slate-200 text-slate-500"
-                }`}
-              >
-                2
-              </button>
+              <button onClick={() => updateStageMutation.mutate({ id, stage: "assessment" })} className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${isAssessment ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-500"}`}>2</button>
               <span className={`text-xs mt-1.5 ${isAssessment ? "font-semibold text-emerald-700" : "text-slate-500"}`}>Assessment</span>
             </div>
-
-            {/* Line */}
             <div className="flex-1 h-0.5 mx-2 bg-slate-200" />
-
-            {/* Outcome */}
             <div className="flex flex-col items-center">
-              <Select
-                value={client.stage}
-                onValueChange={(v) => updateStageMutation.mutate({ id, stage: v as any })}
-              >
-                <SelectTrigger className="h-10 w-[180px] text-xs bg-slate-100 border-slate-200">
-                  <SelectValue placeholder="Select Outcome" />
-                </SelectTrigger>
+              <Select value={client.stage} onValueChange={(v) => updateStageMutation.mutate({ id, stage: v as any })}>
+                <SelectTrigger className="h-10 w-[180px] text-xs bg-slate-100 border-slate-200"><SelectValue placeholder="Select Outcome" /></SelectTrigger>
                 <SelectContent>
-                  {Object.entries(STAGE_CONFIG).map(([key, { label }]) => (
-                    <SelectItem key={key} value={key}>{label}</SelectItem>
-                  ))}
+                  {Object.entries(STAGE_CONFIG).map(([key, { label }]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
                 </SelectContent>
               </Select>
               <span className="text-xs mt-1.5 text-slate-500">Outcome</span>
@@ -320,15 +349,7 @@ export default function AdminClientDetail() {
         {/* Tabs */}
         <div className="flex gap-1 border-b border-slate-200">
           {(["overview", "assessment", "services"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                activeTab === tab
-                  ? "border-emerald-500 text-emerald-700"
-                  : "border-transparent text-slate-500 hover:text-slate-700"
-              }`}
-            >
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
               {tab === "overview" ? "Overview" : tab === "assessment" ? "Assessment" : "Services"}
             </button>
           ))}
@@ -337,74 +358,77 @@ export default function AdminClientDetail() {
         {/* Overview Tab */}
         {activeTab === "overview" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Left Column */}
             <div className="space-y-5">
-              {/* Client Information */}
               <SectionCard title="Client Information">
                 <InfoLine label="CIN ID" value={client.medicaidId} />
                 <InfoLine label="Date of Birth" value={fd.dateOfBirth ? new Date(fd.dateOfBirth).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : null} />
                 <InfoLine label="Phone" value={client.cellPhone} />
                 <InfoLine label="Address" value={[fd.streetAddress, fd.aptUnit, fd.city || "Brooklyn", fd.state || "NY", fd.zipcode].filter(Boolean).join(" ")} />
-                <InfoLine label="Language" value={client.language || "English"} />
-                <InfoLine label="Program" value={client.program || "PHS"} />
+                <InfoLine label="Language" value={(client as any).language || "English"} />
+                <InfoLine label="Program" value={(client as any).program || "PHS"} />
+                {client.referralSource && <InfoLine label="Referred By" value={client.referralSource} />}
               </SectionCard>
 
-              {/* Household Members */}
-              <SectionCard title="Household Members" count={householdMembers.length} onAdd={() => toast.info("Feature coming soon")}>
+              <SectionCard title="Household Members" count={householdMembers.length} onAdd={() => setShowAddHousehold(true)}>
                 {householdMembers.length > 0 ? (
                   <div className="space-y-2">
                     {householdMembers.map((m: any, i: number) => (
                       <div key={i} className="p-3 rounded-lg bg-slate-50 border border-slate-100">
                         <p className="text-sm font-medium text-slate-900">{m.name || `Member ${i + 1}`}</p>
                         <div className="flex gap-4 mt-1 text-xs text-slate-500">
-                          <span>DOB: {m.dob || m.dateOfBirth || "—"}</span>
+                          <span>DOB: {m.dateOfBirth || m.dob || "—"}</span>
                           <span>Medicaid: {m.medicaidId || "—"}</span>
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-sm text-slate-400">No household members linked</p>
-                )}
+                ) : <p className="text-sm text-slate-400">No household members linked</p>}
               </SectionCard>
 
-              {/* Addresses */}
-              <SectionCard title="Addresses" onAdd={() => toast.info("Feature coming soon")}>
-                <p className="text-sm text-slate-400">No additional addresses. Click Add to create one.</p>
+              <SectionCard title="Addresses" onAdd={() => setShowAddAddress(true)}>
+                {additionalAddresses.length > 0 ? (
+                  <div className="space-y-2">
+                    {additionalAddresses.map((a: any, i: number) => (
+                      <div key={i} className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                        <p className="text-sm text-slate-700">{a.street} {a.apt && `Apt ${a.apt}`}</p>
+                        <p className="text-xs text-slate-500">{a.city}, {a.state} {a.zip}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className="text-sm text-slate-400">No additional addresses. Click Add to create one.</p>}
               </SectionCard>
 
-              {/* Additional Phones */}
-              <SectionCard title="Additional Phones" onAdd={() => toast.info("Feature coming soon")}>
-                <p className="text-sm text-slate-400">No additional phone numbers. Click Add to create one.</p>
+              <SectionCard title="Additional Phones" onAdd={() => setShowAddPhone(true)}>
+                {additionalPhones.length > 0 ? (
+                  <div className="space-y-1">
+                    {additionalPhones.map((p: string, i: number) => (
+                      <p key={i} className="text-sm text-slate-700 p-2 rounded bg-slate-50 border border-slate-100">{p}</p>
+                    ))}
+                  </div>
+                ) : <p className="text-sm text-slate-400">No additional phone numbers. Click Add to create one.</p>}
               </SectionCard>
 
-              {/* Email Addresses */}
-              <SectionCard title="Email Addresses" onAdd={() => toast.info("Feature coming soon")}>
-                {client.email ? (
-                  <p className="text-sm text-slate-700">{client.email}</p>
-                ) : (
-                  <p className="text-sm text-slate-400">No email addresses. Click Add to create one.</p>
-                )}
+              <SectionCard title="Email Addresses" onAdd={() => setShowAddEmail(true)}>
+                {client.email && <p className="text-sm text-slate-700 p-2 rounded bg-slate-50 border border-slate-100 mb-1">{client.email}</p>}
+                {additionalEmails.length > 0 && additionalEmails.map((e: string, i: number) => (
+                  <p key={i} className="text-sm text-slate-700 p-2 rounded bg-slate-50 border border-slate-100 mb-1">{e}</p>
+                ))}
+                {!client.email && additionalEmails.length === 0 && <p className="text-sm text-slate-400">No email addresses. Click Add to create one.</p>}
               </SectionCard>
             </div>
 
-            {/* Right Column */}
             <div className="space-y-5">
               {/* Services */}
               <SectionCard title="Services">
                 <div className="flex justify-end -mt-2 mb-2">
-                  <Link href={`#`}>
-                    <span className="text-xs text-blue-600 hover:text-blue-700 cursor-pointer" onClick={() => setActiveTab("services")}>View All</span>
-                  </Link>
+                  <span className="text-xs text-blue-600 hover:text-blue-700 cursor-pointer" onClick={() => setActiveTab("services")}>View All</span>
                 </div>
                 {clientServices && (clientServices as any[]).length > 0 ? (
                   <div className="space-y-2">
                     {(clientServices as any[]).slice(0, 3).map((s: any) => (
                       <div key={s.id} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100">
                         <span className="text-sm text-slate-700">{s.name}</span>
-                        <Badge className={`text-[10px] ${s.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
-                          {s.status}
-                        </Badge>
+                        <Badge className={`text-[10px] ${s.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{s.status}</Badge>
                       </div>
                     ))}
                   </div>
@@ -419,32 +443,23 @@ export default function AdminClientDetail() {
               {/* Tasks & Action Items */}
               <div className="bg-white rounded-lg border border-slate-200 p-5">
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Tasks & Action Items</h3>
-
-                {/* Intake Rep Tasks */}
                 <CollapsibleSection title={`Intake Rep Tasks → ${intakeRepName || "Unassigned"}`}>
                   {intakeRepTasks.length > 0 ? (
                     <div className="space-y-2">
                       {intakeRepTasks.map((t: any) => (
                         <div key={t.id} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100">
                           <span className="text-sm text-slate-700">{t.description}</span>
-                          <Badge className={`text-[10px] ${t.status === "completed" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                          <Badge className={`text-[10px] cursor-pointer ${t.status === "completed" ? "bg-emerald-100 text-emerald-700" : t.status === "verified" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`} onClick={() => cycleTaskStatus(t.id, t.status)}>
                             {t.status}
                           </Badge>
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <p className="text-sm text-slate-400">No tasks yet.</p>
-                  )}
-                  <Button
-                    variant="ghost" size="sm"
-                    className="text-blue-600 hover:text-blue-700 gap-1 mt-2 h-7 text-xs px-2"
-                    onClick={() => addTaskMutation.mutate({ submissionId: id, description: "New task", area: "intake_rep" })}
-                  >
+                  ) : <p className="text-sm text-slate-400">No tasks yet.</p>}
+                  <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 gap-1 mt-2 h-7 text-xs px-2" onClick={() => { setTaskArea("intake_rep"); setShowAddTask(true); }}>
                     <Plus className="h-3 w-3" /> Add Task
                   </Button>
                 </CollapsibleSection>
-
                 <div className="mt-3">
                   <CollapsibleSection title="Assigned Worker Tasks">
                     {workerTasks.length > 0 ? (
@@ -452,20 +467,14 @@ export default function AdminClientDetail() {
                         {workerTasks.map((t: any) => (
                           <div key={t.id} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100">
                             <span className="text-sm text-slate-700">{t.description}</span>
-                            <Badge className={`text-[10px] ${t.status === "completed" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                            <Badge className={`text-[10px] cursor-pointer ${t.status === "completed" ? "bg-emerald-100 text-emerald-700" : t.status === "verified" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`} onClick={() => cycleTaskStatus(t.id, t.status)}>
                               {t.status}
                             </Badge>
                           </div>
                         ))}
                       </div>
-                    ) : (
-                      <p className="text-sm text-slate-400">No tasks yet.</p>
-                    )}
-                    <Button
-                      variant="ghost" size="sm"
-                      className="text-blue-600 hover:text-blue-700 gap-1 mt-2 h-7 text-xs px-2"
-                      onClick={() => addTaskMutation.mutate({ submissionId: id, description: "New task", area: "assigned_worker" })}
-                    >
+                    ) : <p className="text-sm text-slate-400">No tasks yet.</p>}
+                    <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 gap-1 mt-2 h-7 text-xs px-2" onClick={() => { setTaskArea("assigned_worker"); setShowAddTask(true); }}>
                       <Plus className="h-3 w-3" /> Add Task
                     </Button>
                   </CollapsibleSection>
@@ -476,75 +485,44 @@ export default function AdminClientDetail() {
               <div className="bg-white rounded-lg border border-slate-200 p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Case Notes</h3>
-                  <Button
-                    size="sm"
-                    className="bg-blue-600 hover:bg-blue-700 text-white gap-1 h-7 text-xs px-2.5"
-                    onClick={() => {
-                      if (noteText.trim()) {
-                        addNoteMutation.mutate({ submissionId: id, content: noteText.trim() });
-                      }
-                    }}
-                    disabled={!noteText.trim() || addNoteMutation.isPending}
-                  >
+                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white gap-1 h-7 text-xs px-2.5" onClick={() => { if (noteText.trim()) addNoteMutation.mutate({ submissionId: id, content: noteText.trim() }); }} disabled={!noteText.trim() || addNoteMutation.isPending}>
                     <Plus className="h-3 w-3" /> Add Note
                   </Button>
                 </div>
-                <Textarea
-                  placeholder="Add a case note..."
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  className="text-sm min-h-[60px] mb-3"
-                />
+                <Textarea placeholder="Add a case note..." value={noteText} onChange={(e) => setNoteText(e.target.value)} className="text-sm min-h-[60px] mb-3" />
                 {notes && (notes as any[]).length > 0 ? (
                   <div className="space-y-2">
                     {(notes as any[]).map((note: any) => (
                       <div key={note.id} className="p-3 rounded-lg bg-slate-50 border border-slate-100">
                         <p className="text-sm text-slate-700">{note.content}</p>
                         <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
-                          <span>{note.authorName || "Staff"}</span>
-                          <span>&middot;</span>
+                          <span>{note.authorName || "Staff"}</span><span>&middot;</span>
                           <span>{new Date(note.createdAt).toLocaleString()}</span>
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-sm text-slate-400">No notes yet.</p>
-                )}
+                ) : <p className="text-sm text-slate-400">No notes yet.</p>}
               </div>
 
               {/* Documents */}
               <div className="bg-white rounded-lg border border-slate-200 p-5">
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Documents</h3>
-
-                {/* Document Type + Upload */}
                 <div className="flex gap-2 mb-3">
                   <Select value={docType} onValueChange={setDocType}>
-                    <SelectTrigger className="flex-1 h-9 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger className="flex-1 h-9 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {DOCUMENT_TYPES.map((dt) => (
-                        <SelectItem key={dt.value} value={dt.value}>{dt.label}</SelectItem>
-                      ))}
+                      {DOCUMENT_TYPES.map((dt) => <SelectItem key={dt.value} value={dt.value}>{dt.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* Upload area */}
                 <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors mb-3">
                   <Upload className="h-6 w-6 text-slate-400 mb-1" />
                   <span className="text-sm text-slate-500">Click to upload documents</span>
                   <span className="text-xs text-slate-400">or drag files here</span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                  />
+                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
                 </label>
-
-                {/* Existing documents */}
+                {uploadDocMutation.isPending && <div className="flex items-center gap-2 text-sm text-blue-600 mb-2"><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</div>}
                 {clientDocs && (clientDocs as any[]).length > 0 ? (
                   <div className="space-y-2">
                     {(clientDocs as any[]).map((doc: any) => (
@@ -553,32 +531,23 @@ export default function AdminClientDetail() {
                           <FileText className="h-4 w-4 text-slate-400" />
                           <span className="text-sm text-slate-700">{doc.name}</span>
                         </div>
-                        <a href={doc.url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" />
-                        </a>
+                        <a href={doc.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" /></a>
                       </div>
                     ))}
                   </div>
-                ) : (
-                  /* Also show form-uploaded documents */
-                  Object.keys(documents).length > 0 ? (
-                    <div className="space-y-2">
-                      {Object.entries(documents).map(([key, url]) => (
-                        <div key={key} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-slate-400" />
-                            <span className="text-sm text-slate-700">{key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}</span>
-                          </div>
-                          <a href={url as string} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" />
-                          </a>
+                ) : Object.keys(documents).length > 0 ? (
+                  <div className="space-y-2">
+                    {Object.entries(documents).map(([key, url]) => (
+                      <div key={key} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-slate-400" />
+                          <span className="text-sm text-slate-700">{key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}</span>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-400">No documents yet. Upload one above.</p>
-                  )
-                )}
+                        <a href={url as string} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" /></a>
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className="text-sm text-slate-400">No documents yet. Upload one above.</p>}
               </div>
             </div>
           </div>
@@ -589,32 +558,20 @@ export default function AdminClientDetail() {
           <div className="bg-white rounded-lg border border-slate-200 p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-slate-900">SCN Screening Questionnaire</h2>
-              <Button variant="outline" size="sm" className="gap-1.5 text-slate-600 h-8">
-                <Pencil className="h-3.5 w-3.5" /> Edit
-              </Button>
             </div>
-
-            {/* Screening Info */}
             <div className="mb-6">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Screening Info</h3>
               <InfoLine label="Screening Date" value={client.createdAt ? new Date(client.createdAt).toLocaleDateString() : null} />
               <InfoLine label="Screener Name" value={intakeRepName || "—"} />
             </div>
-
-            {/* Screening Questions */}
             <div>
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Screening Questions</h3>
               <ScreeningLine num={1} label="Current living situation" value={screening.livingSituation} />
-              {screening.livingSituation && (
-                <div className="pl-6 py-1.5 border-b border-slate-100">
-                  <span className="text-xs text-slate-400">Struggles with paying for housing / behind on payments</span>
-                </div>
-              )}
               <ScreeningLine num={2} label="Utility shutoff threat (past 12 months)" value={screening.utilityShutoff} />
-              <ScreeningLine num={3} label="Receives SNAP (Food Stamps)" value={fd.receivesSnap ?? fd.hasSnap} />
-              <ScreeningLine num={4} label="Receives WIC" value={fd.receivesWic ?? fd.hasWic} />
+              <ScreeningLine num={3} label="Receives SNAP (Food Stamps)" value={fd.receivesSnap ?? fd.hasSnap ?? screening.receivesSnap} />
+              <ScreeningLine num={4} label="Receives WIC" value={fd.receivesWic ?? fd.hasWic ?? screening.receivesWic} />
               <ScreeningLine num={5} label="Receives TANF" value={screening.receivesTanf} />
-              <ScreeningLine num={6} label="Enrolled in Health Home" value={healthCategories.includes("Enrolled in Health Home Care Management")} />
+              <ScreeningLine num={6} label="Enrolled in Health Home" value={screening.enrolledHealthHome || healthCategories.includes("Enrolled in Health Home Care Management")} />
               <ScreeningLine num={7} label="Household members" value={fd.householdMemberCount || String(householdMembers.length)} />
               <ScreeningLine num={8} label="Household members with Medicaid" value={screening.householdMembersWithMedicaid} />
               <ScreeningLine num={9} label="Needs work assistance" value={screening.needsWorkAssistance} />
@@ -623,18 +580,14 @@ export default function AdminClientDetail() {
               <ScreeningLine num={12} label="Has chronic illness" value={screening.hasChronicIllness} />
               <ScreeningLine num={13} label="Other known health issues" value={screening.otherHealthIssues} />
               <ScreeningLine num={14} label="Medications require refrigeration" value={screening.medicationsRequireRefrigeration} />
-              <ScreeningLine num={15} label="Pregnant or postpartum" value={healthCategories.includes("Pregnant") || healthCategories.includes("Postpartum")} />
+              <ScreeningLine num={15} label="Pregnant or postpartum" value={screening.pregnantOrPostpartum || healthCategories.includes("Pregnant") || healthCategories.includes("Postpartum")} />
               <ScreeningLine num={16} label="Breastmilk refrigeration needed" value={screening.breastmilkRefrigeration} />
             </div>
-
-            {/* Food Allergies */}
             <div className="mt-6 pt-4 border-t border-slate-200">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Food Allergies / Dietary Restrictions</h3>
               <InfoLine label="Food allergies" value={fd.foodAllergies || fd.foodAllergiesDetails || "—"} />
               <InfoLine label="Dietary restrictions" value={fd.dietaryRestrictions || "—"} />
             </div>
-
-            {/* Appliances */}
             <div className="mt-6 pt-4 border-t border-slate-200">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Household Appliance / Cooking Needs</h3>
               <InfoLine label="Needs refrigerator" value={fd.needsRefrigerator || "—"} />
@@ -649,10 +602,7 @@ export default function AdminClientDetail() {
           <div className="bg-white rounded-lg border border-slate-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-slate-900">Services</h2>
-              <Button
-                className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 h-8 text-sm px-3"
-                onClick={() => setShowAddService(true)}
-              >
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 h-8 text-sm px-3" onClick={() => setShowAddService(true)}>
                 <Plus className="h-4 w-4" /> Add Service
               </Button>
             </div>
@@ -665,13 +615,7 @@ export default function AdminClientDetail() {
                       {s.description && <p className="text-xs text-slate-500 mt-0.5">{s.description}</p>}
                       {s.startDate && <p className="text-xs text-slate-400 mt-0.5">Started: {new Date(s.startDate).toLocaleDateString()}</p>}
                     </div>
-                    <Badge className={`text-xs ${
-                      s.status === "active" ? "bg-emerald-100 text-emerald-700" :
-                      s.status === "completed" ? "bg-blue-100 text-blue-700" :
-                      "bg-slate-100 text-slate-600"
-                    }`}>
-                      {s.status}
-                    </Badge>
+                    <Badge className={`text-xs ${s.status === "active" ? "bg-emerald-100 text-emerald-700" : s.status === "completed" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}>{s.status}</Badge>
                   </div>
                 ))}
               </div>
@@ -684,26 +628,136 @@ export default function AdminClientDetail() {
           </div>
         )}
 
-        {/* Add Service Dialog */}
-        <Dialog open={showAddService} onOpenChange={setShowAddService}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Service</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3">
-              <Input
-                placeholder="Service name..."
-                value={newServiceName}
-                onChange={(e) => setNewServiceName(e.target.value)}
-              />
+        {/* ═══ DIALOGS ═══ */}
+
+        {/* Edit Client Dialog */}
+        <Dialog open={showEdit} onOpenChange={setShowEdit}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Edit Client</DialogTitle><DialogDescription>Update client information</DialogDescription></DialogHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="text-xs">First Name</Label><Input value={editForm.firstName} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} /></div>
+              <div><Label className="text-xs">Last Name</Label><Input value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} /></div>
+              <div><Label className="text-xs">Email</Label><Input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} /></div>
+              <div><Label className="text-xs">Phone</Label><Input value={editForm.cellPhone} onChange={(e) => setEditForm({ ...editForm, cellPhone: e.target.value })} /></div>
+              <div><Label className="text-xs">Medicaid ID (CIN)</Label><Input value={editForm.medicaidId} onChange={(e) => setEditForm({ ...editForm, medicaidId: e.target.value })} /></div>
+              <div><Label className="text-xs">Language</Label><Input value={editForm.language} onChange={(e) => setEditForm({ ...editForm, language: e.target.value })} /></div>
+              <div className="col-span-2"><Label className="text-xs">Program</Label><Input value={editForm.program} onChange={(e) => setEditForm({ ...editForm, program: e.target.value })} /></div>
             </div>
             <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEdit(false)}>Cancel</Button>
+              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleEditSave} disabled={updateClientMutation.isPending}>
+                {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Client Dialog */}
+        <AlertDialog open={showDelete} onOpenChange={setShowDelete}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Client</AlertDialogTitle>
+              <AlertDialogDescription>Are you sure you want to delete {client.firstName} {client.lastName}? This will also delete all related tasks, notes, documents, and services. This action cannot be undone.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => deleteClientMutation.mutate({ id })} disabled={deleteClientMutation.isPending}>
+                {deleteClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Add Household Member Dialog */}
+        <Dialog open={showAddHousehold} onOpenChange={setShowAddHousehold}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Add Household Member</DialogTitle><DialogDescription>Add a new household member to this client</DialogDescription></DialogHeader>
+            <div className="space-y-3">
+              <div><Label className="text-xs">Full Name *</Label><Input placeholder="Full name" value={householdForm.name} onChange={(e) => setHouseholdForm({ ...householdForm, name: e.target.value })} /></div>
+              <div><Label className="text-xs">Date of Birth</Label><Input type="date" value={householdForm.dateOfBirth} onChange={(e) => setHouseholdForm({ ...householdForm, dateOfBirth: e.target.value })} /></div>
+              <div><Label className="text-xs">Medicaid ID (CIN)</Label><Input placeholder="AA00000A" value={householdForm.medicaidId} onChange={(e) => setHouseholdForm({ ...householdForm, medicaidId: e.target.value })} /></div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAddHousehold(false)}>Cancel</Button>
+              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleAddHousehold} disabled={updateClientMutation.isPending}>
+                {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Address Dialog */}
+        <Dialog open={showAddAddress} onOpenChange={setShowAddAddress}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Add Address</DialogTitle><DialogDescription>Add an additional address for this client</DialogDescription></DialogHeader>
+            <div className="space-y-3">
+              <div><Label className="text-xs">Street *</Label><Input placeholder="123 Main St" value={addressForm.street} onChange={(e) => setAddressForm({ ...addressForm, street: e.target.value })} /></div>
+              <div><Label className="text-xs">Apt/Unit</Label><Input placeholder="Apt 4B" value={addressForm.apt} onChange={(e) => setAddressForm({ ...addressForm, apt: e.target.value })} /></div>
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label className="text-xs">City</Label><Input placeholder="Brooklyn" value={addressForm.city} onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })} /></div>
+                <div><Label className="text-xs">State</Label><Input value={addressForm.state} onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })} /></div>
+                <div><Label className="text-xs">Zip</Label><Input placeholder="11219" value={addressForm.zip} onChange={(e) => setAddressForm({ ...addressForm, zip: e.target.value })} /></div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAddAddress(false)}>Cancel</Button>
+              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleAddAddress} disabled={updateClientMutation.isPending}>
+                {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Phone Dialog */}
+        <Dialog open={showAddPhone} onOpenChange={setShowAddPhone}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Add Phone Number</DialogTitle><DialogDescription>Add an additional phone number</DialogDescription></DialogHeader>
+            <div><Label className="text-xs">Phone Number *</Label><Input placeholder="(718) 555-0100" value={phoneForm} onChange={(e) => setPhoneForm(e.target.value)} /></div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAddPhone(false)}>Cancel</Button>
+              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleAddPhone} disabled={updateClientMutation.isPending}>
+                {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Email Dialog */}
+        <Dialog open={showAddEmail} onOpenChange={setShowAddEmail}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Add Email Address</DialogTitle><DialogDescription>Add an additional email address</DialogDescription></DialogHeader>
+            <div><Label className="text-xs">Email *</Label><Input type="email" placeholder="name@example.com" value={emailForm} onChange={(e) => setEmailForm(e.target.value)} /></div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAddEmail(false)}>Cancel</Button>
+              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleAddEmail} disabled={updateClientMutation.isPending}>
+                {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Task Dialog */}
+        <Dialog open={showAddTask} onOpenChange={setShowAddTask}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Add Task</DialogTitle><DialogDescription>Create a new task for {taskArea === "intake_rep" ? "Intake Rep" : "Assigned Worker"}</DialogDescription></DialogHeader>
+            <div><Label className="text-xs">Task Description *</Label><Input placeholder="Describe the task..." value={taskForm} onChange={(e) => setTaskForm(e.target.value)} /></div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAddTask(false)}>Cancel</Button>
+              <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleAddTask} disabled={!taskForm.trim() || addTaskMutation.isPending}>
+                {addTaskMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add Task"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Service Dialog */}
+        <Dialog open={showAddService} onOpenChange={setShowAddService}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Add Service</DialogTitle><DialogDescription>Add a new service for this client</DialogDescription></DialogHeader>
+            <div><Label className="text-xs">Service Name *</Label><Input placeholder="Service name..." value={newServiceName} onChange={(e) => setNewServiceName(e.target.value)} /></div>
+            <DialogFooter>
               <Button variant="outline" onClick={() => setShowAddService(false)}>Cancel</Button>
-              <Button
-                className="bg-blue-600 hover:bg-blue-700"
-                onClick={() => newServiceName.trim() && addServiceMutation.mutate({ submissionId: id, name: newServiceName.trim() })}
-                disabled={!newServiceName.trim() || addServiceMutation.isPending}
-              >
+              <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => newServiceName.trim() && addServiceMutation.mutate({ submissionId: id, name: newServiceName.trim() })} disabled={!newServiceName.trim() || addServiceMutation.isPending}>
                 {addServiceMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
               </Button>
             </DialogFooter>

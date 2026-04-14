@@ -3,7 +3,7 @@ import { getLoginUrl } from "@/const";
 import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Users, ClipboardList, FileText, Building2,
-  LogOut, Loader2, ShieldCheck, ChevronRight, Leaf,
+  LogOut, Loader2, ShieldCheck, ChevronRight, Leaf, Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { type ReactNode } from "react";
@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { path: "/admin/clients", label: "Clients", icon: Users },
   { path: "/admin/tasks", label: "Tasks", icon: ClipboardList },
   { path: "/admin/documents", label: "Document Library", icon: FileText },
+  { path: "/admin/referrals", label: "Referral Links", icon: Link2 },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {

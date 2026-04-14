@@ -170,3 +170,27 @@ export const services = mysqlTable("services", {
 
 export type Service = typeof services.$inferSelect;
 export type InsertService = typeof services.$inferInsert;
+
+/**
+ * Referral Links — trackable links that attribute new clients to a referrer.
+ */
+export const referralLinks = mysqlTable("referralLinks", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Unique code used in the URL (e.g., ?ref=abc123) */
+  code: varchar("code", { length: 64 }).notNull().unique(),
+  /** Human-readable name for the referrer (e.g., "John Smith", "Community Center") */
+  referrerName: varchar("referrerName", { length: 256 }).notNull(),
+  /** Optional description/notes */
+  description: text("description"),
+  /** Number of times this link was used (submissions with this ref code) */
+  usageCount: int("usageCount").default(0).notNull(),
+  /** Whether this link is active */
+  isActive: int("isActive").default(1).notNull(),
+  /** Created by admin user ID */
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ReferralLink = typeof referralLinks.$inferSelect;
+export type InsertReferralLink = typeof referralLinks.$inferInsert;

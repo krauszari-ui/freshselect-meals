@@ -14,6 +14,9 @@ import {
   createCaseNote, getCaseNotesBySubmission,
   createDocument, getDocumentsBySubmission, getLibraryDocuments, deleteDocument,
   createService, getServicesBySubmission, updateServiceStatus,
+  updateSubmissionFields, deleteSubmission,
+  createReferralLink, listReferralLinks, getReferralLinkByCode,
+  updateReferralLink, deleteReferralLink, incrementReferralUsage, getReferralStats,
   type WorkerPermissions,
 } from "./db";
 import { sendAdminNotification, sendApplicantConfirmation } from "./email";
@@ -209,6 +212,11 @@ export const appRouter = router({
         borough: input.city === "Brooklyn" ? "Brooklyn" : input.city,
       });
 
+      // Track referral link usage
+      if (input.ref) {
+        incrementReferralUsage(input.ref).catch((err) => console.warn("[Referral] Failed to track:", err));
+      }
+
       Promise.all([
         sendApplicantConfirmation({ referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName, email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId, supermarket: input.supermarket, formData: input as unknown as Record<string, unknown> }),
         sendAdminNotification({ referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName, email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId, supermarket: input.supermarket, formData: input as unknown as Record<string, unknown> }),
@@ -357,6 +365,70 @@ export const appRouter = router({
       updateStatus: staffProcedure.input(z.object({
         id: z.number(), status: z.enum(["active", "completed", "cancelled"]),
       })).mutation(async ({ input }) => { await updateServiceStatus(input.id, input.status); return { success: true }; }),
+    }),
+
+    // ─── Client edit/delete ────────────────────────────────────────────────
+    updateClient: staffProcedure.input(z.object({
+      id: z.number(),
+      firstName: z.string().optional(),
+      lastName: z.string().optional(),
+      email: z.string().optional(),
+      cellPhone: z.string().optional(),
+      medicaidId: z.string().optional(),
+      language: z.string().optional(),
+      program: z.string().optional(),
+      borough: z.string().optional(),
+      formData: z.record(z.string(), z.unknown()).optional(),
+    })).mutation(async ({ input }) => {
+      const { id, formData, ...fields } = input;
+      const updateData: Record<string, unknown> = {};
+      Object.entries(fields).forEach(([k, v]) => { if (v !== undefined) updateData[k] = v; });
+      if (formData) {
+        const existing = await getSubmissionById(id);
+        if (existing) {
+          const merged = { ...(existing.formData as Record<string, unknown>), ...formData };
+          updateData.formData = merged;
+        }
+      }
+      await updateSubmissionFields(id, updateData as any);
+      return { success: true };
+    }),
+
+    deleteClient: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      await deleteSubmission(input.id);
+      return { success: true };
+    }),
+
+    // ─── Referral Links ──────────────────────────────────────────────────
+    referrals: router({
+      list: staffProcedure.query(async () => listReferralLinks()),
+      stats: staffProcedure.query(async () => getReferralStats()),
+      getByCode: publicProcedure.input(z.object({ code: z.string() })).query(async ({ input }) => {
+        const link = await getReferralLinkByCode(input.code);
+        return link || null;
+      }),
+      create: adminProcedure.input(z.object({
+        code: z.string().min(2).max(64),
+        referrerName: z.string().min(1),
+        description: z.string().optional(),
+      })).mutation(async ({ ctx, input }) => {
+        const id = await createReferralLink({ ...input, createdBy: ctx.user.id });
+        return { success: true, id };
+      }),
+      update: adminProcedure.input(z.object({
+        id: z.number(),
+        referrerName: z.string().optional(),
+        description: z.string().optional(),
+        isActive: z.number().optional(),
+      })).mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await updateReferralLink(id, data as any);
+        return { success: true };
+      }),
+      delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+        await deleteReferralLink(input.id);
+        return { success: true };
+      }),
     }),
 
     // ─── Worker management ────────────────────────────────────────────────

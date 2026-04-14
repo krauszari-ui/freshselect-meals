@@ -29,6 +29,13 @@
       "when": 1776188065504,
       "tag": "0003_odd_leopardon",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1776200263454,
+      "tag": "0004_magenta_johnny_blaze",
+      "breakpoints": true
     }
   ]
 }
