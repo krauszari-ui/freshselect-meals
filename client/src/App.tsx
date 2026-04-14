@@ -9,6 +9,11 @@ import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminApplicationDetail from "./pages/AdminApplicationDetail";
 import AdminWorkers from "./pages/AdminWorkers";
+import AdminTasks from "./pages/AdminTasks";
+import AdminDocuments from "./pages/AdminDocuments";
+import AdminAgency from "./pages/AdminAgency";
+import AdminClients from "./pages/AdminClients";
+import AdminClientDetail from "./pages/AdminClientDetail";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 function Router() {
@@ -23,6 +28,11 @@ function Router() {
       <Route path={"/admin/dashboard"} component={AdminDashboard} />
       <Route path={"/admin/application/:id"} component={AdminApplicationDetail} />
       <Route path={"/admin/workers"} component={AdminWorkers} />
+      <Route path={"/admin/tasks"} component={AdminTasks} />
+      <Route path={"/admin/documents"} component={AdminDocuments} />
+      <Route path={"/admin/agency"} component={AdminAgency} />
+      <Route path={"/admin/clients"} component={AdminClients} />
+      <Route path={"/admin/clients/:id"} component={AdminClientDetail} />
 
       {/* Fallback */}
       <Route path={"/404"} component={NotFound} />

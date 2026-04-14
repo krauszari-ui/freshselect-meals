@@ -328,7 +328,7 @@ describe("submission.submit", () => {
     expect(body.markdown_description).toContain("**HIPAA Consent:** Granted");
     expect(body.markdown_description).toContain("**Consent Timestamp:**");
     expect(body.markdown_description).toContain(
-      '"I authorize FreshSelect Meals to securely process my health and household information to coordinate my SCN food benefits, and I agree to the Privacy Policy."'
+      '**Consent Text:** I authorize FreshSelect Meals to securely process my health and household information to coordinate my SCN food benefits, and I agree to the Privacy Policy.'
     );
   });
 

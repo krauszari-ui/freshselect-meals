@@ -70,3 +70,17 @@
 - [x] Set up email notifications: send every application to info@freshselectmeals.com
 - [x] Update contact information to info@freshselectmeals.com
 - [x] Update DB schema for file uploads and worker roles
+
+## CareFlow-Style Admin Dashboard Rebuild
+- [x] Update DB schema: add client stages, tasks, case notes, documents tables
+- [x] Build dark sidebar admin layout matching CareFlow design
+- [x] Build Dashboard page: stats cards, client journey pipeline, recent clients, tasks
+- [x] Build Agency Overview page: stats, stage breakdown, recently added/updated, ineligible, outstanding tasks
+- [x] Build Clients list page: search, filters (stage, status, supermarket), sortable table, CSV export
+- [x] Build Client Detail page: intake journey progress, overview/assessment/services/tasks tabs
+- [x] Build Client Overview tab: info, household, addresses, phones, emails, health categories, case notes
+- [x] Build Client Assessment tab: SCN Screening Questionnaire display
+- [x] Build Client Services tab
+- [x] Build Tasks page: search, filters, open/completed/verified tabs, task cards
+- [x] Build Document Library page: category filter, document cards, upload/download
+- [x] Worker permissions: admin controls worker access levels (Staff Management page)

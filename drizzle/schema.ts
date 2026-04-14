@@ -26,6 +26,7 @@ export type InsertUser = typeof users.$inferInsert;
 /**
  * Submissions table — stores every FreshSelect Meals application.
  * The full form payload is stored as JSON in `formData` for flexibility.
+ * Now also acts as the "client" record for the CareFlow-style admin.
  */
 export const submissions = mysqlTable("submissions", {
   id: int("id").autoincrement().primaryKey(),
@@ -37,6 +38,17 @@ export const submissions = mysqlTable("submissions", {
   medicaidId: varchar("medicaidId", { length: 32 }).notNull(),
   supermarket: varchar("supermarket", { length: 128 }).notNull(),
   referralSource: varchar("referralSource", { length: 128 }),
+  /** CareFlow-style stage for intake journey */
+  stage: mysqlEnum("stage", [
+    "referral",
+    "assessment",
+    "level_one_only",
+    "level_one_household",
+    "level_2_active",
+    "ineligible",
+    "provider_attestation_required",
+    "flagged"
+  ]).default("referral").notNull(),
   status: mysqlEnum("status", ["new", "in_review", "approved", "rejected", "on_hold"])
     .default("new")
     .notNull(),
@@ -45,13 +57,116 @@ export const submissions = mysqlTable("submissions", {
   formData: json("formData").notNull(),
   hipaaConsentAt: timestamp("hipaaConsentAt").notNull(),
   clickupTaskId: varchar("clickupTaskId", { length: 64 }),
-  /** Whether confirmation email was sent */
   emailSentAt: timestamp("emailSentAt"),
-  /** Assigned worker ID */
+  /** Assigned worker user ID */
   assignedTo: int("assignedTo"),
+  /** Intake rep user ID */
+  intakeRep: int("intakeRep"),
+  /** Language preference */
+  language: varchar("language", { length: 32 }).default("English"),
+  /** Borough */
+  borough: varchar("borough", { length: 64 }),
+  /** Program */
+  program: varchar("program", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type Submission = typeof submissions.$inferSelect;
 export type InsertSubmission = typeof submissions.$inferInsert;
+
+/**
+ * Tasks / Action Items — assigned to workers for specific clients.
+ */
+export const tasks = mysqlTable("tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The client (submission) this task relates to */
+  submissionId: int("submissionId").notNull(),
+  /** Task description */
+  description: text("description").notNull(),
+  /** Area: intake_rep or assigned_worker */
+  area: mysqlEnum("area", ["intake_rep", "assigned_worker"]).default("intake_rep").notNull(),
+  /** Assigned to user ID */
+  assignedTo: int("assignedTo"),
+  /** Status */
+  status: mysqlEnum("status", ["open", "completed", "verified"]).default("open").notNull(),
+  /** Created by user ID */
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  completedAt: timestamp("completedAt"),
+});
+
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = typeof tasks.$inferInsert;
+
+/**
+ * Case Notes — notes added by workers/admins on a client record.
+ */
+export const caseNotes = mysqlTable("caseNotes", {
+  id: int("id").autoincrement().primaryKey(),
+  submissionId: int("submissionId").notNull(),
+  content: text("content").notNull(),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CaseNote = typeof caseNotes.$inferSelect;
+export type InsertCaseNote = typeof caseNotes.$inferInsert;
+
+/**
+ * Documents — uploaded files associated with clients or the document library.
+ */
+export const documents = mysqlTable("documents", {
+  id: int("id").autoincrement().primaryKey(),
+  /** If null, it's a library document; if set, it's client-specific */
+  submissionId: int("submissionId"),
+  /** Document name/filename */
+  name: varchar("name", { length: 256 }).notNull(),
+  /** Category: provider_attestation, consent, supporting_documentation, id, medicaid_card, forms, uncategorized */
+  category: mysqlEnum("category", [
+    "provider_attestation",
+    "consent",
+    "supporting_documentation",
+    "id_document",
+    "medicaid_card",
+    "birth_certificate",
+    "marriage_license",
+    "forms",
+    "uncategorized"
+  ]).default("uncategorized").notNull(),
+  /** S3 URL */
+  url: varchar("url", { length: 1024 }).notNull(),
+  /** S3 file key */
+  fileKey: varchar("fileKey", { length: 512 }).notNull(),
+  /** MIME type */
+  mimeType: varchar("mimeType", { length: 128 }),
+  /** File size in bytes */
+  fileSize: int("fileSize"),
+  /** Uploaded by user ID */
+  uploadedBy: int("uploadedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Document = typeof documents.$inferSelect;
+export type InsertDocument = typeof documents.$inferInsert;
+
+/**
+ * Services — services assigned to clients (e.g., Medically Tailored Food Prescription Boxes).
+ */
+export const services = mysqlTable("services", {
+  id: int("id").autoincrement().primaryKey(),
+  submissionId: int("submissionId").notNull(),
+  name: varchar("name", { length: 256 }).notNull(),
+  description: text("description"),
+  startDate: timestamp("startDate"),
+  endDate: timestamp("endDate"),
+  status: mysqlEnum("status", ["active", "completed", "cancelled"]).default("active").notNull(),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Service = typeof services.$inferSelect;
+export type InsertService = typeof services.$inferInsert;

@@ -122,7 +122,7 @@ describe("admin.stats", () => {
 
   it("throws FORBIDDEN for regular users", async () => {
     const caller = appRouter.createCaller(createUserContext());
-    await expect(caller.admin.stats()).rejects.toThrow("Admin access required");
+    await expect(caller.admin.stats()).rejects.toThrow("Staff access required");
   });
 
   it("throws UNAUTHORIZED for anonymous users", async () => {
@@ -153,7 +153,7 @@ describe("admin.list", () => {
 
   it("throws FORBIDDEN for non-admin", async () => {
     const caller = appRouter.createCaller(createUserContext());
-    await expect(caller.admin.list({})).rejects.toThrow("Admin access required");
+    await expect(caller.admin.list({})).rejects.toThrow("Staff access required");
   });
 });
 
@@ -170,12 +170,12 @@ describe("admin.getById", () => {
     const { getSubmissionById } = await import("./db");
     vi.mocked(getSubmissionById).mockResolvedValueOnce(undefined);
     const caller = appRouter.createCaller(createAdminContext());
-    await expect(caller.admin.getById({ id: 9999 })).rejects.toThrow("Submission not found");
+    await expect(caller.admin.getById({ id: 9999 })).rejects.toThrow("Client not found");
   });
 
   it("throws FORBIDDEN for non-admin", async () => {
     const caller = appRouter.createCaller(createUserContext());
-    await expect(caller.admin.getById({ id: 1 })).rejects.toThrow("Admin access required");
+    await expect(caller.admin.getById({ id: 1 })).rejects.toThrow("Staff access required");
   });
 });
 
@@ -202,6 +202,6 @@ describe("admin.updateStatus", () => {
     const caller = appRouter.createCaller(createUserContext());
     await expect(
       caller.admin.updateStatus({ id: 1, status: "approved" })
-    ).rejects.toThrow("Admin access required");
+    ).rejects.toThrow("Staff access required");
   });
 });
