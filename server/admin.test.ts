@@ -16,6 +16,7 @@ vi.mock("./db", () => ({
     supermarket: "Foodoo",
     referralSource: "sha",
     status: "new",
+    stage: "referral",
     adminNotes: null,
     formData: {},
     hipaaConsentAt: new Date("2026-01-01T00:00:00Z"),
@@ -36,6 +37,7 @@ vi.mock("./db", () => ({
         supermarket: "Foodoo",
         referralSource: "sha",
         status: "new",
+        stage: "referral",
         adminNotes: null,
         formData: {},
         hipaaConsentAt: new Date("2026-01-01T00:00:00Z"),
@@ -51,14 +53,54 @@ vi.mock("./db", () => ({
   }),
   getSubmissionStats: vi.fn().mockResolvedValue({
     total: 5,
-    new: 3,
-    in_review: 1,
-    approved: 1,
-    rejected: 0,
-    on_hold: 0,
+    stages: {
+      referral: 2,
+      assessment: 1,
+      level_one_only: 0,
+      level_one_household: 0,
+      level_2_active: 1,
+      ineligible: 1,
+      provider_attestation_required: 0,
+      flagged: 0,
+    },
+    supermarkets: { Foodoo: 3, "Rosemary Kosher Supermarket": 2 },
   }),
   updateSubmissionStatus: vi.fn().mockResolvedValue(undefined),
+  updateSubmissionStage: vi.fn().mockResolvedValue(undefined),
+  updateSubmissionAssignment: vi.fn().mockResolvedValue(undefined),
+  getAllSubmissions: vi.fn().mockResolvedValue([]),
   getSubmissionByRef: vi.fn().mockResolvedValue(undefined),
+  listStaffUsers: vi.fn().mockResolvedValue([
+    { id: 1, name: "Admin User", email: "admin@freshselect.com", role: "admin" },
+    { id: 2, name: "Worker One", email: "worker@freshselect.com", role: "worker" },
+  ]),
+  getRecentSubmissions: vi.fn().mockResolvedValue([
+    { id: 1, firstName: "Sarah", lastName: "Cohen", stage: "referral", createdAt: new Date() },
+  ]),
+  getRecentlyUpdated: vi.fn().mockResolvedValue([]),
+  getAddedCount: vi.fn().mockResolvedValue(3),
+  getTaskStats: vi.fn().mockResolvedValue({ open: 2, completed: 1, verified: 0, total: 3 }),
+  listTasks: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
+  getTasksBySubmission: vi.fn().mockResolvedValue([]),
+  createTask: vi.fn().mockResolvedValue(1),
+  updateTaskStatus: vi.fn().mockResolvedValue(undefined),
+  getCaseNotesBySubmission: vi.fn().mockResolvedValue([]),
+  createCaseNote: vi.fn().mockResolvedValue(1),
+  getDocumentsBySubmission: vi.fn().mockResolvedValue([]),
+  getLibraryDocuments: vi.fn().mockResolvedValue([
+    { id: 1, fileName: "HRA Consent.pdf", category: "uncategorized", fileUrl: "https://example.com/file.pdf" },
+  ]),
+  createDocument: vi.fn().mockResolvedValue(1),
+  deleteDocument: vi.fn().mockResolvedValue(undefined),
+  getServicesBySubmission: vi.fn().mockResolvedValue([]),
+  createService: vi.fn().mockResolvedValue(1),
+  updateServiceStatus: vi.fn().mockResolvedValue(undefined),
+  listWorkers: vi.fn().mockResolvedValue([]),
+  listAllUsers: vi.fn().mockResolvedValue([]),
+  setUserRole: vi.fn().mockResolvedValue(undefined),
+  toggleWorkerActive: vi.fn().mockResolvedValue(undefined),
+  updateWorkerPermissions: vi.fn().mockResolvedValue(undefined),
+  updateSubmissionEmailSent: vi.fn().mockResolvedValue(undefined),
 }));
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
@@ -83,9 +125,29 @@ function createAdminContext(): TrpcContext {
   };
 }
 
-function createUserContext(): TrpcContext {
+function createWorkerContext(): TrpcContext {
   const user: AuthenticatedUser = {
     id: 2,
+    openId: "worker-user",
+    email: "worker@example.com",
+    name: "Worker User",
+    loginMethod: "manus",
+    role: "worker",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    lastSignedIn: new Date(),
+  };
+
+  return {
+    user,
+    req: { protocol: "https", headers: {} } as TrpcContext["req"],
+    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
+  };
+}
+
+function createUserContext(): TrpcContext {
+  const user: AuthenticatedUser = {
+    id: 3,
     openId: "regular-user",
     email: "user@example.com",
     name: "Regular User",
@@ -111,13 +173,21 @@ function createAnonContext(): TrpcContext {
   };
 }
 
+// ─── Dashboard Stats ───────────────────────────────────────────────────
 describe("admin.stats", () => {
-  it("returns stats for admin users", async () => {
+  it("returns stats with total and stages for admin users", async () => {
     const caller = appRouter.createCaller(createAdminContext());
     const result = await caller.admin.stats();
     expect(result.total).toBe(5);
-    expect(result.new).toBe(3);
-    expect(result.approved).toBe(1);
+    expect(result.stages).toBeDefined();
+    expect(result.stages.referral).toBe(2);
+    expect(result.stages.assessment).toBe(1);
+  });
+
+  it("returns stats for worker users", async () => {
+    const caller = appRouter.createCaller(createWorkerContext());
+    const result = await caller.admin.stats();
+    expect(result.total).toBe(5);
   });
 
   it("throws FORBIDDEN for regular users", async () => {
@@ -131,6 +201,55 @@ describe("admin.stats", () => {
   });
 });
 
+// ─── Task Stats ────────────────────────────────────────────────────────
+describe("admin.taskStats", () => {
+  it("returns open/completed/verified/total counts", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.taskStats();
+    expect(result.open).toBe(2);
+    expect(result.completed).toBe(1);
+    expect(result.verified).toBe(0);
+    expect(result.total).toBe(3);
+  });
+});
+
+// ─── Recent Clients ────────────────────────────────────────────────────
+describe("admin.recentClients", () => {
+  it("returns recent clients list with default params", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.recentClients();
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it("accepts custom days and limit", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.recentClients({ days: 30, limit: 5 });
+    expect(Array.isArray(result)).toBe(true);
+  });
+});
+
+// ─── Added Count ───────────────────────────────────────────────────────
+describe("admin.addedCount", () => {
+  it("returns count of recently added clients", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.addedCount({ days: 7 });
+    expect(result).toBe(3);
+  });
+});
+
+// ─── Staff List ────────────────────────────────────────────────────────
+describe("admin.staffList", () => {
+  it("returns list of staff users", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.staffList();
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBe(2);
+    expect(result[0].name).toBe("Admin User");
+  });
+});
+
+// ─── Client List ───────────────────────────────────────────────────────
 describe("admin.list", () => {
   it("returns paginated submissions for admin", async () => {
     const caller = appRouter.createCaller(createAdminContext());
@@ -141,22 +260,26 @@ describe("admin.list", () => {
     expect(result.rows[0]?.firstName).toBe("Sarah");
   });
 
-  it("accepts search and status filters", async () => {
+  it("accepts search, status, stage, and filter parameters", async () => {
     const caller = appRouter.createCaller(createAdminContext());
     const result = await caller.admin.list({
       search: "Sarah",
       status: "new",
+      stage: "referral",
+      language: "English",
+      borough: "Brooklyn",
       page: 1,
     });
     expect(result.rows).toBeDefined();
   });
 
-  it("throws FORBIDDEN for non-admin", async () => {
+  it("throws FORBIDDEN for non-staff", async () => {
     const caller = appRouter.createCaller(createUserContext());
     await expect(caller.admin.list({})).rejects.toThrow("Staff access required");
   });
 });
 
+// ─── Get By ID ─────────────────────────────────────────────────────────
 describe("admin.getById", () => {
   it("returns a submission by ID for admin", async () => {
     const caller = appRouter.createCaller(createAdminContext());
@@ -164,6 +287,7 @@ describe("admin.getById", () => {
     expect(result.referenceNumber).toBe("ABC123");
     expect(result.firstName).toBe("Sarah");
     expect(result.status).toBe("new");
+    expect(result.stage).toBe("referral");
   });
 
   it("throws NOT_FOUND when submission does not exist", async () => {
@@ -173,12 +297,13 @@ describe("admin.getById", () => {
     await expect(caller.admin.getById({ id: 9999 })).rejects.toThrow("Client not found");
   });
 
-  it("throws FORBIDDEN for non-admin", async () => {
+  it("throws FORBIDDEN for non-staff", async () => {
     const caller = appRouter.createCaller(createUserContext());
     await expect(caller.admin.getById({ id: 1 })).rejects.toThrow("Staff access required");
   });
 });
 
+// ─── Update Status ─────────────────────────────────────────────────────
 describe("admin.updateStatus", () => {
   it("updates submission status for admin", async () => {
     const caller = appRouter.createCaller(createAdminContext());
@@ -198,10 +323,146 @@ describe("admin.updateStatus", () => {
     }
   });
 
-  it("throws FORBIDDEN for non-admin", async () => {
+  it("throws FORBIDDEN for non-staff", async () => {
     const caller = appRouter.createCaller(createUserContext());
     await expect(
       caller.admin.updateStatus({ id: 1, status: "approved" })
     ).rejects.toThrow("Staff access required");
+  });
+});
+
+// ─── Update Stage ──────────────────────────────────────────────────────
+describe("admin.updateStage", () => {
+  it("updates submission stage", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.updateStage({ id: 1, stage: "assessment" });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts all valid stage values", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const stages = ["referral", "assessment", "level_one_only", "level_one_household", "level_2_active", "ineligible", "provider_attestation_required", "flagged"] as const;
+    for (const stage of stages) {
+      const result = await caller.admin.updateStage({ id: 1, stage });
+      expect(result.success).toBe(true);
+    }
+  });
+});
+
+// ─── Tasks CRUD ────────────────────────────────────────────────────────
+describe("admin.tasks", () => {
+  it("lists tasks with filters", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.tasks.list({});
+    expect(result).toBeDefined();
+  });
+
+  it("returns task stats", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.tasks.stats();
+    expect(result.open).toBe(2);
+    expect(result.total).toBe(3);
+  });
+
+  it("creates a task", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.tasks.create({
+      submissionId: 1,
+      description: "Follow up with client",
+      area: "intake_rep",
+    });
+    expect(result.success).toBe(true);
+    expect(result.id).toBe(1);
+  });
+
+  it("updates task status", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.tasks.updateStatus({ id: 1, status: "completed" });
+    expect(result.success).toBe(true);
+  });
+
+  it("gets tasks by client", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.tasks.byClient({ submissionId: 1 });
+    expect(Array.isArray(result)).toBe(true);
+  });
+});
+
+// ─── Case Notes ────────────────────────────────────────────────────────
+describe("admin.notes", () => {
+  it("gets notes by client", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.notes.byClient({ submissionId: 1 });
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it("creates a case note", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.notes.create({
+      submissionId: 1,
+      content: "Client called to follow up on referral status.",
+    });
+    expect(result.success).toBe(true);
+    expect(result.id).toBe(1);
+  });
+});
+
+// ─── Documents ─────────────────────────────────────────────────────────
+describe("admin.documents", () => {
+  it("gets documents by client", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.documents.byClient({ submissionId: 1 });
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it("gets library documents", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.documents.library();
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBe(1);
+    expect(result[0].fileName).toBe("HRA Consent.pdf");
+  });
+
+  it("gets library documents filtered by category", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.documents.library({ category: "forms" });
+    expect(Array.isArray(result)).toBe(true);
+  });
+});
+
+// ─── Services ──────────────────────────────────────────────────────────
+describe("admin.services", () => {
+  it("gets services by client", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.services.byClient({ submissionId: 1 });
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it("creates a service", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.services.create({
+      submissionId: 1,
+      name: "Meal Delivery",
+      description: "Weekly meal delivery service",
+    });
+    expect(result.success).toBe(true);
+    expect(result.id).toBe(1);
+  });
+
+  it("updates service status", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.services.updateStatus({ id: 1, status: "completed" });
+    expect(result.success).toBe(true);
+  });
+});
+
+// ─── Export CSV ─────────────────────────────────────────────────────────
+describe("admin.exportCsv", () => {
+  it("exports CSV for admin", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.exportCsv({});
+    expect(result.csv).toBeDefined();
+    expect(typeof result.csv).toBe("string");
+    expect(result.count).toBeDefined();
   });
 });
