@@ -182,13 +182,13 @@ const SUPERMARKETS = [
   { name: "Rosemary Kosher", address: "4901 13th Ave, Brooklyn, NY 11219", icon: "🌿" },
   { name: "Chestnut", address: "1506 62nd St, Brooklyn, NY 11219", icon: "🌰" },
   { name: "Central Market", address: "4220 13th Ave, Brooklyn, NY 11219", icon: "🏪" },
+  { name: "Bingo Wholesale", address: "4802 New Utrecht Ave, Brooklyn, NY 11219", icon: "🎪" },
 ];
 
 const HEALTH_CATEGORIES = [
   "Pregnant",
   "Had a Miscarriage",
   "Postpartum (Within the last 12 months)",
-  "Enrolled in Health Home Care Management",
   "Substance Use Disorder",
   "HIV / AIDS",
   "Diabetes",
@@ -248,9 +248,10 @@ function validateStep2(form: FormData): FormErrors {
   if (!sq.breastmilkRefrigeration) e["sq.breastmilkRefrigeration"] = "Required";
   if (!form.employed) e.employed = "Required";
   if (!form.spouseEmployed) e.spouseEmployed = "Required";
-  if (!form.hasWic) e.hasWic = "Required";
-  if (!form.hasSnap) e.hasSnap = "Required";
   if (!form.newApplicant) e.newApplicant = "Required";
+  // Household members required
+  const memberCount = parseInt(form.additionalMembersCount) || 0;
+  if (memberCount === 0) e.householdMembers = "At least one household member is required";
   // Conditional health fields
   if (form.healthCategories.includes("Pregnant") && !form.dueDate)
     e.dueDate = "Due date is required";
@@ -430,8 +431,11 @@ function LandingPage({ onStart }: { onStart: () => void }) {
               <p className="text-xs text-stone-500">SCN Approved Vendor</p>
             </div>
           </div>
-          <div className="flex items-center gap-4 text-sm text-stone-600">
-            <a href="mailto:info@freshselectmeals.com" className="hidden sm:flex items-center gap-1 hover:text-green-700">
+          <div className="flex items-center gap-4">
+            <a href="tel:7183074664" className="flex items-center gap-1.5 text-stone-600 hover:text-green-700 text-sm">
+              <Phone className="w-4 h-4" /> (718) 307-4664
+            </a>
+            <a href="mailto:info@freshselectmeals.com" className="flex items-center gap-1.5 text-stone-600 hover:text-green-700 text-sm">
               <Mail className="w-4 h-4" /> info@freshselectmeals.com
             </a>
           </div>
@@ -563,6 +567,9 @@ function LandingPage({ onStart }: { onStart: () => void }) {
       <section className="max-w-5xl mx-auto px-4 py-12">
         <h3 className="text-xl font-bold text-green-800 font-serif text-center mb-6">Contact Us</h3>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-6 text-stone-600">
+          <a href="tel:7183074664" className="flex items-center gap-2 hover:text-green-700">
+            <Phone className="w-5 h-5" /> (718) 307-4664
+          </a>
           <a href="mailto:info@freshselectmeals.com" className="flex items-center gap-2 hover:text-green-700">
             <Mail className="w-5 h-5" /> info@freshselectmeals.com
           </a>
@@ -755,7 +762,7 @@ export default function Home() {
             </div>
           </div>
           <div className="text-sm text-stone-500 mb-6">
-            <p>Questions? Contact us at <a href="mailto:info@freshselectmeals.com" className="text-green-700 underline">info@freshselectmeals.com</a></p>
+            <p>Questions? Call us at <a href="tel:7183074664" className="text-green-700 underline">(718) 307-4664</a> or email <a href="mailto:info@freshselectmeals.com" className="text-green-700 underline">info@freshselectmeals.com</a></p>
           </div>
           <Button
             onClick={() => {
@@ -997,14 +1004,7 @@ export default function Home() {
                       uploading={uploading}
                       setUploading={setUploading}
                     />
-                    <FileUploadField
-                      label="Mother's Birth Certificate *"
-                      category="motherBirthCertificate"
-                      uploads={uploads}
-                      setUploads={setUploads}
-                      uploading={uploading}
-                      setUploading={setUploading}
-                    />
+
                     <FileUploadField
                       label="Marriage License"
                       category="marriageLicense"
@@ -1262,8 +1262,6 @@ export default function Home() {
                       {[
                         { key: "employed" as const, label: "Employed *" },
                         { key: "spouseEmployed" as const, label: "Spouse Employed *" },
-                        { key: "hasWic" as const, label: "Receives WIC *" },
-                        { key: "hasSnap" as const, label: "Receives SNAP *" },
                       ].map(({ key, label }) => (
                         <div key={key}>
                           <Label className="text-stone-700">{label}</Label>
@@ -1276,14 +1274,14 @@ export default function Home() {
                       ))}
                     </div>
                     <div>
-                      <Label className="text-stone-700">New Applicant *</Label>
+                      <Label className="text-stone-700">New application or transfer from different agency *</Label>
                       <Select value={form.newApplicant} onValueChange={(v) => update("newApplicant", v)}>
                         <SelectTrigger className={errors.newApplicant ? "border-red-400" : ""}>
                           <SelectValue placeholder="Select..." />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Yes">Yes - New Applicant</SelectItem>
-                          <SelectItem value="No">No - Returning Applicant</SelectItem>
+                          <SelectItem value="New">New Application</SelectItem>
+                          <SelectItem value="Transfer">Transfer from Different Agency</SelectItem>
                         </SelectContent>
                       </Select>
                       {errors.newApplicant && <p className="text-red-500 text-xs mt-1">{errors.newApplicant}</p>}
@@ -1338,10 +1336,12 @@ export default function Home() {
                 <Card className="border-stone-200">
                   <CardContent className="p-6 space-y-4">
                     <h3 className="font-bold text-stone-800 flex items-center gap-2">
-                      <Users className="w-4 h-4 text-green-600" /> Additional Household Members
+                      <Users className="w-4 h-4 text-green-600" /> Household Members *
                     </h3>
+                    <p className="text-sm text-stone-500">You must add at least one household member.</p>
+                    {errors.householdMembers && <p className="text-red-500 text-xs">{errors.householdMembers}</p>}
                     <div>
-                      <Label className="text-stone-700">Number of additional household members</Label>
+                      <Label className="text-stone-700">Number of household members *</Label>
                       <Select
                         value={form.additionalMembersCount}
                         onValueChange={(v) => update("additionalMembersCount", v)}
@@ -1680,7 +1680,7 @@ export default function Home() {
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
             <p className="text-sm text-red-700">
-              Something went wrong. Please try again. If the problem persists, contact us at info@freshselectmeals.com.
+              Something went wrong. Please try again. If the problem persists, call (718) 307-4664 or email info@freshselectmeals.com.
             </p>
           </div>
         )}

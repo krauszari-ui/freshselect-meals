@@ -3,14 +3,19 @@ import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X,
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { Link, useSearch } from "wouter";
+import { toast } from "sonner";
 
 const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
   referral: { label: "Referral", bg: "bg-emerald-100", text: "text-emerald-700" },
@@ -38,6 +43,213 @@ function getInitials(firstName: string, lastName: string) {
   return `${(firstName || "")[0] || ""}${(lastName || "")[0] || ""}`.toUpperCase();
 }
 
+/* ─── Add Client Dialog ──────────────────────────────────────────────── */
+
+interface AddClientForm {
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  medicaidId: string;
+  cellPhone: string;
+  email: string;
+  streetAddress: string;
+  city: string;
+  state: string;
+  zipcode: string;
+  language: string;
+  supermarket: string;
+}
+
+const INITIAL_ADD_FORM: AddClientForm = {
+  firstName: "", lastName: "", dateOfBirth: "", medicaidId: "",
+  cellPhone: "", email: "", streetAddress: "", city: "Brooklyn",
+  state: "NY", zipcode: "", language: "English", supermarket: "Foodoo",
+};
+
+function AddClientDialog({
+  open, onClose, onSuccess,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [form, setForm] = useState<AddClientForm>({ ...INITIAL_ADD_FORM });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const submitMutation = trpc.submission.submit.useMutation({
+    onSuccess: () => {
+      toast.success("Client added successfully");
+      setForm({ ...INITIAL_ADD_FORM });
+      setErrors({});
+      onSuccess();
+      onClose();
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to add client");
+    },
+  });
+
+  const update = (key: keyof AddClientForm, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setErrors((prev) => { const n = { ...prev }; delete n[key]; return n; });
+  };
+
+  const handleSubmit = () => {
+    const e: Record<string, string> = {};
+    if (!form.firstName.trim()) e.firstName = "Required";
+    if (!form.lastName.trim()) e.lastName = "Required";
+    if (!form.dateOfBirth) e.dateOfBirth = "Required";
+    if (!form.medicaidId.trim()) e.medicaidId = "Required";
+    else if (!/^[A-Za-z]{2}\d{5}[A-Za-z]$/.test(form.medicaidId))
+      e.medicaidId = "Format: 2 letters, 5 digits, 1 letter";
+    if (!form.cellPhone.trim()) e.cellPhone = "Required";
+    if (!form.email.trim()) e.email = "Required";
+    if (!form.streetAddress.trim()) e.streetAddress = "Required";
+    if (!form.zipcode.trim()) e.zipcode = "Required";
+
+    if (Object.keys(e).length > 0) { setErrors(e); return; }
+
+    submitMutation.mutate({
+      ...form,
+      homePhone: "",
+      aptUnit: "",
+      healthCategories: [],
+      employed: "No",
+      spouseEmployed: "No",
+      hasWic: "No",
+      hasSnap: "No",
+      newApplicant: "Yes",
+      householdMembers: [{ name: "N/A", dateOfBirth: "2000-01-01", medicaidId: "AA00000A" }],
+      mealFocus: ["Lunch"],
+      needsRefrigerator: "No",
+      needsMicrowave: "No",
+      needsCookingUtensils: "No",
+      hipaaConsent: true,
+      screeningQuestions: {},
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add New Client</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-slate-600">First Name *</Label>
+              <Input value={form.firstName} onChange={(e) => update("firstName", e.target.value)}
+                className={errors.firstName ? "border-red-400" : ""} placeholder="First Name" />
+              {errors.firstName && <p className="text-red-500 text-xs mt-0.5">{errors.firstName}</p>}
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">Last Name *</Label>
+              <Input value={form.lastName} onChange={(e) => update("lastName", e.target.value)}
+                className={errors.lastName ? "border-red-400" : ""} placeholder="Last Name" />
+              {errors.lastName && <p className="text-red-500 text-xs mt-0.5">{errors.lastName}</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-slate-600">Date of Birth *</Label>
+              <Input type="date" value={form.dateOfBirth} onChange={(e) => update("dateOfBirth", e.target.value)}
+                className={errors.dateOfBirth ? "border-red-400" : ""} />
+              {errors.dateOfBirth && <p className="text-red-500 text-xs mt-0.5">{errors.dateOfBirth}</p>}
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">Medicaid ID (CIN) *</Label>
+              <Input value={form.medicaidId} onChange={(e) => update("medicaidId", e.target.value.toUpperCase())}
+                className={errors.medicaidId ? "border-red-400" : ""} placeholder="AB12345C" maxLength={8} />
+              {errors.medicaidId && <p className="text-red-500 text-xs mt-0.5">{errors.medicaidId}</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-slate-600">Cell Phone *</Label>
+              <Input value={form.cellPhone} onChange={(e) => update("cellPhone", e.target.value)}
+                className={errors.cellPhone ? "border-red-400" : ""} placeholder="(718) 555-0123" />
+              {errors.cellPhone && <p className="text-red-500 text-xs mt-0.5">{errors.cellPhone}</p>}
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">Email *</Label>
+              <Input type="email" value={form.email} onChange={(e) => update("email", e.target.value)}
+                className={errors.email ? "border-red-400" : ""} placeholder="email@example.com" />
+              {errors.email && <p className="text-red-500 text-xs mt-0.5">{errors.email}</p>}
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs text-slate-600">Street Address *</Label>
+            <Input value={form.streetAddress} onChange={(e) => update("streetAddress", e.target.value)}
+              className={errors.streetAddress ? "border-red-400" : ""} placeholder="123 Main Street" />
+            {errors.streetAddress && <p className="text-red-500 text-xs mt-0.5">{errors.streetAddress}</p>}
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <Label className="text-xs text-slate-600">City</Label>
+              <Input value={form.city} onChange={(e) => update("city", e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">State</Label>
+              <Input value={form.state} onChange={(e) => update("state", e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">Zipcode *</Label>
+              <Input value={form.zipcode} onChange={(e) => update("zipcode", e.target.value)}
+                className={errors.zipcode ? "border-red-400" : ""} placeholder="11219" />
+              {errors.zipcode && <p className="text-red-500 text-xs mt-0.5">{errors.zipcode}</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-slate-600">Language</Label>
+              <Select value={form.language} onValueChange={(v) => update("language", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["English", "Spanish", "Yiddish", "Hebrew", "Russian", "Chinese", "Arabic"].map((l) => (
+                    <SelectItem key={l} value={l}>{l}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-slate-600">Supermarket</Label>
+              <Select value={form.supermarket} onValueChange={(v) => update("supermarket", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["Foodoo", "Rosemary Kosher", "Chestnut", "Central Market"].map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={submitMutation.isPending}
+            className="bg-green-700 hover:bg-green-800 text-white"
+          >
+            {submitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+            Add Client
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ─── Main Component ──────────────────────────────────────────────────── */
+
 export default function AdminClients() {
   const searchParams = useSearch();
   const urlParams = new URLSearchParams(searchParams);
@@ -53,11 +265,14 @@ export default function AdminClients() {
   const [repFilter, setRepFilter] = useState("all");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
+  const [showAddDialog, setShowAddDialog] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 400);
     return () => clearTimeout(t);
   }, [search]);
+
+  const utils = trpc.useUtils();
 
   const listQuery = trpc.admin.list.useQuery({
     search: debouncedSearch || undefined,
@@ -77,7 +292,6 @@ export default function AdminClients() {
   const totalPages = listData?.totalPages ?? 1;
   const totalCount = listData?.total ?? 0;
 
-  // Sort rows by date
   const sortedRows = useMemo(() => {
     if (!rows.length) return rows;
     return [...rows].sort((a: any, b: any) => {
@@ -87,7 +301,6 @@ export default function AdminClients() {
     });
   }, [rows, sortDir]);
 
-  // Filter by program client-side (since backend doesn't have program filter yet)
   const filteredRows = useMemo(() => {
     if (programFilter === "all") return sortedRows;
     return sortedRows.filter((r: any) => r.program === programFilter);
@@ -110,7 +323,10 @@ export default function AdminClients() {
             <h1 className="text-2xl font-bold text-slate-900">Clients</h1>
             <p className="text-slate-500 text-sm mt-0.5">{totalCount} total clients</p>
           </div>
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 h-9 px-4 text-sm">
+          <Button
+            onClick={() => setShowAddDialog(true)}
+            className="bg-green-700 hover:bg-green-800 text-white gap-1.5 h-9 px-4 text-sm"
+          >
             <Plus className="h-4 w-4" />
             Add Client
           </Button>
@@ -253,9 +469,9 @@ export default function AdminClients() {
                     const avatarColor = getAvatarColor(`${client.firstName}${client.lastName}`);
                     const workerName = getWorkerName(client.assignedTo);
                     const stageInfo = STAGE_CONFIG[client.stage] || { label: client.stage, bg: "bg-slate-100", text: "text-slate-700" };
-                    const dob = fd.dateOfBirth ? new Date(fd.dateOfBirth).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—";
+                    const dob = fd.dateOfBirth ? new Date(fd.dateOfBirth).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "\u2014";
                     const householdMembers = fd.householdMembers || [];
-                    const householdDisplay = householdMembers.length > 0 ? householdMembers[0]?.name || "—" : "—";
+                    const householdDisplay = householdMembers.length > 0 ? householdMembers[0]?.name || "\u2014" : "\u2014";
 
                     return (
                       <tr key={client.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
@@ -266,7 +482,7 @@ export default function AdminClients() {
                                 {initials}
                               </div>
                               <div>
-                                <p className="text-sm font-medium text-blue-600 hover:text-blue-700">{client.firstName} {client.lastName}</p>
+                                <p className="text-sm font-medium text-green-700 hover:text-green-800">{client.firstName} {client.lastName}</p>
                                 <p className="text-xs text-slate-400">{workerName}</p>
                               </div>
                             </div>
@@ -310,6 +526,13 @@ export default function AdminClients() {
           )}
         </div>
       </div>
+
+      {/* Add Client Dialog */}
+      <AddClientDialog
+        open={showAddDialog}
+        onClose={() => setShowAddDialog(false)}
+        onSuccess={() => utils.admin.list.invalidate()}
+      />
     </AdminLayout>
   );
 }

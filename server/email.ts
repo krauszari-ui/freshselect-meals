@@ -137,7 +137,7 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
   <div class="section">
     <h3>Household Members</h3>`;
     householdMembers.forEach((m, i) => {
-      html += `<div class="field"><span class="field-label">Member ${i + 1}</span><span class="field-value">${m.name || "N/A"} (DOB: ${m.dob || "N/A"}, CIN: ${m.medicaidId || "N/A"})</span></div>`;
+      html += `<div class="field"><span class="field-label">Member ${i + 1}</span><span class="field-value">${m.name || "N/A"} (DOB: ${m.dateOfBirth || "N/A"}, CIN: ${m.medicaidId || "N/A"})</span></div>`;
     });
     html += `</div>`;
   }
@@ -176,7 +176,7 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
   <div class="footer">
     <p>${isAdmin ? "This is an automated notification from FreshSelect Meals." : "Thank you for your application. Our team will review it and contact you within 5 business days."}</p>
     <p>FreshSelect Meals &mdash; SCN Approved Vendor</p>
-    <p>Contact: info@freshselectmeals.com</p>
+    <p>Contact: (718) 307-4664 | info@freshselectmeals.com</p>
   </div>
 </div>
 </body>

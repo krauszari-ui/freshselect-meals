@@ -94,3 +94,15 @@
 - [x] Exact clone of Document Library page
 - [x] Exact clone of Agency Overview page
 - [x] Match all sidebar navigation, colors, icons, and layout exactly
+
+## Bug Fixes & Improvements (User Feedback)
+- [x] Match admin pages to original green color theme (not dark navy CareFlow colors)
+- [x] Fix Add Client button - make it functional
+- [x] Remove mother's birth certificate upload from form (keep only kids' birth certificates)
+- [x] Make Household Members required (not optional)
+- [x] Fix duplicate SNAP question (removed from benefits, kept in screening)
+- [x] Fix duplicate WIC question (removed from benefits, kept in screening)
+- [x] Fix duplicate "Enrolled in Health Home" question (removed from health categories, kept in screening)
+- [x] Fix grocery/supermarket address display (added Bingo Wholesale)
+- [x] Update "New Applicant" to "New application or transfer from different agency"
+- [x] Add phone number 718-307-4664 to the site (header, contact section, success page, error page, emails)
