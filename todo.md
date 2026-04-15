@@ -129,3 +129,6 @@
 - [x] Build referral person login system (each referral link person gets a login)
 - [x] Referral person can view their referred clients (read-only, no edit)
 - [x] Referral person dashboard showing their referral stats and client list
+
+## Round 4 - Fix Persistent Form Submission Error
+- [x] Diagnose and fix the form submission error - ROOT CAUSE: hasWic/hasSnap Zod validation rejected empty strings after UI fields were removed. Fixed Zod schema to optional, auto-populate from screening, moved household validation to correct step.

@@ -249,9 +249,6 @@ function validateStep2(form: FormData): FormErrors {
   if (!form.employed) e.employed = "Required";
   if (!form.spouseEmployed) e.spouseEmployed = "Required";
   if (!form.newApplicant) e.newApplicant = "Required";
-  // Household members required
-  const memberCount = parseInt(form.additionalMembersCount) || 0;
-  if (memberCount === 0) e.householdMembers = "At least one household member is required";
   // Conditional health fields
   if (form.healthCategories.includes("Pregnant") && !form.dueDate)
     e.dueDate = "Due date is required";
@@ -267,6 +264,9 @@ function validateStep2(form: FormData): FormErrors {
 
 function validateStep3(form: FormData): FormErrors {
   const e: FormErrors = {};
+  // Household members required
+  const memberCount = parseInt(form.additionalMembersCount) || 0;
+  if (memberCount === 0) e.householdMembers = "At least one household member is required";
   if (form.mealFocus.length === 0) e.mealFocus = "Select at least one meal type";
   if (!form.needsRefrigerator) e.needsRefrigerator = "Required";
   if (!form.needsMicrowave) e.needsMicrowave = "Required";
@@ -651,6 +651,7 @@ export default function Home() {
       setRefNumber(data.referenceNumber);
       setSubmitted(true);
     },
+    retry: 2, // Retry up to 2 times on failure
   });
 
   const update = <K extends keyof FormData>(key: K, value: FormData[K]) => {
@@ -721,8 +722,14 @@ export default function Home() {
       uploadedDocuments[key] = doc.url;
     }
 
+    // Auto-populate hasWic/hasSnap from screening answers (UI fields were removed as duplicates)
+    const hasWic = form.hasWic || form.screeningQuestions.receivesWic || "No";
+    const hasSnap = form.hasSnap || form.screeningQuestions.receivesSnap || "No";
+
     submitMutation.mutate({
       ...form,
+      hasWic,
+      hasSnap,
       ref: ref || undefined,
       uploadedDocuments: Object.keys(uploadedDocuments).length > 0 ? uploadedDocuments : undefined,
     });
@@ -1683,11 +1690,21 @@ export default function Home() {
         </div>
 
         {submitMutation.isError && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-red-700">
-              Something went wrong. Please try again. If the problem persists, call (718) 307-4664 or email info@freshselectmeals.com.
-            </p>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm text-red-700 font-medium">Something went wrong. Please try again.</p>
+                <p className="text-xs text-red-600 mt-1">If the problem persists, call (718) 307-4664 or email info@freshselectmeals.com.</p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              className="mt-3 bg-red-600 hover:bg-red-700 text-white text-sm"
+              onClick={() => { submitMutation.reset(); handleSubmit(); }}
+            >
+              Try Again
+            </Button>
           </div>
         )}
       </div>

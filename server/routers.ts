@@ -72,7 +72,7 @@ const submissionInputSchema = z.object({
   dueDate: z.string().optional(), miscarriageDate: z.string().optional(),
   infantName: z.string().optional(), infantDateOfBirth: z.string().optional(), infantMedicaidId: z.string().optional(),
   employed: z.string().min(1), spouseEmployed: z.string().min(1),
-  hasWic: z.string().min(1), hasSnap: z.string().min(1),
+  hasWic: z.string().optional().default(""), hasSnap: z.string().optional().default(""),
   foodAllergies: z.string().optional(), foodAllergiesDetails: z.string().optional(),
   dietaryRestrictions: z.string().optional(),
   newApplicant: z.string().min(1),
@@ -198,39 +198,47 @@ export const appRouter = router({
   // ─── Submission ───────────────────────────────────────────────────────────
   submission: router({
     submit: publicProcedure.input(submissionInputSchema).mutation(async ({ input }) => {
-      const listId = (input.ref && REFERRAL_LIST_MAP[input.ref.toLowerCase()]) || DEFAULT_LIST_ID;
-      const taskName = `${input.firstName} ${input.lastName} \u2014 ${input.supermarket}`;
-      const description = buildClickUpDescription(input);
       const refNumber = Math.random().toString(36).substring(2, 8).toUpperCase();
       const consentAt = new Date();
 
-      await createSubmission({
-        referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName,
-        email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId,
-        supermarket: input.supermarket, referralSource: input.ref ?? null,
-        status: "new", stage: "referral",
-        formData: input as unknown as Record<string, unknown>,
-        hipaaConsentAt: consentAt, clickupTaskId: null,
-        borough: input.city === "Brooklyn" ? "Brooklyn" : input.city,
-      });
+      // Step 1: Save to database (this is the only critical step)
+      try {
+        await createSubmission({
+          referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName,
+          email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId,
+          supermarket: input.supermarket, referralSource: input.ref ?? null,
+          status: "new", stage: "referral",
+          formData: input as unknown as Record<string, unknown>,
+          hipaaConsentAt: consentAt, clickupTaskId: null,
+          borough: input.city === "Brooklyn" ? "Brooklyn" : input.city,
+        });
+      } catch (dbErr) {
+        console.error("[Submission] Database save failed:", dbErr);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to save application. Please try again." });
+      }
 
+      // Step 2: Everything below is fire-and-forget - never blocks the user
       // Track referral link usage
       if (input.ref) {
         incrementReferralUsage(input.ref).catch((err) => console.warn("[Referral] Failed to track:", err));
       }
 
+      // Send emails (non-blocking)
+      const emailPayload = { referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName, email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId, supermarket: input.supermarket, formData: input as unknown as Record<string, unknown> };
       Promise.all([
-        sendApplicantConfirmation({ referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName, email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId, supermarket: input.supermarket, formData: input as unknown as Record<string, unknown> }),
-        sendAdminNotification({ referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName, email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId, supermarket: input.supermarket, formData: input as unknown as Record<string, unknown> }),
-      ]).catch(console.error);
+        sendApplicantConfirmation(emailPayload),
+        sendAdminNotification(emailPayload),
+      ]).catch((err) => console.warn("[Email] Non-blocking failure:", err));
 
-      try {
-        await fetch(`https://api.clickup.com/api/v2/list/${listId}/task`, {
-          method: "POST",
-          headers: { Authorization: ENV.clickupApiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ name: taskName, markdown_description: description, tags: ["freshselect-meals"] }),
-        });
-      } catch (err) { console.warn("[ClickUp] Failed:", err); }
+      // Create ClickUp task (non-blocking)
+      const listId = (input.ref && REFERRAL_LIST_MAP[input.ref.toLowerCase()]) || DEFAULT_LIST_ID;
+      const taskName = `${input.firstName} ${input.lastName} \u2014 ${input.supermarket}`;
+      const description = buildClickUpDescription(input);
+      fetch(`https://api.clickup.com/api/v2/list/${listId}/task`, {
+        method: "POST",
+        headers: { Authorization: ENV.clickupApiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: taskName, markdown_description: description, tags: ["freshselect-meals"] }),
+      }).catch((err) => console.warn("[ClickUp] Non-blocking failure:", err));
 
       return { success: true, referenceNumber: refNumber };
     }),
