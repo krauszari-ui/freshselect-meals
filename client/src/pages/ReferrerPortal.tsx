@@ -1,0 +1,399 @@
+import { useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  LogIn, LogOut, Users, Eye, Loader2, Mail, Lock, Search,
+  UserCheck, Clock, AlertCircle, ChevronLeft, ChevronRight,
+} from "lucide-react";
+import { toast } from "sonner";
+
+const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
+  referral: { label: "Referral", bg: "bg-emerald-100", text: "text-emerald-700" },
+  assessment: { label: "Assessment", bg: "bg-blue-100", text: "text-blue-700" },
+  level_one_only: { label: "Level One Only", bg: "bg-violet-100", text: "text-violet-700" },
+  level_one_household: { label: "Level One (Household)", bg: "bg-purple-100", text: "text-purple-700" },
+  level_2_active: { label: "Level 2 Active", bg: "bg-teal-100", text: "text-teal-700" },
+  ineligible: { label: "Ineligible", bg: "bg-red-100", text: "text-red-700" },
+  provider_attestation_required: { label: "Provider Attestation Required", bg: "bg-orange-100", text: "text-orange-700" },
+  flagged: { label: "Flagged", bg: "bg-rose-100", text: "text-rose-700" },
+};
+
+const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
+  new: { label: "New", bg: "bg-blue-100", text: "text-blue-700" },
+  in_review: { label: "In Review", bg: "bg-amber-100", text: "text-amber-700" },
+  approved: { label: "Approved", bg: "bg-green-100", text: "text-green-700" },
+  rejected: { label: "Rejected", bg: "bg-red-100", text: "text-red-700" },
+  on_hold: { label: "On Hold", bg: "bg-gray-100", text: "text-gray-700" },
+};
+
+const ITEMS_PER_PAGE = 10;
+
+export default function ReferrerPortal() {
+  const [session, setSession] = useState<{
+    referrerId: number;
+    referrerName: string;
+    code: string;
+  } | null>(null);
+
+  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  const [loginError, setLoginError] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
+  const loginMutation = trpc.admin.referrerPortal.login.useMutation({
+    onSuccess: (data) => {
+      setSession({ referrerId: data.referrerId, referrerName: data.referrerName, code: data.code });
+      setLoginError("");
+      toast.success(`Welcome, ${data.referrerName}!`);
+    },
+    onError: (err) => {
+      setLoginError(err.message || "Invalid email or password");
+    },
+  });
+
+  const { data: clients, isLoading: clientsLoading } = trpc.admin.referrerPortal.myClients.useQuery(
+    { code: session?.code || "" },
+    { enabled: !!session }
+  );
+
+  const { data: stats } = trpc.admin.referrerPortal.myStats.useQuery(
+    { code: session?.code || "" },
+    { enabled: !!session }
+  );
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginForm.email || !loginForm.password) {
+      setLoginError("Please enter both email and password");
+      return;
+    }
+    loginMutation.mutate(loginForm);
+  };
+
+  const handleLogout = () => {
+    setSession(null);
+    setLoginForm({ email: "", password: "" });
+    setSearch("");
+    setPage(1);
+  };
+
+  // Filter and paginate clients
+  const filteredClients = (clients || []).filter((c) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      c.firstName.toLowerCase().includes(q) ||
+      c.lastName.toLowerCase().includes(q) ||
+      c.email.toLowerCase().includes(q) ||
+      c.cellPhone.includes(q)
+    );
+  });
+
+  const totalPages = Math.ceil(filteredClients.length / ITEMS_PER_PAGE);
+  const paginatedClients = filteredClients.slice(
+    (page - 1) * ITEMS_PER_PAGE,
+    page * ITEMS_PER_PAGE
+  );
+
+  // ─── Login Screen ──────────────────────────────────────────────────
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          {/* Logo */}
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-white font-bold text-xl">FS</span>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">Referrer Portal</h1>
+            <p className="text-gray-500 mt-1">Track your referred clients</p>
+          </div>
+
+          <Card className="shadow-lg border-0">
+            <CardContent className="p-6">
+              <form onSubmit={handleLogin} className="space-y-4">
+                {loginError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                    <p className="text-sm text-red-700">{loginError}</p>
+                  </div>
+                )}
+
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">Email</Label>
+                  <div className="relative mt-1">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input
+                      type="email"
+                      value={loginForm.email}
+                      onChange={(e) => { setLoginForm((p) => ({ ...p, email: e.target.value })); setLoginError(""); }}
+                      placeholder="your@email.com"
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">Password</Label>
+                  <div className="relative mt-1">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input
+                      type="password"
+                      value={loginForm.password}
+                      onChange={(e) => { setLoginForm((p) => ({ ...p, password: e.target.value })); setLoginError(""); }}
+                      placeholder="Enter your password"
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={loginMutation.isPending}
+                  className="w-full bg-green-700 hover:bg-green-800 text-white"
+                >
+                  {loginMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <LogIn className="w-4 h-4 mr-2" />
+                  )}
+                  Sign In
+                </Button>
+              </form>
+
+              <p className="text-xs text-gray-400 text-center mt-4">
+                Contact your agency administrator if you need access.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Referrer Dashboard ────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center">
+                <span className="text-white font-bold text-sm">FS</span>
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-gray-900">FreshSelect Meals</h1>
+                <p className="text-xs text-gray-500">Referrer Portal</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-medium text-gray-900">{session.referrerName}</p>
+                <p className="text-xs text-gray-500">Referral Code: {session.code}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                <LogOut className="w-4 h-4 mr-1" /> Sign Out
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <Users className="w-5 h-5 text-green-700" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">{stats?.totalClients ?? 0}</p>
+                  <p className="text-xs text-gray-500">Total Referrals</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-blue-700" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {(stats?.stages?.referral ?? 0) + (stats?.stages?.assessment ?? 0)}
+                  </p>
+                  <p className="text-xs text-gray-500">In Progress</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                  <UserCheck className="w-5 h-5 text-emerald-700" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {(stats?.stages?.level_2_active ?? 0) + (stats?.stages?.level_one_only ?? 0) + (stats?.stages?.level_one_household ?? 0)}
+                  </p>
+                  <p className="text-xs text-gray-500">Active Clients</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                  <Eye className="w-5 h-5 text-amber-700" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">View Only</p>
+                  <p className="text-xs text-gray-500">Access Level</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Client List */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <CardTitle className="text-lg">Your Referred Clients</CardTitle>
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  placeholder="Search clients..."
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  className="pl-9 h-9"
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {clientsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-green-600" />
+              </div>
+            ) : filteredClients.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <Users className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                <p className="font-medium">No referred clients yet</p>
+                <p className="text-sm mt-1">Share your referral link to start tracking clients</p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">Client Name</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">Phone</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">Email</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">Supermarket</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">Stage</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">Status</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedClients.map((client) => {
+                        const stageConf = STAGE_CONFIG[client.stage] || { label: client.stage, bg: "bg-gray-100", text: "text-gray-700" };
+                        const statusConf = STATUS_CONFIG[client.status] || { label: client.status, bg: "bg-gray-100", text: "text-gray-700" };
+                        return (
+                          <tr key={client.id} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-700 font-semibold text-xs">
+                                  {(client.firstName[0] || "")}{(client.lastName[0] || "")}
+                                </div>
+                                <span className="font-medium text-gray-900">
+                                  {client.firstName} {client.lastName}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-gray-600">{client.cellPhone}</td>
+                            <td className="py-3 px-4 text-gray-600">{client.email}</td>
+                            <td className="py-3 px-4 text-gray-600">{client.supermarket}</td>
+                            <td className="py-3 px-4">
+                              <Badge className={`${stageConf.bg} ${stageConf.text} border-0 text-xs`}>
+                                {stageConf.label}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4">
+                              <Badge className={`${statusConf.bg} ${statusConf.text} border-0 text-xs`}>
+                                {statusConf.label}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4 text-gray-500 text-xs">
+                              {new Date(client.createdAt).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
+                    <p className="text-sm text-gray-500">
+                      Showing {(page - 1) * ITEMS_PER_PAGE + 1}–{Math.min(page * ITEMS_PER_PAGE, filteredClients.length)} of {filteredClients.length}
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={page <= 1}
+                        onClick={() => setPage((p) => p - 1)}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <span className="text-sm text-gray-600 px-2">
+                        Page {page} of {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={page >= totalPages}
+                        onClick={() => setPage((p) => p + 1)}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Info Banner */}
+        <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+          <Eye className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-green-800">Read-Only Access</p>
+            <p className="text-sm text-green-700 mt-0.5">
+              You can view the status and progress of clients you've referred. For any changes or questions, please contact the agency at (718) 307-4664.
+            </p>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

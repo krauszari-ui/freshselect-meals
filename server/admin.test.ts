@@ -113,6 +113,13 @@ vi.mock("./db", () => ({
   deleteReferralLink: vi.fn().mockResolvedValue(undefined),
   incrementReferralUsage: vi.fn().mockResolvedValue(undefined),
   getReferralStats: vi.fn().mockResolvedValue({ totalLinks: 3, totalReferrals: 12 }),
+  getReferralLinkByEmail: vi.fn().mockResolvedValue({
+    id: 1, code: "abc123", referrerName: "John Smith", isActive: 1, usageCount: 5,
+    email: "john@example.com", passwordHash: "$2a$10$hashedpassword",
+  }),
+  getClientsByReferralCode: vi.fn().mockResolvedValue([
+    { id: 1, firstName: "Sarah", lastName: "Cohen", cellPhone: "718-555-1234", email: "sarah@example.com", supermarket: "Foodoo", stage: "referral", status: "new", createdAt: new Date(), language: "English" },
+  ]),
 }));
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
@@ -570,5 +577,34 @@ describe("admin.referrals", () => {
   it("throws FORBIDDEN for non-staff", async () => {
     const caller = appRouter.createCaller(createUserContext());
     await expect(caller.admin.referrals.list()).rejects.toThrow("Staff access required");
+  });
+
+  it("creates a referral link with portal login", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.referrals.create({
+      code: "withlogin",
+      referrerName: "Portal User",
+      email: "portal@example.com",
+      password: "password123",
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+// ─── Referrer Portal ─────────────────────────────────────────────────
+describe("admin.referrerPortal", () => {
+  it("returns clients for a valid referral code", async () => {
+    const caller = appRouter.createCaller(createAnonContext());
+    const result = await caller.admin.referrerPortal.myClients({ code: "abc123" });
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBe(1);
+    expect(result[0].firstName).toBe("Sarah");
+  });
+
+  it("returns stats for a valid referral code", async () => {
+    const caller = appRouter.createCaller(createAnonContext());
+    const result = await caller.admin.referrerPortal.myStats({ code: "abc123" });
+    expect(result.totalClients).toBe(1);
+    expect(result.referrerName).toBe("John Smith");
   });
 });

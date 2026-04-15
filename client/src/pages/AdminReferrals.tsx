@@ -31,8 +31,8 @@ export default function AdminReferrals() {
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [createForm, setCreateForm] = useState({ code: generateCode(), referrerName: "", description: "" });
-  const [editForm, setEditForm] = useState({ referrerName: "", description: "", isActive: 1 });
+  const [createForm, setCreateForm] = useState({ code: generateCode(), referrerName: "", description: "", email: "", password: "" });
+  const [editForm, setEditForm] = useState({ referrerName: "", description: "", isActive: 1, email: "", password: "" });
 
   const linksQuery = trpc.admin.referrals.list.useQuery();
   const statsQuery = trpc.admin.referrals.stats.useQuery();
@@ -42,7 +42,7 @@ export default function AdminReferrals() {
       utils.admin.referrals.list.invalidate();
       utils.admin.referrals.stats.invalidate();
       setShowCreate(false);
-      setCreateForm({ code: generateCode(), referrerName: "", description: "" });
+      setCreateForm({ code: generateCode(), referrerName: "", description: "", email: "", password: "" });
       toast.success("Referral link created");
     },
     onError: (err) => toast.error(err.message),
@@ -79,8 +79,14 @@ export default function AdminReferrals() {
 
   const openEdit = (link: any) => {
     setSelectedId(link.id);
-    setEditForm({ referrerName: link.referrerName, description: link.description || "", isActive: link.isActive });
+    setEditForm({ referrerName: link.referrerName, description: link.description || "", isActive: link.isActive, email: link.email || "", password: "" });
     setShowEdit(true);
+  };
+
+  const copyPortalLink = () => {
+    const url = `${window.location.origin}/referrer`;
+    navigator.clipboard.writeText(url);
+    toast.success("Referrer portal link copied");
   };
 
   return (
@@ -156,6 +162,7 @@ export default function AdminReferrals() {
                   <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Referrer</th>
                   <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Code</th>
                   <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Link</th>
+                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Portal Login</th>
                   <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Referrals</th>
                   <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Status</th>
                   <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Created</th>
@@ -183,6 +190,13 @@ export default function AdminReferrals() {
                           <Copy className="h-3.5 w-3.5" />
                         </button>
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {link.email ? (
+                        <span className="text-xs text-slate-600">{link.email}</span>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">No login</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
@@ -219,10 +233,11 @@ export default function AdminReferrals() {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
           <h3 className="text-sm font-semibold text-blue-800 mb-2">How Referral Links Work</h3>
           <ol className="text-sm text-blue-700 space-y-1.5 list-decimal list-inside">
-            <li>Create a referral link with the referrer's name (e.g., "John Smith" or "Community Center")</li>
+            <li>Create a referral link with the referrer's name and optionally set up portal login credentials</li>
             <li>Share the generated link with the referrer — it looks like: <code className="bg-blue-100 px-1 py-0.5 rounded text-xs">{window.location.origin}/?ref=abc123</code></li>
             <li>When someone signs up through that link, the referral is automatically tracked</li>
             <li>You can see which referrer brought each client on the client detail page under "Referred By"</li>
+            <li>If you set up portal login, the referrer can sign in at <button onClick={copyPortalLink} className="underline text-blue-600 hover:text-blue-800">{window.location.origin}/referrer</button> to view their referred clients (read-only)</li>
           </ol>
         </div>
       </div>
@@ -251,13 +266,32 @@ export default function AdminReferrals() {
               <Label className="text-xs">Description (optional)</Label>
               <Textarea placeholder="Notes about this referrer..." value={createForm.description} onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })} className="min-h-[60px]" />
             </div>
+            <div className="border-t border-slate-200 pt-3 mt-1">
+              <p className="text-xs font-semibold text-slate-700 mb-2">Portal Login (optional)</p>
+              <p className="text-xs text-slate-500 mb-2">Set up login credentials so this referrer can view their referred clients at /referrer</p>
+              <div className="space-y-2">
+                <div>
+                  <Label className="text-xs">Email</Label>
+                  <Input type="email" placeholder="referrer@email.com" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Password (min 6 characters)</Label>
+                  <Input type="password" placeholder="Set a password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} />
+                </div>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => {
               if (!createForm.referrerName.trim()) { toast.error("Referrer name is required"); return; }
               if (!createForm.code.trim()) { toast.error("Link code is required"); return; }
-              createMutation.mutate(createForm);
+              if (createForm.email && !createForm.password) { toast.error("Password is required when email is set"); return; }
+              if (createForm.password && createForm.password.length < 6) { toast.error("Password must be at least 6 characters"); return; }
+              const payload: any = { code: createForm.code, referrerName: createForm.referrerName, description: createForm.description };
+              if (createForm.email) payload.email = createForm.email;
+              if (createForm.password) payload.password = createForm.password;
+              createMutation.mutate(payload);
             }} disabled={createMutation.isPending}>
               {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Link"}
             </Button>
@@ -285,11 +319,29 @@ export default function AdminReferrals() {
               <input type="checkbox" id="isActive" checked={editForm.isActive === 1} onChange={(e) => setEditForm({ ...editForm, isActive: e.target.checked ? 1 : 0 })} className="rounded" />
               <Label htmlFor="isActive" className="text-sm">Active (accepting new referrals)</Label>
             </div>
+            <div className="border-t border-slate-200 pt-3 mt-1">
+              <p className="text-xs font-semibold text-slate-700 mb-2">Portal Login</p>
+              <div className="space-y-2">
+                <div>
+                  <Label className="text-xs">Email</Label>
+                  <Input type="email" placeholder="referrer@email.com" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs">New Password (leave blank to keep current)</Label>
+                  <Input type="password" placeholder="Set new password" value={editForm.password} onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} />
+                </div>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEdit(false)}>Cancel</Button>
             <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => {
-              if (selectedId) updateMutation.mutate({ id: selectedId, ...editForm });
+              if (selectedId) {
+                const payload: any = { id: selectedId, referrerName: editForm.referrerName, description: editForm.description, isActive: editForm.isActive };
+                if (editForm.email) payload.email = editForm.email;
+                if (editForm.password && editForm.password.length >= 6) payload.password = editForm.password;
+                updateMutation.mutate(payload);
+              }
             }} disabled={updateMutation.isPending}>
               {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
             </Button>

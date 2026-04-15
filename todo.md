@@ -121,3 +121,11 @@
 - [x] Build referral link system: admin can create referral links for people
 - [x] Track which referrer brought each client (show on client list and detail)
 - [x] Referral management page or section in admin
+
+## Round 3 - Submission Fix, Grocery Update, Referral Logins
+- [x] Fix form submission error ("Something went wrong" on submit) - email failures now non-blocking
+- [x] Update grocery store names and addresses to correct values
+- [x] Add grocery store logos from their websites
+- [x] Build referral person login system (each referral link person gets a login)
+- [x] Referral person can view their referred clients (read-only, no edit)
+- [x] Referral person dashboard showing their referral stats and client list

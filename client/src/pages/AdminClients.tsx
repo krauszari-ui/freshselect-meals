@@ -63,7 +63,7 @@ interface AddClientForm {
 const INITIAL_ADD_FORM: AddClientForm = {
   firstName: "", lastName: "", dateOfBirth: "", medicaidId: "",
   cellPhone: "", email: "", streetAddress: "", city: "Brooklyn",
-  state: "NY", zipcode: "", language: "English", supermarket: "Foodoo",
+  state: "NY", zipcode: "", language: "English", supermarket: "Foodoo Kosher Supermarket",
 };
 
 function AddClientDialog({
@@ -223,7 +223,7 @@ function AddClientDialog({
               <Select value={form.supermarket} onValueChange={(v) => update("supermarket", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["Foodoo", "Rosemary Kosher", "Chestnut", "Central Market", "Bingo Wholesale"].map((s) => (
+                  {["Foodoo Kosher Supermarket", "Rosemary Kosher Supermarket", "Chestnut Supermarket", "Central Market", "Bingo Wholesale"].map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>

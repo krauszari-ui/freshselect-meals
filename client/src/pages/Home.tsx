@@ -178,11 +178,11 @@ const INITIAL_FORM: FormData = {
 };
 
 const SUPERMARKETS = [
-  { name: "Foodoo", address: "4814 13th Ave, Brooklyn, NY 11219", icon: "🛒" },
-  { name: "Rosemary Kosher", address: "4901 13th Ave, Brooklyn, NY 11219", icon: "🌿" },
-  { name: "Chestnut", address: "1506 62nd St, Brooklyn, NY 11219", icon: "🌰" },
-  { name: "Central Market", address: "4220 13th Ave, Brooklyn, NY 11219", icon: "🏪" },
-  { name: "Bingo Wholesale", address: "4802 New Utrecht Ave, Brooklyn, NY 11219", icon: "🎪" },
+  { name: "Foodoo Kosher Supermarket", address: "249 Wallabout St, Brooklyn, NY 11206", icon: "🛒", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/foodoo-logo_4f53a2c6.png" },
+  { name: "Rosemary Kosher Supermarket", address: "392 Flushing Ave, Brooklyn, NY 11205", icon: "🌿", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/rosemary-logo_a286acb8.webp" },
+  { name: "Chestnut Supermarket", address: "700 Myrtle Ave, Brooklyn, NY 11205", icon: "🌰", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/chestnut-store_b43a49f5.jpg" },
+  { name: "Central Market", address: "50 Division Ave, Brooklyn, NY 11249", icon: "🏪", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/central-market-store_1b7c6b82.jpg" },
+  { name: "Bingo Wholesale", address: "4802 New Utrecht Ave, Brooklyn, NY 11219", icon: "🎪", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/bingo-logo_bac570c5.jpg" },
 ];
 
 const HEALTH_CATEGORIES = [
@@ -1619,7 +1619,13 @@ export default function Home() {
                       onClick={() => update("supermarket", store.name)}
                     >
                       <CardContent className="p-6 text-center">
-                        <div className="text-4xl mb-3">{store.icon}</div>
+                        <div className="w-16 h-16 mx-auto mb-3 rounded-lg overflow-hidden bg-white flex items-center justify-center">
+                          {store.logo ? (
+                            <img src={store.logo} alt={store.name} className="w-full h-full object-contain" />
+                          ) : (
+                            <span className="text-4xl">{store.icon}</span>
+                          )}
+                        </div>
                         <h3 className="font-bold text-stone-800 text-lg">{store.name}</h3>
                         <p className="text-sm text-stone-500 flex items-center justify-center gap-1 mt-2">
                           <MapPin className="w-3 h-3" /> {store.address}

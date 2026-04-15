@@ -182,6 +182,10 @@ export const referralLinks = mysqlTable("referralLinks", {
   referrerName: varchar("referrerName", { length: 256 }).notNull(),
   /** Optional description/notes */
   description: text("description"),
+  /** Referrer login email */
+  email: varchar("email", { length: 320 }),
+  /** Hashed password for referrer portal login */
+  passwordHash: varchar("passwordHash", { length: 256 }),
   /** Number of times this link was used (submissions with this ref code) */
   usageCount: int("usageCount").default(0).notNull(),
   /** Whether this link is active */

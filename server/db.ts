@@ -422,6 +422,19 @@ export async function incrementReferralUsage(code: string): Promise<void> {
   await db.update(referralLinks).set({ usageCount: sql`usageCount + 1` }).where(eq(referralLinks.code, code));
 }
 
+export async function getReferralLinkByEmail(email: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(referralLinks).where(eq(referralLinks.email, email)).limit(1);
+  return result[0];
+}
+
+export async function getClientsByReferralCode(code: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(submissions).where(eq(submissions.referralSource, code)).orderBy(desc(submissions.createdAt));
+}
+
 export async function getReferralStats() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

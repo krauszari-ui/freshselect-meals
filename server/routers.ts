@@ -17,8 +17,10 @@ import {
   updateSubmissionFields, deleteSubmission,
   createReferralLink, listReferralLinks, getReferralLinkByCode,
   updateReferralLink, deleteReferralLink, incrementReferralUsage, getReferralStats,
+  getReferralLinkByEmail, getClientsByReferralCode,
   type WorkerPermissions,
 } from "./db";
+import bcrypt from "bcryptjs";
 import { sendAdminNotification, sendApplicantConfirmation } from "./email";
 import { storagePut } from "./storage";
 import { z } from "zod";
@@ -411,8 +413,14 @@ export const appRouter = router({
         code: z.string().min(2).max(64),
         referrerName: z.string().min(1),
         description: z.string().optional(),
+        email: z.string().email().optional(),
+        password: z.string().min(6).optional(),
       })).mutation(async ({ ctx, input }) => {
-        const id = await createReferralLink({ ...input, createdBy: ctx.user.id });
+        const { password, ...rest } = input;
+        const data: any = { ...rest, createdBy: ctx.user.id };
+        if (input.email) data.email = input.email;
+        if (password) data.passwordHash = await bcrypt.hash(password, 10);
+        const id = await createReferralLink(data);
         return { success: true, id };
       }),
       update: adminProcedure.input(z.object({
@@ -420,14 +428,62 @@ export const appRouter = router({
         referrerName: z.string().optional(),
         description: z.string().optional(),
         isActive: z.number().optional(),
+        email: z.string().email().optional(),
+        password: z.string().min(6).optional(),
       })).mutation(async ({ input }) => {
-        const { id, ...data } = input;
-        await updateReferralLink(id, data as any);
+        const { id, password, ...data } = input;
+        const updateData: any = { ...data };
+        if (password) updateData.passwordHash = await bcrypt.hash(password, 10);
+        await updateReferralLink(id, updateData);
         return { success: true };
       }),
       delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
         await deleteReferralLink(input.id);
         return { success: true };
+      }),
+    }),
+
+    // ─── Referrer Portal (public login + read-only access) ─────────────
+    referrerPortal: router({
+      login: publicProcedure.input(z.object({
+        email: z.string().email(),
+        password: z.string(),
+      })).mutation(async ({ input }) => {
+        const link = await getReferralLinkByEmail(input.email);
+        if (!link || !link.passwordHash) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This account has been deactivated" });
+        const valid = await bcrypt.compare(input.password, link.passwordHash);
+        if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+        return { success: true, referrerId: link.id, referrerName: link.referrerName, code: link.code };
+      }),
+      myClients: publicProcedure.input(z.object({
+        code: z.string(),
+      })).query(async ({ input }) => {
+        const link = await getReferralLinkByCode(input.code);
+        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        const clients = await getClientsByReferralCode(link.referrerName);
+        return clients.map((c) => ({
+          id: c.id,
+          firstName: c.firstName,
+          lastName: c.lastName,
+          cellPhone: c.cellPhone,
+          email: c.email,
+          supermarket: c.supermarket,
+          stage: c.stage,
+          status: c.status,
+          createdAt: c.createdAt,
+          language: c.language,
+        }));
+      }),
+      myStats: publicProcedure.input(z.object({
+        code: z.string(),
+      })).query(async ({ input }) => {
+        const link = await getReferralLinkByCode(input.code);
+        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        const clients = await getClientsByReferralCode(link.referrerName);
+        const stages: Record<string, number> = {};
+        clients.forEach((c) => { stages[c.stage] = (stages[c.stage] || 0) + 1; });
+        return { totalClients: clients.length, stages, referrerName: link.referrerName, code: link.code };
       }),
     }),
 
