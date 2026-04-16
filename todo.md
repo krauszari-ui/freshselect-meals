@@ -132,3 +132,33 @@
 
 ## Round 4 - Fix Persistent Form Submission Error
 - [x] Diagnose and fix the form submission error - ROOT CAUSE: hasWic/hasSnap Zod validation rejected empty strings after UI fields were removed. Fixed Zod schema to optional, auto-populate from screening, moved household validation to correct step.
+
+## FreshSelect 2.0 - Complete Architectural Refactor
+- [x] Audit all ClickUp integration code and map removal points
+- [x] Audit all Manus OAuth code and map removal points
+- [x] Audit all external service dependencies (Forge API, Manus-specific env vars)
+- [x] Design new local auth schema (email/password for admins and workers)
+- [x] Update drizzle schema with proper users table for local auth
+- [x] Apply database migrations for new auth tables (passwordHash on users, drop clickupTaskId)
+- [x] Build local email/password authentication system (register, login, sessions)
+- [x] Replace Manus OAuth routes with local auth routes
+- [x] Remove all ClickUp API calls from submission flow
+- [x] Store all order data exclusively in local database
+- [x] Update admin dashboard to read from local DB only (no ClickUp)
+- [x] Build admin login page (email/password)
+- [x] Build worker login page (email/password)
+- [x] Strip Manus OAuth hooks and providers from frontend
+- [x] Fix referral system: 30-day cookie, proper worker attribution in local DB
+- [x] Fix household relationship dropdown in new architecture
+- [x] Fix grocery store selections in new architecture
+- [x] Fix all TypeScript errors (0 errors)
+- [x] Write tests for new local auth system
+- [x] Write tests for new submission flow (no ClickUp) - 25 tests covering local DB, emails, referrals
+- [x] Full end-to-end testing of all pages - 75 tests passing
+- [x] Ensure app is fully standalone and deployable to Vercel/anywhere
+- [x] Delete clickup.test.ts
+- [x] Rewrite submission.test.ts (remove all ClickUp-specific tests, add local-only tests)
+- [x] Fix admin.test.ts (remove clickupTaskId references, update loginMethod to 'local')
+- [x] Add 30-day referral cookie tracking in Home.tsx
+- [x] Clean up ManusDialog references and Manus OAuth comments
+- [x] Generate and apply migration for removed clickupTaskId column

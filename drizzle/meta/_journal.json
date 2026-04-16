@@ -43,6 +43,13 @@
       "when": 1776262175085,
       "tag": "0005_strong_ronan",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1776359469633,
+      "tag": "0006_black_brood",
+      "breakpoints": true
     }
   ]
 }

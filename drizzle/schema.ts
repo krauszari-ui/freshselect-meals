@@ -58,7 +58,6 @@ export const submissions = mysqlTable("submissions", {
   /** Full form payload stored as JSON (includes screening answers, uploads, etc.) */
   formData: json("formData").notNull(),
   hipaaConsentAt: timestamp("hipaaConsentAt").notNull(),
-  clickupTaskId: varchar("clickupTaskId", { length: 64 }),
   emailSentAt: timestamp("emailSentAt"),
   /** Assigned worker user ID */
   assignedTo: int("assignedTo"),
