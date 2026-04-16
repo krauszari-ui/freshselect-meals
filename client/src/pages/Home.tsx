@@ -37,6 +37,7 @@ import {
   Apple,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { SignaturePad } from "@/components/SignaturePad";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -105,6 +106,8 @@ interface FormData {
   needsMicrowave: string;
   needsCookingUtensils: string;
   hipaaConsent: boolean;
+  guardianName: string;
+  signatureDataUrl: string;
   screeningQuestions: ScreeningQuestions;
 }
 
@@ -175,6 +178,8 @@ const INITIAL_FORM: FormData = {
   needsMicrowave: "",
   needsCookingUtensils: "",
   hipaaConsent: false,
+  guardianName: "",
+  signatureDataUrl: "",
   screeningQuestions: { ...INITIAL_SCREENING },
 };
 
@@ -273,6 +278,8 @@ function validateStep3(form: FormData): FormErrors {
   if (!form.needsMicrowave) e.needsMicrowave = "Required";
   if (!form.needsCookingUtensils) e.needsCookingUtensils = "Required";
   if (!form.hipaaConsent) e.hipaaConsent = "You must agree to the HIPAA consent";
+  if (!form.guardianName.trim()) e.guardianName = "Please enter the member/parent/guardian name";
+  if (!form.signatureDataUrl) e.signatureDataUrl = "Please provide your electronic signature";
   return e;
 }
 
@@ -1598,6 +1605,75 @@ export default function Home() {
                         />
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* Household Attestation & Electronic Signature */}
+                <Card className="border-blue-200 bg-blue-50/30">
+                  <CardContent className="p-6 space-y-5">
+                    {/* Attestation Header */}
+                    <div className="flex items-start gap-3">
+                      <ClipboardList className="w-6 h-6 text-blue-700 mt-0.5 shrink-0" />
+                      <div>
+                        <h3 className="font-bold text-stone-800 text-base">Household Attestation</h3>
+                        <p className="text-sm text-stone-600 mt-1 leading-relaxed">
+                          I, <span className="font-semibold text-stone-800">{form.guardianName || "________________________________"}</span>, (Member/Parent/Legal Guardian), attest that the individuals
+                          listed below are members of my household. They live with me at the address above and
+                          share common living arrangements and resources (e.g., food, housing, utilities). This
+                          information is provided for SCN/HRSN eligibility and service planning.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Household Members List */}
+                    {form.householdMembers.length > 0 && (
+                      <div className="bg-white rounded-lg border border-blue-100 p-4">
+                        <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Household Members Listed</p>
+                        <ul className="space-y-1">
+                          {form.householdMembers.map((m, i) => (
+                            <li key={i} className="text-sm text-stone-700">
+                              {i + 1}. {m.name}{m.dateOfBirth ? ` — DOB: ${m.dateOfBirth}` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Acknowledgment */}
+                    <div className="border-t border-blue-100 pt-4">
+                      <h4 className="font-semibold text-stone-800 mb-1">Acknowledgment</h4>
+                      <p className="text-sm text-stone-600 leading-relaxed">
+                        I certify the above information is true and accurate. I understand it may be used to
+                        determine eligibility for SCN services and that false information may impact services.
+                      </p>
+                    </div>
+
+                    {/* Guardian Name Field */}
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-stone-700">
+                        Member/Parent/Guardian Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={form.guardianName}
+                        onChange={(e) => update("guardianName", e.target.value)}
+                        placeholder="Full legal name"
+                        className={`w-full px-3 py-2 rounded-md border text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+                          errors.guardianName ? "border-red-400" : "border-stone-300"
+                        }`}
+                      />
+                      {errors.guardianName && (
+                        <p className="text-red-500 text-xs">{errors.guardianName}</p>
+                      )}
+                    </div>
+
+                    {/* Electronic Signature */}
+                    <SignaturePad
+                      label="Electronic Signature *"
+                      value={form.signatureDataUrl}
+                      onChange={(dataUrl) => update("signatureDataUrl", dataUrl)}
+                      error={errors.signatureDataUrl}
+                    />
                   </CardContent>
                 </Card>
 

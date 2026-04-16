@@ -74,6 +74,8 @@ const submissionInputSchema = z.object({
   dinnerItems: z.string().optional(), snackItems: z.string().optional(),
   needsRefrigerator: z.string().min(1), needsMicrowave: z.string().min(1), needsCookingUtensils: z.string().min(1),
   hipaaConsent: z.boolean().refine((val) => val === true, { message: "HIPAA consent is required" }),
+  guardianName: z.string().min(1, "Guardian name is required"),
+  signatureDataUrl: z.string().min(1, "Electronic signature is required"),
   ref: z.string().optional(),
   screeningQuestions: screeningQuestionsSchema.optional(),
   uploadedDocuments: z.record(z.string(), z.string()).optional(),

@@ -125,6 +125,8 @@ function AddClientDialog({
       needsMicrowave: "No",
       needsCookingUtensils: "No",
       hipaaConsent: true,
+      guardianName: `${form.firstName} ${form.lastName}`,
+      signatureDataUrl: "admin-added",
       screeningQuestions: {},
     });
   };
