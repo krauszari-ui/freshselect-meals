@@ -205,3 +205,8 @@
 - [x] Verify referral link logic uses window.location.origin
 - [x] Verify vercel.json routing config (/api/* -> server, all else -> SPA)
 - [x] Final sync to GitHub for Vercel deployment
+
+## Export Feature (April 2026)
+- [x] Add Export to Excel (.xlsx) button on Admin Clients page
+- [x] Add Export to CSV option
+- [x] Include all client fields in export (name, CIN, DOB, address, language, household, health categories, stage, vendor, referral, guardian name, etc.)
