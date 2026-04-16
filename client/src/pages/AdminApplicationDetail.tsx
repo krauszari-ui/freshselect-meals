@@ -174,8 +174,8 @@ export default function AdminApplicationDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: Application Details */}
           <div className="lg:col-span-2 space-y-4">
-            {/* Mother's Personal Info */}
-            <Section title="Mother's Personal Information" icon={<User className="w-4 h-4" />}>
+            {/* Primary Member Info */}
+            <Section title="Primary Member Information" icon={<User className="w-4 h-4" />}>
               <dl className="grid grid-cols-2 gap-3">
                 <Field label="First Name" value={sub.firstName} />
                 <Field label="Last Name" value={sub.lastName} />
@@ -214,8 +214,8 @@ export default function AdminApplicationDetail() {
               </dl>
             </Section>
 
-            {/* Supermarket */}
-            <Section title="Supermarket" icon={<Store className="w-4 h-4" />}>
+            {/* Vendor */}
+            <Section title="Vendor" icon={<Store className="w-4 h-4" />}>
               <p className="text-sm font-medium text-foreground">{sub.supermarket}</p>
               {sub.referralSource && (
                 <p className="text-xs text-muted-foreground mt-1">Referral: {sub.referralSource}</p>

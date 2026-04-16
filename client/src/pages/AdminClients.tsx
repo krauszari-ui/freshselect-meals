@@ -63,7 +63,7 @@ interface AddClientForm {
 const INITIAL_ADD_FORM: AddClientForm = {
   firstName: "", lastName: "", dateOfBirth: "", medicaidId: "",
   cellPhone: "", email: "", streetAddress: "", city: "Brooklyn",
-  state: "NY", zipcode: "", language: "English", supermarket: "Foodoo Kosher Supermarket",
+  state: "NY", zipcode: "", language: "English", supermarket: "Foodoo Kosher",
 };
 
 function AddClientDialog({
@@ -113,7 +113,7 @@ function AddClientDialog({
       ...form,
       homePhone: "",
       aptUnit: "",
-      healthCategories: [],
+      healthCategories: ["Chronic Condition"],
       employed: "No",
       spouseEmployed: "No",
       hasWic: "No",
@@ -221,11 +221,11 @@ function AddClientDialog({
               </Select>
             </div>
             <div>
-              <Label className="text-xs text-slate-600">Supermarket</Label>
+              <Label className="text-xs text-slate-600">Vendor</Label>
               <Select value={form.supermarket} onValueChange={(v) => update("supermarket", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["Foodoo Kosher Supermarket", "Rosemary Kosher Supermarket", "Chestnut Supermarket", "Central Market", "Bingo Wholesale"].map((s) => (
+                  {["Foodoo Kosher", "Rosemary Kosher", "Chestnut", "Central Market"].map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>

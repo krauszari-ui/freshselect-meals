@@ -262,17 +262,9 @@ describe("submission.submit", () => {
         utilityShutoff: "Yes",
         receivesSnap: "Yes",
         receivesWic: "No",
-        receivesTanf: "No",
-        enrolledHealthHome: "No",
-        householdMembersCount: "3",
-        householdMembersWithMedicaid: "2",
-        needsWorkAssistance: "No",
-        wantsSchoolHelp: "No",
-        transportationBarrier: "Yes",
         hasChronicIllness: "No",
         otherHealthIssues: "No",
         medicationsRequireRefrigeration: "No",
-        pregnantOrPostpartum: "No",
         breastmilkRefrigeration: "No",
       },
     };
@@ -281,7 +273,7 @@ describe("submission.submit", () => {
     expect(result.success).toBe(true);
     const savedData = mockCreateSubmission.mock.calls[0][0];
     expect(savedData.formData.screeningQuestions.livingSituation).toBe("Renting");
-    expect(savedData.formData.screeningQuestions.transportationBarrier).toBe("Yes");
+    expect(savedData.formData.screeningQuestions.hasChronicIllness).toBe("No");
   });
 
   it("stores HIPAA consent timestamp", async () => {

@@ -304,7 +304,7 @@ export default function ReferrerPortal() {
                         <th className="text-left py-3 px-4 font-medium text-gray-600">Client Name</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-600">Phone</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-600">Email</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-600">Supermarket</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">Vendor</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-600">Stage</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-600">Status</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-600">Date</th>
