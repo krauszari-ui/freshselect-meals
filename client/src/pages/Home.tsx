@@ -1822,7 +1822,9 @@ export default function Home() {
             <div className="flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
               <div>
-                <p className="text-sm text-red-700 font-medium">Something went wrong. Please try again.</p>
+                <p className="text-sm text-red-700 font-medium">
+                  {submitMutation.error?.message || "Something went wrong. Please try again."}
+                </p>
                 <p className="text-xs text-red-600 mt-1">If the problem persists, call (718) 307-4664 or email info@freshselectmeals.com.</p>
               </div>
             </div>

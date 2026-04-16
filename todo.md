@@ -244,3 +244,12 @@
 - [x] Update createSubmission in routers.ts to save neighborhood to DB column
 - [x] Update getAllSubmissions in db.ts to filter by DB column instead of client-side JSON filtering
 - [x] 75 tests passing, 0 TypeScript errors
+
+## Persistent Form Submission Error Investigation (April 2026)
+- [x] Check 1: Schema alignment — all frontend fields match Zod schema exactly, .passthrough() active
+- [x] Check 2: Zod validation — .passthrough() confirmed, all field names match, additionalMembersCount present
+- [x] Check 3: Database URL and SSL — PlanetScale connection works, test insert/delete succeeded, neighborhood column confirmed
+- [x] Added server-side logging for submission processing (success/failure with ref numbers)
+- [x] Improved frontend error display to show actual backend error message
+- [x] 75 tests passing, 0 TypeScript errors
+- [ ] Sync to GitHub for redeployment
