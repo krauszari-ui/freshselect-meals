@@ -3,13 +3,13 @@ export const ENV = {
   appId: process.env.VITE_APP_ID ?? "freshselect-meals",
   /** Secret used to sign / verify session JWTs — must be set in production */
   cookieSecret: process.env.JWT_SECRET ?? "",
-  /** MySQL connection string */
+  /** MySQL / PlanetScale connection string */
   databaseUrl: process.env.DATABASE_URL ?? "",
   /** Production flag */
   isProduction: process.env.NODE_ENV === "production",
   /** Resend API key for transactional email */
   resendApiKey: process.env.RESEND_API_KEY ?? "",
-  // ── Forge API (storage, LLM, maps, etc.) ──────────────────────────────────
+  // ── Forge API fields kept for _core framework compatibility (unused in app) ─
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
 };

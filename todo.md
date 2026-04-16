@@ -162,3 +162,14 @@
 - [x] Add 30-day referral cookie tracking in Home.tsx
 - [x] Clean up ManusDialog references and Manus OAuth comments
 - [x] Generate and apply migration for removed clickupTaskId column
+
+## Production Launch Prep (freshselectmeals.com)
+- [x] PlanetScale DB compatibility: SSL pool connection via URL param, no FK constraints in schema
+- [x] Replace Manus Forge storage proxy with direct AWS S3 (SigV4) implementation
+- [x] Update index.html with production SEO metadata and OG tags for freshselectmeals.com
+- [x] Remove Manus analytics script from index.html
+- [x] Create vercel.json for Express+React deployment
+- [x] Remove ComponentShowcase route from App.tsx (dev-only page)
+- [x] Verify admin auth protection (adminProcedure guards all admin routes)
+- [x] Referral links use window.location.origin (auto-resolves to freshselectmeals.com in prod)
+- [x] 75 tests passing, 0 TypeScript errors
