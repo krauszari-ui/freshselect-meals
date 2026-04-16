@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
@@ -76,13 +76,29 @@ function createPublicContext(): TrpcContext {
   };
 }
 
+/**
+ * Helper: flush the setTimeout(0) background tasks that the submit procedure schedules.
+ * Uses fake timers to advance, then lets microtasks (Promises) settle.
+ */
+async function flushBackgroundTasks() {
+  // Advance fake timers to fire the setTimeout(0) callback
+  vi.advanceTimersByTime(1);
+  // Let any resulting Promises (email sends, referral tracking) settle
+  await vi.advanceTimersByTimeAsync(10);
+}
+
 describe("submission.submit", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
     mockCreateSubmission.mockResolvedValue(undefined);
     mockIncrementReferralUsage.mockResolvedValue(undefined);
     mockSendApplicantConfirmation.mockResolvedValue(true);
     mockSendAdminNotification.mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("accepts valid input and returns a reference number", async () => {
@@ -120,8 +136,8 @@ describe("submission.submit", () => {
 
     await caller.submission.submit(validInput());
 
-    // Allow fire-and-forget promises to settle
-    await new Promise((r) => setTimeout(r, 50));
+    // Flush the setTimeout(0) background tasks
+    await flushBackgroundTasks();
 
     expect(mockSendApplicantConfirmation).toHaveBeenCalledTimes(1);
     expect(mockSendAdminNotification).toHaveBeenCalledTimes(1);
@@ -138,8 +154,8 @@ describe("submission.submit", () => {
 
     await caller.submission.submit({ ...validInput(), ref: "community_center" });
 
-    // Allow fire-and-forget promises to settle
-    await new Promise((r) => setTimeout(r, 50));
+    // Flush the setTimeout(0) background tasks
+    await flushBackgroundTasks();
 
     expect(mockIncrementReferralUsage).toHaveBeenCalledTimes(1);
     expect(mockIncrementReferralUsage).toHaveBeenCalledWith("community_center");
@@ -151,7 +167,7 @@ describe("submission.submit", () => {
 
     await caller.submission.submit(validInput());
 
-    await new Promise((r) => setTimeout(r, 50));
+    await flushBackgroundTasks();
 
     expect(mockIncrementReferralUsage).not.toHaveBeenCalled();
   });
@@ -332,6 +348,9 @@ describe("submission.submit", () => {
     const result = await caller.submission.submit(validInput());
     expect(result.success).toBe(true);
     expect(result.referenceNumber).toBeTruthy();
+
+    // Flush background tasks so rejected promises are handled before test ends
+    await flushBackgroundTasks();
   });
 
   it("succeeds even when referral tracking fails (non-blocking)", async () => {
@@ -343,6 +362,9 @@ describe("submission.submit", () => {
     const result = await caller.submission.submit({ ...validInput(), ref: "test_ref" });
     expect(result.success).toBe(true);
     expect(result.referenceNumber).toBeTruthy();
+
+    // Flush background tasks so rejected promises are handled before test ends
+    await flushBackgroundTasks();
   });
 
   it("fails when database save fails", async () => {
