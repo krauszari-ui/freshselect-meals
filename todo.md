@@ -236,3 +236,11 @@
 - [x] Update tests to use vi.useFakeTimers() to properly handle setTimeout(0) in tests
 - [x] email.ts already has defensive try-catch wrappers (no changes needed)
 - [x] 75 tests passing, 0 TypeScript errors
+
+## Neighborhood Column Migration (April 2026)
+- [x] Add neighborhood column to Drizzle schema (varchar 64, nullable)
+- [x] Push schema to PlanetScale production database via drizzle-kit push
+- [x] Verify neighborhood column exists in production (confirmed)
+- [x] Update createSubmission in routers.ts to save neighborhood to DB column
+- [x] Update getAllSubmissions in db.ts to filter by DB column instead of client-side JSON filtering
+- [x] 75 tests passing, 0 TypeScript errors
