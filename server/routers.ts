@@ -387,7 +387,7 @@ export const appRouter = router({
       })).query(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
-        const clients = await getClientsByReferralCode(link.referrerName);
+        const clients = await getClientsByReferralCode(link.code);
         return clients.map((c) => ({
           id: c.id,
           firstName: c.firstName,
@@ -406,7 +406,7 @@ export const appRouter = router({
       })).query(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
-        const clients = await getClientsByReferralCode(link.referrerName);
+        const clients = await getClientsByReferralCode(link.code);
         const stages: Record<string, number> = {};
         clients.forEach((c) => { stages[c.stage] = (stages[c.stage] || 0) + 1; });
         return { totalClients: clients.length, stages, referrerName: link.referrerName, code: link.code };
