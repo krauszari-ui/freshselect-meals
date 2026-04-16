@@ -135,6 +135,8 @@ export const appRouter = router({
       const refNumber = Math.random().toString(36).substring(2, 8).toUpperCase();
       const consentAt = new Date();
 
+      console.log(`[Submission] Processing new submission for ${input.firstName} ${input.lastName} (ref: ${refNumber})`);
+
       // Step 1: Save to database (this is the ONLY critical step)
       try {
         await createSubmission({
@@ -147,8 +149,9 @@ export const appRouter = router({
           borough: input.city === "Brooklyn" ? "Brooklyn" : input.city,
           neighborhood: input.neighborhood || null,
         });
-      } catch (dbErr) {
-        console.error("[Submission] Database save failed:", dbErr);
+        console.log(`[Submission] ✓ Saved to database (ref: ${refNumber})`);
+      } catch (dbErr: any) {
+        console.error(`[Submission] ✗ Database save failed (ref: ${refNumber}):`, dbErr?.message || dbErr);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to save application. Please try again." });
       }
 
