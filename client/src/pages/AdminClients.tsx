@@ -11,9 +11,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X,
+  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText,
 } from "lucide-react";
-import { useEffect, useState, useMemo } from "react";
+import * as XLSX from "xlsx";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { Link, useSearch } from "wouter";
 import { toast } from "sonner";
 
@@ -250,6 +251,113 @@ function AddClientDialog({
   );
 }
 
+/* ─── Export Dropdown ─────────────────────────────────────────────────── */
+
+function ExportDropdown() {
+  const [open, setOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const exportMutation = trpc.admin.exportCsv.useMutation();
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportCsv = async () => {
+    setExporting(true);
+    setOpen(false);
+    try {
+      const result = await exportMutation.mutateAsync({});
+      const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8;" });
+      const date = new Date().toISOString().slice(0, 10);
+      triggerDownload(blob, `freshselect-clients-${date}.csv`);
+      toast.success(`Exported ${result.count} clients to CSV`);
+    } catch {
+      toast.error("Failed to export clients");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    setOpen(false);
+    try {
+      const result = await exportMutation.mutateAsync({});
+      const wsData = [result.headers, ...result.data];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      // Auto-size columns
+      const colWidths = result.headers.map((h: string, i: number) => {
+        let maxLen = h.length;
+        result.data.forEach((row: string[]) => {
+          if (row[i] && row[i].length > maxLen) maxLen = row[i].length;
+        });
+        return { wch: Math.min(maxLen + 2, 50) };
+      });
+      ws["!cols"] = colWidths;
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Clients");
+      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const date = new Date().toISOString().slice(0, 10);
+      triggerDownload(blob, `freshselect-clients-${date}.xlsx`);
+      toast.success(`Exported ${result.count} clients to Excel`);
+    } catch {
+      toast.error("Failed to export clients");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <Button
+        variant="outline"
+        onClick={() => setOpen(!open)}
+        disabled={exporting}
+        className="gap-1.5 h-9 px-4 text-sm border-slate-300 text-slate-700 hover:bg-slate-50"
+      >
+        {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        Export
+        <ChevronDown className="h-3 w-3 ml-0.5" />
+      </Button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-green-600" />
+            Export to Excel
+          </button>
+          <button
+            onClick={handleExportCsv}
+            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            <FileText className="h-4 w-4 text-blue-600" />
+            Export to CSV
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Main Component ──────────────────────────────────────────────────── */
 
 export default function AdminClients() {
@@ -325,13 +433,16 @@ export default function AdminClients() {
             <h1 className="text-2xl font-bold text-slate-900">Clients</h1>
             <p className="text-slate-500 text-sm mt-0.5">{totalCount} total clients</p>
           </div>
-          <Button
-            onClick={() => setShowAddDialog(true)}
-            className="bg-green-700 hover:bg-green-800 text-white gap-1.5 h-9 px-4 text-sm"
-          >
-            <Plus className="h-4 w-4" />
-            Add Client
-          </Button>
+          <div className="flex items-center gap-2">
+            <ExportDropdown />
+            <Button
+              onClick={() => setShowAddDialog(true)}
+              className="bg-green-700 hover:bg-green-800 text-white gap-1.5 h-9 px-4 text-sm"
+            >
+              <Plus className="h-4 w-4" />
+              Add Client
+            </Button>
+          </div>
         </div>
 
         {/* Search */}

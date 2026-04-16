@@ -215,11 +215,22 @@ export const appRouter = router({
     exportCsv: staffProcedure.input(z.object({ status: z.string().optional(), supermarket: z.string().optional(), stage: z.string().optional() }))
       .mutation(async ({ input }) => {
         const rows = await getAllSubmissions(input);
-        const headers = ["Reference #", "First Name", "Last Name", "Email", "Phone", "Medicaid ID", "Vendor", "Stage", "Status", "Referral Source", "Submitted"];
-        const csvRows = rows.map((r) => [r.referenceNumber, r.firstName, r.lastName, r.email, r.cellPhone, r.medicaidId, r.supermarket, r.stage, r.status, r.referralSource || "", r.createdAt.toISOString()]);
+        const headers = ["Reference #", "First Name", "Last Name", "Email", "Phone", "Medicaid ID", "DOB", "Address", "City", "State", "Zip", "Language", "Vendor", "Stage", "Status", "Household Members", "Health Categories", "Referral Source", "Guardian Name", "Submitted"];
+        const csvRows = rows.map((r) => {
+          const fd = (r.formData as any) || {};
+          const householdNames = (fd.householdMembers || []).map((m: any) => `${m.firstName || ""} ${m.lastName || ""} (${m.relationship || ""})`.trim()).join("; ");
+          const healthCats = (fd.healthCategories || []).join("; ");
+          return [
+            r.referenceNumber, r.firstName, r.lastName, r.email, r.cellPhone, r.medicaidId,
+            fd.dateOfBirth || "", fd.address || "", fd.city || "", fd.state || "", fd.zipCode || "",
+            fd.language || r.language || "English", r.supermarket, r.stage, r.status,
+            householdNames, healthCats, r.referralSource || "", fd.guardianName || "",
+            r.createdAt.toISOString()
+          ];
+        });
         const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
         const csv = [headers.map(escape).join(","), ...csvRows.map((row) => row.map(escape).join(","))].join("\n");
-        return { csv, count: rows.length };
+        return { csv, count: rows.length, headers, data: csvRows };
       }),
 
     // ─── Tasks ────────────────────────────────────────────────────────────
