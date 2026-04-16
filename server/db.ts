@@ -14,7 +14,14 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      // PlanetScale requires SSL. We append ?ssl={"rejectUnauthorized":true} to
+      // the connection string so the drizzle string-overload handles the pool
+      // creation internally — no FK constraints are defined in the schema.
+      const url = new URL(process.env.DATABASE_URL);
+      if (!url.searchParams.has("ssl")) {
+        url.searchParams.set("ssl", JSON.stringify({ rejectUnauthorized: true }));
+      }
+      _db = drizzle(url.toString());
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
