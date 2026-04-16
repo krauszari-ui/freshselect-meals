@@ -67,6 +67,8 @@ export const submissions = mysqlTable("submissions", {
   language: varchar("language", { length: 32 }).default("English"),
   /** Borough */
   borough: varchar("borough", { length: 64 }),
+  /** Neighborhood (e.g. Williamsburg, Borough Park, Flatbush, Monsey, Monroe) */
+  neighborhood: varchar("neighborhood", { length: 64 }),
   /** Program */
   program: varchar("program", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

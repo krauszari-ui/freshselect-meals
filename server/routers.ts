@@ -145,6 +145,7 @@ export const appRouter = router({
           formData: input as unknown as Record<string, unknown>,
           hipaaConsentAt: consentAt,
           borough: input.city === "Brooklyn" ? "Brooklyn" : input.city,
+          neighborhood: input.neighborhood || null,
         });
       } catch (dbErr) {
         console.error("[Submission] Database save failed:", dbErr);
