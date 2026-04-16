@@ -644,7 +644,19 @@ export default function Home() {
 
   const [ref] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("ref") || "";
+    const urlRef = params.get("ref") || "";
+
+    // If ref is in URL, save it to a 30-day cookie
+    if (urlRef) {
+      const expires = new Date();
+      expires.setDate(expires.getDate() + 30);
+      document.cookie = `fs_ref=${encodeURIComponent(urlRef)};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
+      return urlRef;
+    }
+
+    // Otherwise, check for existing cookie
+    const cookieMatch = document.cookie.match(/(?:^|;\s*)fs_ref=([^;]*)/);
+    return cookieMatch ? decodeURIComponent(cookieMatch[1]) : "";
   });
 
   const submitMutation = trpc.submission.submit.useMutation({

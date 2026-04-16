@@ -1,10 +1,14 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
 // Mock the database module so tests don't need a real DB
+const mockCreateSubmission = vi.fn().mockResolvedValue(undefined);
+const mockIncrementReferralUsage = vi.fn().mockResolvedValue(undefined);
+const mockGetReferralLinkByCode = vi.fn().mockResolvedValue(null);
+
 vi.mock("./db", () => ({
-  createSubmission: vi.fn().mockResolvedValue(undefined),
+  createSubmission: (...args: unknown[]) => mockCreateSubmission(...args),
   listSubmissions: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
   updateSubmissionEmailSent: vi.fn().mockResolvedValue(undefined),
   getSubmissionById: vi.fn(),
@@ -16,14 +20,17 @@ vi.mock("./db", () => ({
   updateSubmissionStatus: vi.fn(),
   updateWorkerPermissions: vi.fn(),
   getAllSubmissions: vi.fn(),
-  incrementReferralUsage: vi.fn().mockResolvedValue(undefined),
-  getReferralLinkByCode: vi.fn().mockResolvedValue(null),
+  incrementReferralUsage: (...args: unknown[]) => mockIncrementReferralUsage(...args),
+  getReferralLinkByCode: (...args: unknown[]) => mockGetReferralLinkByCode(...args),
 }));
 
 // Mock the email module
+const mockSendApplicantConfirmation = vi.fn().mockResolvedValue(true);
+const mockSendAdminNotification = vi.fn().mockResolvedValue(true);
+
 vi.mock("./email", () => ({
-  sendApplicantConfirmation: vi.fn().mockResolvedValue(true),
-  sendAdminNotification: vi.fn().mockResolvedValue(true),
+  sendApplicantConfirmation: (...args: unknown[]) => mockSendApplicantConfirmation(...args),
+  sendAdminNotification: (...args: unknown[]) => mockSendAdminNotification(...args),
 }));
 
 function validInput() {
@@ -68,19 +75,12 @@ function createPublicContext(): TrpcContext {
 }
 
 describe("submission.submit", () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
-
   beforeEach(() => {
-    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ id: "task_123" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })
-    );
-  });
-
-  afterEach(() => {
-    fetchSpy.mockRestore();
+    vi.clearAllMocks();
+    mockCreateSubmission.mockResolvedValue(undefined);
+    mockIncrementReferralUsage.mockResolvedValue(undefined);
+    mockSendApplicantConfirmation.mockResolvedValue(true);
+    mockSendAdminNotification.mockResolvedValue(true);
   });
 
   it("accepts valid input and returns a reference number", async () => {
@@ -94,135 +94,139 @@ describe("submission.submit", () => {
     expect(result.referenceNumber.length).toBe(6);
   });
 
-  it("sends correct data to ClickUp API", async () => {
+  it("saves submission to local database", async () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
     await caller.submission.submit(validInput());
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain("https://api.clickup.com/api/v2/list/");
-    expect(url).toContain("/task");
-    expect(options.method).toBe("POST");
-    expect(options.headers).toHaveProperty("Authorization");
-    expect(options.headers).toHaveProperty("Content-Type", "application/json");
-
-    const body = JSON.parse(options.body as string);
-    expect(body.name).toBe("Jane Doe \u2014 Foodoo");
-    expect(body.markdown_description).toContain("**Medicaid ID:** AB12345C");
-    expect(body.markdown_description).toContain("**Cell Phone:** (555) 123-4567");
-    expect(body.tags).toContain("freshselect-meals");
+    expect(mockCreateSubmission).toHaveBeenCalledTimes(1);
+    const savedData = mockCreateSubmission.mock.calls[0][0];
+    expect(savedData.firstName).toBe("Jane");
+    expect(savedData.lastName).toBe("Doe");
+    expect(savedData.email).toBe("jane@example.com");
+    expect(savedData.medicaidId).toBe("AB12345C");
+    expect(savedData.supermarket).toBe("Foodoo");
+    expect(savedData.status).toBe("new");
+    expect(savedData.stage).toBe("referral");
+    expect(savedData.formData).toBeDefined();
   });
 
-  it("includes household members in the description", async () => {
+  it("sends confirmation emails after submission", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.submission.submit(validInput());
+
+    // Allow fire-and-forget promises to settle
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(mockSendApplicantConfirmation).toHaveBeenCalledTimes(1);
+    expect(mockSendAdminNotification).toHaveBeenCalledTimes(1);
+
+    const emailPayload = mockSendApplicantConfirmation.mock.calls[0][0];
+    expect(emailPayload.firstName).toBe("Jane");
+    expect(emailPayload.email).toBe("jane@example.com");
+    expect(emailPayload.referenceNumber).toBeDefined();
+  });
+
+  it("tracks referral usage when ref is provided", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.submission.submit({ ...validInput(), ref: "community_center" });
+
+    // Allow fire-and-forget promises to settle
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(mockIncrementReferralUsage).toHaveBeenCalledTimes(1);
+    expect(mockIncrementReferralUsage).toHaveBeenCalledWith("community_center");
+  });
+
+  it("does not track referral when no ref is provided", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.submission.submit(validInput());
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(mockIncrementReferralUsage).not.toHaveBeenCalled();
+  });
+
+  it("stores referral source in database when ref is provided", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.submission.submit({ ...validInput(), ref: "sha" });
+
+    const savedData = mockCreateSubmission.mock.calls[0][0];
+    expect(savedData.referralSource).toBe("sha");
+  });
+
+  it("stores null referral source when no ref is provided", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.submission.submit(validInput());
+
+    const savedData = mockCreateSubmission.mock.calls[0][0];
+    expect(savedData.referralSource).toBeNull();
+  });
+
+  it("accepts zero household members", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = { ...validInput(), householdMembers: [] };
+    const result = await caller.submission.submit(input);
+
+    expect(result.success).toBe(true);
+    expect(result.referenceNumber).toBeDefined();
+  });
+
+  it("accepts household members with relationship field", async () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
     const input = {
       ...validInput(),
       householdMembers: [
-        { name: "John Doe", dateOfBirth: "03/10/2015", medicaidId: "CD67890E" },
+        { name: "John Doe", dateOfBirth: "03/10/2015", medicaidId: "CD67890E", relationship: "Child" },
+        { name: "Bob Doe", dateOfBirth: "05/20/1988", medicaidId: "EF12345G", relationship: "Husband" },
       ],
     };
+    const result = await caller.submission.submit(input);
 
-    await caller.submission.submit(input);
-
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("## Additional Household Members");
-    expect(body.markdown_description).toContain("**Name:** John Doe");
-    expect(body.markdown_description).toContain("**Medicaid ID:** CD67890E");
-  });
-
-  it("includes meal preferences in the description", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const input = {
-      ...validInput(),
-      mealFocus: ["breakfast", "lunch"],
-      breakfastItems: "Eggs and toast",
-      lunchItems: "Salad and soup",
-    };
-
-    await caller.submission.submit(input);
-
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("**Meal Focus:** breakfast, lunch");
-    expect(body.markdown_description).toContain("**Breakfast Items:** Eggs and toast");
-    expect(body.markdown_description).toContain("**Lunch Items:** Salad and soup");
-  });
-
-  it("includes referral source when provided", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const input = { ...validInput(), ref: "community_center" };
-
-    await caller.submission.submit(input);
-
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("## Referral");
-    expect(body.markdown_description).toContain("**Source:** community_center");
-  });
-
-  it("routes sha referral to the correct ClickUp list", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const input = { ...validInput(), ref: "sha" };
-
-    await caller.submission.submit(input);
-
-    const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain("901414869527");
-  });
-
-  it("routes submissions without referral to the default list", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    await caller.submission.submit(validInput());
-
-    const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain("901414846482");
+    expect(result.success).toBe(true);
+    const savedData = mockCreateSubmission.mock.calls[0][0];
+    expect(savedData.formData.householdMembers).toHaveLength(2);
+    expect(savedData.formData.householdMembers[0].relationship).toBe("Child");
+    expect(savedData.formData.householdMembers[1].relationship).toBe("Husband");
   });
 
   it("includes due date when Pregnant is selected", async () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    const input = {
-      ...validInput(),
-      healthCategories: ["Pregnant"],
-      dueDate: "2026-08-15",
-    };
+    const input = { ...validInput(), healthCategories: ["Pregnant"], dueDate: "2026-08-15" };
+    const result = await caller.submission.submit(input);
 
-    await caller.submission.submit(input);
-
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("**Due Date:** 2026-08-15");
+    expect(result.success).toBe(true);
+    const savedData = mockCreateSubmission.mock.calls[0][0];
+    expect(savedData.formData.dueDate).toBe("2026-08-15");
   });
 
   it("includes miscarriage date when Had a Miscarriage is selected", async () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    const input = {
-      ...validInput(),
-      healthCategories: ["Had a Miscarriage"],
-      miscarriageDate: "2026-01-10",
-    };
+    const input = { ...validInput(), healthCategories: ["Had a Miscarriage"], miscarriageDate: "2026-01-10" };
+    const result = await caller.submission.submit(input);
 
-    await caller.submission.submit(input);
-
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("**Date of Miscarriage:** 2026-01-10");
+    expect(result.success).toBe(true);
+    const savedData = mockCreateSubmission.mock.calls[0][0];
+    expect(savedData.formData.miscarriageDate).toBe("2026-01-10");
   });
 
   it("includes infant info when Postpartum is selected", async () => {
@@ -236,125 +240,16 @@ describe("submission.submit", () => {
       infantDateOfBirth: "2026-02-01",
       infantMedicaidId: "XY98765Z",
     };
+    const result = await caller.submission.submit(input);
 
-    await caller.submission.submit(input);
-
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("**Infant Name:** Baby Doe");
-    expect(body.markdown_description).toContain("**Infant Date of Birth:** 2026-02-01");
-    expect(body.markdown_description).toContain("**Infant Medicaid ID (CIN):** XY98765Z");
-  });
-
-  it("rejects invalid Medicaid ID format", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const input = { ...validInput(), medicaidId: "12345" };
-
-    await expect(caller.submission.submit(input)).rejects.toThrow();
-  });
-
-  it("rejects invalid email format", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const input = { ...validInput(), email: "not-an-email" };
-
-    await expect(caller.submission.submit(input)).rejects.toThrow();
-  });
-
-  it("rejects missing required fields", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const input = { ...validInput(), firstName: "" };
-
-    await expect(caller.submission.submit(input)).rejects.toThrow();
-  });
-
-  it("succeeds even when ClickUp API returns an error (DB-first resilience)", async () => {
-    fetchSpy.mockResolvedValueOnce(
-      new Response("Unauthorized", { status: 401 })
-    );
-
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const result = await caller.submission.submit(validInput());
     expect(result.success).toBe(true);
-    expect(result.referenceNumber).toBeTruthy();
+    const savedData = mockCreateSubmission.mock.calls[0][0];
+    expect(savedData.formData.infantName).toBe("Baby Doe");
+    expect(savedData.formData.infantDateOfBirth).toBe("2026-02-01");
+    expect(savedData.formData.infantMedicaidId).toBe("XY98765Z");
   });
 
-  it("includes appliance needs in the description", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const input = {
-      ...validInput(),
-      needsRefrigerator: "Yes",
-      needsMicrowave: "Yes",
-      needsCookingUtensils: "No",
-    };
-
-    await caller.submission.submit(input);
-
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("**Needs Refrigerator:** Yes");
-    expect(body.markdown_description).toContain("**Needs Microwave:** Yes");
-    expect(body.markdown_description).toContain("**Needs Cooking Utensils:** No");
-  });
-
-  it("does not include deli/counter or specific items fields", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    await caller.submission.submit(validInput());
-
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).not.toContain("Deli/Counter");
-    expect(body.markdown_description).not.toContain("Specific Items");
-  });
-
-  it("includes Legal & Compliance section with HIPAA consent and timestamp", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    await caller.submission.submit(validInput());
-
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("## Legal & Compliance");
-    expect(body.markdown_description).toContain("**HIPAA Consent:** Granted");
-    expect(body.markdown_description).toContain("**Consent Timestamp:**");
-    expect(body.markdown_description).toContain(
-      '**Consent Text:** I authorize FreshSelect Meals to securely process my health and household information to coordinate my SCN food benefits, and I agree to the Privacy Policy.'
-    );
-  });
-
-  it("rejects submission when HIPAA consent is false", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const input = { ...validInput(), hipaaConsent: false };
-
-    await expect(caller.submission.submit(input)).rejects.toThrow();
-  });
-
-  it("uses Mother's Personal Information heading in ClickUp description", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    await caller.submission.submit(validInput());
-
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("## Mother's Personal Information");
-  });
-
-  it("includes SCN screening questions in the description", async () => {
+  it("includes screening questions in form data", async () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
@@ -379,13 +274,149 @@ describe("submission.submit", () => {
         breastmilkRefrigeration: "No",
       },
     };
+    const result = await caller.submission.submit(input);
 
-    await caller.submission.submit(input);
+    expect(result.success).toBe(true);
+    const savedData = mockCreateSubmission.mock.calls[0][0];
+    expect(savedData.formData.screeningQuestions.livingSituation).toBe("Renting");
+    expect(savedData.formData.screeningQuestions.transportationBarrier).toBe("Yes");
+  });
 
-    const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(options.body as string);
-    expect(body.markdown_description).toContain("## SCN Screening Questions");
-    expect(body.markdown_description).toContain("**Current Living Situation:** Renting");
-    expect(body.markdown_description).toContain("**Transportation Barrier:** Yes");
+  it("stores HIPAA consent timestamp", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const before = new Date();
+    await caller.submission.submit(validInput());
+    const after = new Date();
+
+    const savedData = mockCreateSubmission.mock.calls[0][0];
+    expect(savedData.hipaaConsentAt).toBeDefined();
+    expect(savedData.hipaaConsentAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(savedData.hipaaConsentAt.getTime()).toBeLessThanOrEqual(after.getTime());
+  });
+
+  it("rejects submission when HIPAA consent is false", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = { ...validInput(), hipaaConsent: false };
+    await expect(caller.submission.submit(input)).rejects.toThrow();
+  });
+
+  it("rejects invalid Medicaid ID format", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = { ...validInput(), medicaidId: "12345" };
+    await expect(caller.submission.submit(input)).rejects.toThrow();
+  });
+
+  it("rejects invalid email format", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = { ...validInput(), email: "not-an-email" };
+    await expect(caller.submission.submit(input)).rejects.toThrow();
+  });
+
+  it("rejects missing required fields", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = { ...validInput(), firstName: "" };
+    await expect(caller.submission.submit(input)).rejects.toThrow();
+  });
+
+  it("succeeds even when email sending fails (non-blocking)", async () => {
+    mockSendApplicantConfirmation.mockRejectedValueOnce(new Error("Email service down"));
+    mockSendAdminNotification.mockRejectedValueOnce(new Error("Email service down"));
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.submission.submit(validInput());
+    expect(result.success).toBe(true);
+    expect(result.referenceNumber).toBeTruthy();
+  });
+
+  it("succeeds even when referral tracking fails (non-blocking)", async () => {
+    mockIncrementReferralUsage.mockRejectedValueOnce(new Error("DB error"));
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.submission.submit({ ...validInput(), ref: "test_ref" });
+    expect(result.success).toBe(true);
+    expect(result.referenceNumber).toBeTruthy();
+  });
+
+  it("fails when database save fails", async () => {
+    mockCreateSubmission.mockRejectedValueOnce(new Error("DB connection lost"));
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(caller.submission.submit(validInput())).rejects.toThrow("Failed to save application");
+  });
+
+  it("sets borough from city field", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.submission.submit(validInput());
+
+    const savedData = mockCreateSubmission.mock.calls[0][0];
+    expect(savedData.borough).toBe("Brooklyn");
+  });
+
+  it("includes meal preferences in form data", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = {
+      ...validInput(),
+      mealFocus: ["breakfast", "lunch"],
+      breakfastItems: "Eggs and toast",
+      lunchItems: "Salad and soup",
+    };
+    const result = await caller.submission.submit(input);
+
+    expect(result.success).toBe(true);
+    const savedData = mockCreateSubmission.mock.calls[0][0];
+    expect(savedData.formData.mealFocus).toEqual(["breakfast", "lunch"]);
+    expect(savedData.formData.breakfastItems).toBe("Eggs and toast");
+    expect(savedData.formData.lunchItems).toBe("Salad and soup");
+  });
+
+  it("includes appliance needs in form data", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = {
+      ...validInput(),
+      needsRefrigerator: "Yes",
+      needsMicrowave: "Yes",
+      needsCookingUtensils: "No",
+    };
+    const result = await caller.submission.submit(input);
+
+    expect(result.success).toBe(true);
+    const savedData = mockCreateSubmission.mock.calls[0][0];
+    expect(savedData.formData.needsRefrigerator).toBe("Yes");
+    expect(savedData.formData.needsMicrowave).toBe("Yes");
+    expect(savedData.formData.needsCookingUtensils).toBe("No");
+  });
+
+  it("accepts optional hasWic and hasSnap fields with defaults", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const input = { ...validInput() };
+    delete (input as any).hasWic;
+    delete (input as any).hasSnap;
+
+    const result = await caller.submission.submit(input);
+    expect(result.success).toBe(true);
   });
 });
