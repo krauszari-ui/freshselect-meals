@@ -195,3 +195,13 @@
 - [x] Remove word "Supermarket" from Foodoo, Rosemary, Chestnut names
 - [x] Remove Bingo Wholesale from vendor options
 - [x] Full review and test of all buttons and flows (75 tests passing)
+
+## Production Launch (April 2026)
+- [x] Push database schema to PlanetScale via drizzle-kit push (7 tables created)
+- [x] Create seed-production script (scripts/seed-production.mjs)
+- [x] Run seed script against production database (2 users + 1 referral link)
+- [x] Verify Admin and Referrer dashboard UI is professional and intact
+- [x] Search and replace all manus.computer / manus.config references (none found)
+- [x] Verify referral link logic uses window.location.origin
+- [x] Verify vercel.json routing config (/api/* -> server, all else -> SPA)
+- [x] Final sync to GitHub for Vercel deployment
