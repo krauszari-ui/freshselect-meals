@@ -38,7 +38,7 @@ const staffProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx });
 });
 
-const householdMemberSchema = z.object({ name: z.string(), dateOfBirth: z.string(), medicaidId: z.string() });
+const householdMemberSchema = z.object({ name: z.string(), dateOfBirth: z.string(), medicaidId: z.string(), relationship: z.string().optional().default("") });
 
 const screeningQuestionsSchema = z.object({
   livingSituation: z.string().optional(), utilityShutoff: z.string().optional(),
@@ -79,6 +79,92 @@ const submissionInputSchema = z.object({
   uploadedDocuments: z.record(z.string(), z.string()).optional(),
 });
 
+<<<<<<< Updated upstream
+=======
+function buildClickUpDescription(input: z.infer<typeof submissionInputSchema>): string {
+  const lines: string[] = [];
+  lines.push("## Mother's Personal Information");
+  lines.push(`**Name:** ${input.firstName} ${input.lastName}`);
+  lines.push(`**Date of Birth:** ${input.dateOfBirth}`);
+  lines.push(`**Medicaid ID:** ${input.medicaidId}`);
+  lines.push("", "## Contact Information");
+  lines.push(`**Cell Phone:** ${input.cellPhone}`);
+  if (input.homePhone) lines.push(`**Home Phone:** ${input.homePhone}`);
+  lines.push(`**Email:** ${input.email}`);
+  lines.push("", "## Address");
+  lines.push(`**Street:** ${input.streetAddress}`);
+  if (input.aptUnit) lines.push(`**Apt/Unit:** ${input.aptUnit}`);
+  lines.push(`**City:** ${input.city}`, `**State:** ${input.state}`, `**Zipcode:** ${input.zipcode}`);
+  lines.push("", "## Supermarket", `**Selected:** ${input.supermarket}`, "");
+  if (input.screeningQuestions) {
+    const sq = input.screeningQuestions;
+    lines.push("## SCN Screening Questions");
+    if (sq.livingSituation) lines.push(`1. **Current Living Situation:** ${sq.livingSituation}`);
+    if (sq.utilityShutoff) lines.push(`2. **Utility Shutoff Threat:** ${sq.utilityShutoff}`);
+    if (sq.receivesSnap) lines.push(`3. **Receives SNAP:** ${sq.receivesSnap}`);
+    if (sq.receivesWic) lines.push(`4. **Receives WIC:** ${sq.receivesWic}`);
+    if (sq.receivesTanf) lines.push(`5. **Receives TANF:** ${sq.receivesTanf}`);
+    if (sq.enrolledHealthHome) lines.push(`6. **Enrolled in Health Home:** ${sq.enrolledHealthHome}`);
+    if (sq.householdMembersCount) lines.push(`7. **Household Members:** ${sq.householdMembersCount}`);
+    if (sq.householdMembersWithMedicaid) lines.push(`8. **Members with Medicaid:** ${sq.householdMembersWithMedicaid}`);
+    if (sq.needsWorkAssistance) lines.push(`9. **Needs Work Assistance:** ${sq.needsWorkAssistance}`);
+    if (sq.wantsSchoolHelp) lines.push(`10. **Wants School/Training Help:** ${sq.wantsSchoolHelp}`);
+    if (sq.transportationBarrier) lines.push(`11. **Transportation Barrier:** ${sq.transportationBarrier}`);
+    if (sq.hasChronicIllness) lines.push(`12. **Has Chronic Illness:** ${sq.hasChronicIllness}`);
+    if (sq.otherHealthIssues) lines.push(`13. **Other Health Issues:** ${sq.otherHealthIssues}`);
+    if (sq.medicationsRequireRefrigeration) lines.push(`14. **Medications Require Refrigeration:** ${sq.medicationsRequireRefrigeration}`);
+    if (sq.pregnantOrPostpartum) lines.push(`15. **Pregnant or Postpartum:** ${sq.pregnantOrPostpartum}`);
+    if (sq.breastmilkRefrigeration) lines.push(`16. **Breastmilk Refrigeration:** ${sq.breastmilkRefrigeration}`);
+    lines.push("");
+  }
+  if (input.healthCategories.length > 0) {
+    lines.push("## Health Categories");
+    input.healthCategories.forEach((c) => lines.push(`- ${c}`));
+    if (input.healthCategories.includes("Pregnant") && input.dueDate) lines.push(`**Due Date:** ${input.dueDate}`);
+    if (input.healthCategories.includes("Had a Miscarriage") && input.miscarriageDate) lines.push(`**Date of Miscarriage:** ${input.miscarriageDate}`);
+    if (input.healthCategories.includes("Postpartum (Within the last 12 months)")) {
+      if (input.infantName) lines.push(`**Infant Name:** ${input.infantName}`);
+      if (input.infantDateOfBirth) lines.push(`**Infant Date of Birth:** ${input.infantDateOfBirth}`);
+      if (input.infantMedicaidId) lines.push(`**Infant Medicaid ID (CIN):** ${input.infantMedicaidId}`);
+    }
+    lines.push("");
+  }
+  lines.push("## Benefits & Employment");
+  lines.push(`**Employed:** ${input.employed}`, `**Spouse Employed:** ${input.spouseEmployed}`);
+  lines.push(`**WIC:** ${input.hasWic}`, `**SNAP:** ${input.hasSnap}`, `**New Applicant:** ${input.newApplicant}`, "");
+  if (input.foodAllergies || input.dietaryRestrictions) {
+    lines.push("## Food Allergies / Dietary Restrictions");
+    if (input.foodAllergies) { lines.push(`**Food Allergies:** ${input.foodAllergies}`); if (input.foodAllergiesDetails) lines.push(`**Details:** ${input.foodAllergiesDetails}`); }
+    if (input.dietaryRestrictions) lines.push(`**Dietary Restrictions:** ${input.dietaryRestrictions}`);
+    lines.push("");
+  }
+  if (input.householdMembers.length > 0) {
+    lines.push("## Additional Household Members");
+    input.householdMembers.forEach((m, i) => { lines.push(`### Member ${i + 1}`, `**Relationship:** ${m.relationship || "Not specified"}`, `**Name:** ${m.name}`, `**DOB:** ${m.dateOfBirth}`, `**Medicaid ID:** ${m.medicaidId}`); });
+    lines.push("");
+  }
+  lines.push("## Meal Preferences");
+  if (input.mealFocus.length > 0) lines.push(`**Meal Focus:** ${input.mealFocus.join(", ")}`);
+  if (input.breakfastItems) lines.push(`**Breakfast Items:** ${input.breakfastItems}`);
+  if (input.lunchItems) lines.push(`**Lunch Items:** ${input.lunchItems}`);
+  if (input.dinnerItems) lines.push(`**Dinner Items:** ${input.dinnerItems}`);
+  if (input.snackItems) lines.push(`**Snack Items:** ${input.snackItems}`);
+  lines.push("", "## Household Appliances / Cooking Needs");
+  lines.push(`**Needs Refrigerator:** ${input.needsRefrigerator}`, `**Needs Microwave:** ${input.needsMicrowave}`, `**Needs Cooking Utensils:** ${input.needsCookingUtensils}`);
+  if (input.uploadedDocuments && Object.keys(input.uploadedDocuments).length > 0) {
+    lines.push("", "## Uploaded Documents");
+    for (const [key, url] of Object.entries(input.uploadedDocuments)) {
+      const label = key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
+      lines.push(`**${label}:** ${url}`);
+    }
+  }
+  if (input.ref) lines.push("", "## Referral", `**Source:** ${input.ref}`);
+  lines.push("", "## Legal & Compliance", `**HIPAA Consent:** Granted`, `**Consent Timestamp:** ${new Date().toISOString()}`);
+  lines.push(`**Consent Text:** I authorize FreshSelect Meals to securely process my health and household information to coordinate my SCN food benefits, and I agree to the Privacy Policy.`);
+  return lines.join("\n");
+}
+
+>>>>>>> Stashed changes
 export const appRouter = router({
   system: systemRouter,
   auth: router({
