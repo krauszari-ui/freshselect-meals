@@ -44,6 +44,7 @@ interface HouseholdMember {
   name: string;
   dateOfBirth: string;
   medicaidId: string;
+  relationship: string;
 }
 
 interface ScreeningQuestions {
@@ -266,7 +267,7 @@ function validateStep3(form: FormData): FormErrors {
   const e: FormErrors = {};
   // Household members required
   const memberCount = parseInt(form.additionalMembersCount) || 0;
-  if (memberCount === 0) e.householdMembers = "At least one household member is required";
+  // 0 members (None) is now acceptable
   if (form.mealFocus.length === 0) e.mealFocus = "Select at least one meal type";
   if (!form.needsRefrigerator) e.needsRefrigerator = "Required";
   if (!form.needsMicrowave) e.needsMicrowave = "Required";
@@ -679,7 +680,7 @@ export default function Home() {
     const count = parseInt(form.additionalMembersCount) || 0;
     setForm((prev) => {
       const current = [...prev.householdMembers];
-      while (current.length < count) current.push({ name: "", dateOfBirth: "", medicaidId: "" });
+      while (current.length < count) current.push({ name: "", dateOfBirth: "", medicaidId: "", relationship: "" });
       return { ...prev, householdMembers: current.slice(0, count) };
     });
   }, [form.additionalMembersCount]);
@@ -1369,6 +1370,29 @@ export default function Home() {
                     {form.householdMembers.map((member, idx) => (
                       <div key={idx} className="bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-3">
                         <h4 className="font-semibold text-stone-700">Member {idx + 1}</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+                          <div>
+                            <Label className="text-stone-600 text-xs">Relationship *</Label>
+                            <Select
+                              value={member.relationship}
+                              onValueChange={(v) => {
+                                const members = [...form.householdMembers];
+                                members[idx] = { ...members[idx], relationship: v };
+                                update("householdMembers", members);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select relationship..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Child">Child</SelectItem>
+                                <SelectItem value="Husband">Husband</SelectItem>
+                                <SelectItem value="Mother">Mother</SelectItem>
+                                <SelectItem value="Other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <Label className="text-stone-600 text-xs">Full Name</Label>
