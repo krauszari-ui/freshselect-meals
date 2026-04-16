@@ -95,6 +95,7 @@ interface FormData {
   foodAllergiesDetails: string;
   dietaryRestrictions: string;
   newApplicant: string;
+  transferAgencyName: string;
   additionalMembersCount: string;
   householdMembers: HouseholdMember[];
   mealFocus: string[];
@@ -167,6 +168,7 @@ const INITIAL_FORM: FormData = {
   foodAllergiesDetails: "",
   dietaryRestrictions: "",
   newApplicant: "",
+  transferAgencyName: "",
   additionalMembersCount: "0",
   householdMembers: [],
   mealFocus: [],
@@ -183,12 +185,11 @@ const INITIAL_FORM: FormData = {
   screeningQuestions: { ...INITIAL_SCREENING },
 };
 
-const SUPERMARKETS = [
-  { name: "Foodoo Kosher Supermarket", address: "249 Wallabout St, Brooklyn, NY 11206", icon: "🛒", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/foodoo-logo_4f53a2c6.png" },
-  { name: "Rosemary Kosher Supermarket", address: "392 Flushing Ave, Brooklyn, NY 11205", icon: "🌿", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/rosemary-logo_a286acb8.webp" },
-  { name: "Chestnut Supermarket", address: "700 Myrtle Ave, Brooklyn, NY 11205", icon: "🌰", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/chestnut-store_b43a49f5.jpg" },
+const VENDORS = [
+  { name: "Foodoo Kosher", address: "249 Wallabout St, Brooklyn, NY 11206", icon: "🛒", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/foodoo-logo_4f53a2c6.png" },
+  { name: "Rosemary Kosher", address: "392 Flushing Ave, Brooklyn, NY 11205", icon: "🌿", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/rosemary-logo_a286acb8.webp" },
+  { name: "Chestnut", address: "700 Myrtle Ave, Brooklyn, NY 11205", icon: "🌰", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/chestnut-store_b43a49f5.jpg" },
   { name: "Central Market", address: "50 Division Ave, Brooklyn, NY 11249", icon: "🏪", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/central-market-store_1b7c6b82.jpg" },
-  { name: "Bingo Wholesale", address: "4802 New Utrecht Ave, Brooklyn, NY 11219", icon: "🎪", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/bingo-logo_bac570c5.jpg" },
 ];
 
 const HEALTH_CATEGORIES = [
@@ -207,7 +208,7 @@ const STEP_LABELS = [
   "Personal Info",
   "Screening & Health",
   "Meals & Preferences",
-  "Grocery Selection",
+  "Vendor Selection",
 ];
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
@@ -236,25 +237,22 @@ function validateStep1(form: FormData): FormErrors {
 function validateStep2(form: FormData): FormErrors {
   const e: FormErrors = {};
   const sq = form.screeningQuestions;
+  // Screening questions (kept: 1-4 and 5-8 renumbered)
   if (!sq.livingSituation) e["sq.livingSituation"] = "Required";
   if (!sq.utilityShutoff) e["sq.utilityShutoff"] = "Required";
   if (!sq.receivesSnap) e["sq.receivesSnap"] = "Required";
   if (!sq.receivesWic) e["sq.receivesWic"] = "Required";
-  if (!sq.receivesTanf) e["sq.receivesTanf"] = "Required";
-  if (!sq.enrolledHealthHome) e["sq.enrolledHealthHome"] = "Required";
-  if (!sq.householdMembersCount) e["sq.householdMembersCount"] = "Required";
-  if (!sq.householdMembersWithMedicaid) e["sq.householdMembersWithMedicaid"] = "Required";
-  if (!sq.needsWorkAssistance) e["sq.needsWorkAssistance"] = "Required";
-  if (!sq.wantsSchoolHelp) e["sq.wantsSchoolHelp"] = "Required";
-  if (!sq.transportationBarrier) e["sq.transportationBarrier"] = "Required";
   if (!sq.hasChronicIllness) e["sq.hasChronicIllness"] = "Required";
   if (!sq.otherHealthIssues) e["sq.otherHealthIssues"] = "Required";
   if (!sq.medicationsRequireRefrigeration) e["sq.medicationsRequireRefrigeration"] = "Required";
-  if (!sq.pregnantOrPostpartum) e["sq.pregnantOrPostpartum"] = "Required";
   if (!sq.breastmilkRefrigeration) e["sq.breastmilkRefrigeration"] = "Required";
+  // Health categories required
+  if (form.healthCategories.length === 0) e.healthCategories = "Please select at least one health category";
   if (!form.employed) e.employed = "Required";
   if (!form.spouseEmployed) e.spouseEmployed = "Required";
   if (!form.newApplicant) e.newApplicant = "Required";
+  // Transfer agency name required when transferring
+  if (form.newApplicant === "Transfer" && !form.transferAgencyName.trim()) e.transferAgencyName = "Agency name is required for transfers";
   // Conditional health fields
   if (form.healthCategories.includes("Pregnant") && !form.dueDate)
     e.dueDate = "Due date is required";
@@ -285,7 +283,7 @@ function validateStep3(form: FormData): FormErrors {
 
 function validateStep4(form: FormData): FormErrors {
   const e: FormErrors = {};
-  if (!form.supermarket) e.supermarket = "Please select a supermarket";
+  if (!form.supermarket) e.supermarket = "Please select a vendor";
   return e;
 }
 
@@ -848,7 +846,7 @@ export default function Home() {
                   <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
                     <Users className="w-7 h-7 text-green-700" />
                   </div>
-                  <h2 className="text-2xl font-bold text-green-800 font-serif">Mother's Personal Information</h2>
+                  <h2 className="text-2xl font-bold text-green-800 font-serif">Primary Member Information</h2>
                   <p className="text-stone-500 text-sm mt-1">Please provide your personal details and contact information.</p>
                 </div>
 
@@ -1015,33 +1013,7 @@ export default function Home() {
                   </CardContent>
                 </Card>
 
-                {/* Document Uploads */}
-                <Card className="border-stone-200">
-                  <CardContent className="p-6 space-y-4">
-                    <h3 className="font-bold text-stone-800 flex items-center gap-2">
-                      <Upload className="w-4 h-4 text-green-600" /> Required Documents
-                    </h3>
-                    <p className="text-sm text-stone-500">Please upload photos or scans of the following documents.</p>
 
-                    <FileUploadField
-                      label="Mother's Medicaid Card *"
-                      category="motherMedicaidCard"
-                      uploads={uploads}
-                      setUploads={setUploads}
-                      uploading={uploading}
-                      setUploading={setUploading}
-                    />
-
-                    <FileUploadField
-                      label="Marriage License"
-                      category="marriageLicense"
-                      uploads={uploads}
-                      setUploads={setUploads}
-                      uploading={uploading}
-                      setUploading={setUploading}
-                    />
-                  </CardContent>
-                </Card>
               </div>
             )}
 
@@ -1087,13 +1059,11 @@ export default function Home() {
                       {errors["sq.livingSituation"] && <p className="text-red-500 text-xs mt-1">{errors["sq.livingSituation"]}</p>}
                     </div>
 
-                    {/* Q2-Q6 Yes/No */}
+                    {/* Q2-Q4 Yes/No */}
                     {[
                       { key: "utilityShutoff" as const, label: "2. Utility shutoff threat (past 12 months) *" },
                       { key: "receivesSnap" as const, label: "3. Receives SNAP (Food Stamps) *" },
                       { key: "receivesWic" as const, label: "4. Receives WIC *" },
-                      { key: "receivesTanf" as const, label: "5. Receives TANF *" },
-                      { key: "enrolledHealthHome" as const, label: "6. Enrolled in Health Home *" },
                     ].map(({ key, label }) => (
                       <div key={key}>
                         <Label className="text-stone-700">{label}</Label>
@@ -1105,44 +1075,12 @@ export default function Home() {
                       </div>
                     ))}
 
-                    {/* Q7-Q8 Number inputs */}
-                    <div>
-                      <Label className="text-stone-700">7. Household members *</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        max="20"
-                        value={form.screeningQuestions.householdMembersCount}
-                        onChange={(e) => updateScreening("householdMembersCount", e.target.value)}
-                        className={errors["sq.householdMembersCount"] ? "border-red-400" : ""}
-                        placeholder="Enter number"
-                      />
-                      {errors["sq.householdMembersCount"] && <p className="text-red-500 text-xs mt-1">{errors["sq.householdMembersCount"]}</p>}
-                    </div>
-                    <div>
-                      <Label className="text-stone-700">8. Household members with Medicaid *</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        max="20"
-                        value={form.screeningQuestions.householdMembersWithMedicaid}
-                        onChange={(e) => updateScreening("householdMembersWithMedicaid", e.target.value)}
-                        className={errors["sq.householdMembersWithMedicaid"] ? "border-red-400" : ""}
-                        placeholder="Enter number"
-                      />
-                      {errors["sq.householdMembersWithMedicaid"] && <p className="text-red-500 text-xs mt-1">{errors["sq.householdMembersWithMedicaid"]}</p>}
-                    </div>
-
-                    {/* Q9-Q16 Yes/No */}
+                    {/* Q5-Q8 Yes/No */}
                     {[
-                      { key: "needsWorkAssistance" as const, label: "9. Needs work assistance *" },
-                      { key: "wantsSchoolHelp" as const, label: "10. Wants school or training help *" },
-                      { key: "transportationBarrier" as const, label: "11. Transportation barrier (past 12 months) *" },
-                      { key: "hasChronicIllness" as const, label: "12. Has chronic illness *" },
-                      { key: "otherHealthIssues" as const, label: "13. Other known health issues *" },
-                      { key: "medicationsRequireRefrigeration" as const, label: "14. Medications require refrigeration *" },
-                      { key: "pregnantOrPostpartum" as const, label: "15. Pregnant or postpartum *" },
-                      { key: "breastmilkRefrigeration" as const, label: "16. Breastmilk refrigeration needed *" },
+                      { key: "hasChronicIllness" as const, label: "5. Has chronic illness *" },
+                      { key: "otherHealthIssues" as const, label: "6. Other known health issues *" },
+                      { key: "medicationsRequireRefrigeration" as const, label: "7. Medications require refrigeration *" },
+                      { key: "breastmilkRefrigeration" as const, label: "8. Breastmilk refrigeration needed *" },
                     ].map(({ key, label }) => (
                       <div key={key}>
                         <Label className="text-stone-700">{label}</Label>
@@ -1162,7 +1100,8 @@ export default function Home() {
                     <h3 className="font-bold text-stone-800 flex items-center gap-2">
                       <Heart className="w-4 h-4 text-green-600" /> Health Categories
                     </h3>
-                    <p className="text-sm text-stone-500">Select all that apply to you.</p>
+                    <p className="text-sm text-stone-500">Select at least one that applies to you. *</p>
+                    {errors.healthCategories && <p className="text-red-500 text-xs">{errors.healthCategories}</p>}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {HEALTH_CATEGORIES.map((cat) => (
                         <label
@@ -1313,6 +1252,18 @@ export default function Home() {
                       </Select>
                       {errors.newApplicant && <p className="text-red-500 text-xs mt-1">{errors.newApplicant}</p>}
                     </div>
+                    {form.newApplicant === "Transfer" && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-3">
+                        <Label className="text-stone-700">Agency Name *</Label>
+                        <Input
+                          value={form.transferAgencyName}
+                          onChange={(e) => update("transferAgencyName", e.target.value)}
+                          className={errors.transferAgencyName ? "border-red-400 mt-2" : "mt-2"}
+                          placeholder="Enter the name of the agency you are transferring from"
+                        />
+                        {errors.transferAgencyName && <p className="text-red-500 text-xs mt-1">{errors.transferAgencyName}</p>}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -1715,8 +1666,8 @@ export default function Home() {
                   <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
                     <Store className="w-7 h-7 text-green-700" />
                   </div>
-                  <h2 className="text-2xl font-bold text-green-800 font-serif">Choose Your Supermarket</h2>
-                  <p className="text-stone-500 text-sm mt-1">Select your preferred grocery store for pickup or delivery.</p>
+                  <h2 className="text-2xl font-bold text-green-800 font-serif">Choose Your Vendor</h2>
+                  <p className="text-stone-500 text-sm mt-1">Select your preferred vendor for pickup or delivery.</p>
                 </div>
 
                 {errors.supermarket && (
@@ -1727,7 +1678,7 @@ export default function Home() {
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {SUPERMARKETS.map((store) => (
+                  {VENDORS.map((store) => (
                     <Card
                       key={store.name}
                       className={`cursor-pointer transition-all hover:shadow-md ${

@@ -63,7 +63,7 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
   </div>
 
   <div class="section">
-    <h3>Mother's Personal Information</h3>
+    <h3>Primary Member Information</h3>
     <div class="field"><span class="field-label">Name</span><span class="field-value">${data.firstName} ${data.lastName}</span></div>
     <div class="field"><span class="field-label">Date of Birth</span><span class="field-value">${fd.dateOfBirth || "N/A"}</span></div>
     <div class="field"><span class="field-label">Medicaid ID</span><span class="field-value">${data.medicaidId}</span></div>
@@ -77,8 +77,8 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
   </div>
 
   <div class="section">
-    <h3>Supermarket</h3>
-    <div class="field"><span class="field-label">Selected Store</span><span class="field-value">${data.supermarket}</span></div>
+    <h3>Vendor</h3>
+    <div class="field"><span class="field-label">Selected Vendor</span><span class="field-value">${data.supermarket}</span></div>
   </div>`;
 
   if (screeningQuestions && Object.keys(screeningQuestions).length > 0) {
@@ -90,13 +90,7 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
       utilityShutoff: "Utility Shutoff Threat",
       receivesSnap: "Receives SNAP",
       receivesWic: "Receives WIC",
-      receivesTanf: "Receives TANF",
-      enrolledHealthHome: "Enrolled in Health Home",
-      householdMembers: "Household Members",
-      householdMembersWithMedicaid: "Members with Medicaid",
-      needsWorkAssistance: "Needs Work Assistance",
-      wantsSchoolHelp: "Wants School/Training Help",
-      transportationBarrier: "Transportation Barrier",
+
       hasChronicIllness: "Has Chronic Illness",
       otherHealthIssues: "Other Health Issues",
       medicationsRequireRefrigeration: "Medications Require Refrigeration",

@@ -61,7 +61,7 @@ vi.mock("./db", () => ({
       provider_attestation_required: 0,
       flagged: 0,
     },
-    supermarkets: { Foodoo: 3, "Rosemary Kosher Supermarket": 2 },
+    supermarkets: { "Foodoo Kosher": 3, "Rosemary Kosher": 2 },
   }),
   updateSubmissionStatus: vi.fn().mockResolvedValue(undefined),
   updateSubmissionStage: vi.fn().mockResolvedValue(undefined),

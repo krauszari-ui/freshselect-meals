@@ -184,3 +184,14 @@
 - [x] Signature stored in formData JSON (no separate column needed)
 - [x] Update backend Zod schema to validate signature fields
 - [x] Update tests for new signature fields (75 passing)
+
+## UI/Form Changes (April 2026)
+- [x] Rename "Mother's Personal Information" to "Primary Member Information"
+- [x] Remove Required Documents section
+- [x] Remove screening questions 5, 6, 7, 8, 9, 10, 11, 15
+- [x] Make Health Categories required field
+- [x] Add agency name field when "Transfer" is selected for new applicant
+- [x] Rename "Choose Your Supermarket" to "Choose Your Vendor"
+- [x] Remove word "Supermarket" from Foodoo, Rosemary, Chestnut names
+- [x] Remove Bingo Wholesale from vendor options
+- [x] Full review and test of all buttons and flows (75 tests passing)

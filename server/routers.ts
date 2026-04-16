@@ -60,7 +60,7 @@ const submissionInputSchema = z.object({
   email: z.string().email(),
   streetAddress: z.string().min(1), aptUnit: z.string().optional(),
   city: z.string().min(1), state: z.string().min(1), zipcode: z.string().min(1),
-  healthCategories: z.array(z.string()),
+  healthCategories: z.array(z.string()).min(1, "At least one health category is required"),
   dueDate: z.string().optional(), miscarriageDate: z.string().optional(),
   infantName: z.string().optional(), infantDateOfBirth: z.string().optional(), infantMedicaidId: z.string().optional(),
   employed: z.string().min(1), spouseEmployed: z.string().min(1),
@@ -68,6 +68,7 @@ const submissionInputSchema = z.object({
   foodAllergies: z.string().optional(), foodAllergiesDetails: z.string().optional(),
   dietaryRestrictions: z.string().optional(),
   newApplicant: z.string().min(1),
+  transferAgencyName: z.string().optional(),
   householdMembers: z.array(householdMemberSchema),
   mealFocus: z.array(z.string()),
   breakfastItems: z.string().optional(), lunchItems: z.string().optional(),
@@ -214,7 +215,7 @@ export const appRouter = router({
     exportCsv: staffProcedure.input(z.object({ status: z.string().optional(), supermarket: z.string().optional(), stage: z.string().optional() }))
       .mutation(async ({ input }) => {
         const rows = await getAllSubmissions(input);
-        const headers = ["Reference #", "First Name", "Last Name", "Email", "Phone", "Medicaid ID", "Supermarket", "Stage", "Status", "Referral Source", "Submitted"];
+        const headers = ["Reference #", "First Name", "Last Name", "Email", "Phone", "Medicaid ID", "Vendor", "Stage", "Status", "Referral Source", "Submitted"];
         const csvRows = rows.map((r) => [r.referenceNumber, r.firstName, r.lastName, r.email, r.cellPhone, r.medicaidId, r.supermarket, r.stage, r.status, r.referralSource || "", r.createdAt.toISOString()]);
         const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
         const csv = [headers.map(escape).join(","), ...csvRows.map((row) => row.map(escape).join(","))].join("\n");
