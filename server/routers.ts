@@ -52,6 +52,7 @@ const screeningQuestionsSchema = z.object({
 });
 
 const submissionInputSchema = z.object({
+  neighborhood: z.string().optional().default(""),
   supermarket: z.string().min(1),
   firstName: z.string().min(1), lastName: z.string().min(1),
   dateOfBirth: z.string().min(1),
@@ -212,10 +213,14 @@ export const appRouter = router({
     })).mutation(async ({ input }) => { await updateSubmissionAssignment(input.id, input.assignedTo, input.intakeRep); return { success: true }; }),
 
     // CSV Export
-    exportCsv: staffProcedure.input(z.object({ status: z.string().optional(), supermarket: z.string().optional(), stage: z.string().optional() }))
+    exportCsv: staffProcedure.input(z.object({
+      status: z.string().optional(), supermarket: z.string().optional(), stage: z.string().optional(),
+      neighborhood: z.string().optional(), language: z.string().optional(), borough: z.string().optional(),
+      search: z.string().optional(),
+    }))
       .mutation(async ({ input }) => {
         const rows = await getAllSubmissions(input);
-        const headers = ["Reference #", "First Name", "Last Name", "Email", "Phone", "Medicaid ID", "DOB", "Address", "City", "State", "Zip", "Language", "Vendor", "Stage", "Status", "Household Members", "Health Categories", "Referral Source", "Guardian Name", "Submitted"];
+        const headers = ["Reference #", "First Name", "Last Name", "Email", "Phone", "Medicaid ID", "DOB", "Address", "City", "State", "Zip", "Language", "Neighborhood", "Vendor", "Stage", "Status", "Household Members", "Health Categories", "Referral Source", "Guardian Name", "Submitted"];
         const csvRows = rows.map((r) => {
           const fd = (r.formData as any) || {};
           const householdNames = (fd.householdMembers || []).map((m: any) => `${m.firstName || ""} ${m.lastName || ""} (${m.relationship || ""})`.trim()).join("; ");
@@ -223,7 +228,7 @@ export const appRouter = router({
           return [
             r.referenceNumber, r.firstName, r.lastName, r.email, r.cellPhone, r.medicaidId,
             fd.dateOfBirth || "", fd.address || "", fd.city || "", fd.state || "", fd.zipCode || "",
-            fd.language || r.language || "English", r.supermarket, r.stage, r.status,
+            fd.language || r.language || "English", fd.neighborhood || "", r.supermarket, r.stage, r.status,
             householdNames, healthCats, r.referralSource || "", fd.guardianName || "",
             r.createdAt.toISOString()
           ];

@@ -136,15 +136,29 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   return { rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
 }
 
-export async function getAllSubmissions(opts: { status?: string; supermarket?: string; stage?: string } = {}) {
+export async function getAllSubmissions(opts: { status?: string; supermarket?: string; stage?: string; neighborhood?: string; language?: string; borough?: string; search?: string } = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const conditions = [];
   if (opts.status && opts.status !== "all") conditions.push(eq(submissions.status, opts.status as Submission["status"]));
   if (opts.supermarket && opts.supermarket !== "all") conditions.push(eq(submissions.supermarket, opts.supermarket));
   if (opts.stage && opts.stage !== "all") conditions.push(eq(submissions.stage, opts.stage as Submission["stage"]));
+  if (opts.language && opts.language !== "all") conditions.push(eq(submissions.language, opts.language));
+  if (opts.borough && opts.borough !== "all") conditions.push(eq(submissions.borough, opts.borough));
+  if (opts.search) {
+    const term = `%${opts.search}%`;
+    conditions.push(or(like(submissions.firstName, term), like(submissions.lastName, term), like(submissions.medicaidId, term)) as any);
+  }
   const where = conditions.length > 0 ? and(...conditions) : undefined;
-  return db.select().from(submissions).where(where).orderBy(desc(submissions.createdAt));
+  const rows = await db.select().from(submissions).where(where).orderBy(desc(submissions.createdAt));
+  // Filter by neighborhood client-side since it's stored in formData JSON
+  if (opts.neighborhood && opts.neighborhood !== "all") {
+    return rows.filter((r) => {
+      const fd = (r.formData as any) || {};
+      return fd.neighborhood === opts.neighborhood;
+    });
+  }
+  return rows;
 }
 
 export async function updateSubmissionStatus(id: number, status: Submission["status"], adminNotes?: string): Promise<void> {

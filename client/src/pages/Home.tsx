@@ -68,6 +68,7 @@ interface ScreeningQuestions {
 }
 
 interface FormData {
+  neighborhood: string;
   supermarket: string;
   firstName: string;
   lastName: string;
@@ -141,6 +142,7 @@ const INITIAL_SCREENING: ScreeningQuestions = {
 };
 
 const INITIAL_FORM: FormData = {
+  neighborhood: "",
   supermarket: "",
   firstName: "",
   lastName: "",
@@ -185,12 +187,48 @@ const INITIAL_FORM: FormData = {
   screeningQuestions: { ...INITIAL_SCREENING },
 };
 
-const VENDORS = [
-  { name: "Foodoo Kosher", address: "249 Wallabout St, Brooklyn, NY 11206", icon: "🛒", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/foodoo-logo_4f53a2c6.png" },
-  { name: "Rosemary Kosher", address: "392 Flushing Ave, Brooklyn, NY 11205", icon: "🌿", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/rosemary-logo_a286acb8.webp" },
-  { name: "Chestnut", address: "700 Myrtle Ave, Brooklyn, NY 11205", icon: "🌰", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/chestnut-store_b43a49f5.jpg" },
-  { name: "Central Market", address: "50 Division Ave, Brooklyn, NY 11249", icon: "🏪", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/central-market-store_1b7c6b82.jpg" },
+const NEIGHBORHOODS = [
+  {
+    name: "Williamsburg",
+    vendors: [
+      { name: "Foodoo Kosher", address: "249 Wallabout St, Brooklyn, NY 11206", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/foodoo-logo_4f53a2c6.png" },
+      { name: "Rosemary Kosher", address: "392 Flushing Ave, Brooklyn, NY 11205", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/rosemary-logo_a286acb8.webp" },
+      { name: "Chestnut", address: "700 Myrtle Ave, Brooklyn, NY 11205", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/chestnut-store_b43a49f5.jpg" },
+      { name: "Central Market", address: "50 Division Ave, Brooklyn, NY 11249", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/central-market-store_1b7c6b82.jpg" },
+    ],
+  },
+  {
+    name: "Borough Park",
+    vendors: [
+      { name: "KRM", address: "1325 39th St, Brooklyn, NY 11218", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/krm-logo_edb72947.webp" },
+      { name: "Certo Market", address: "1274 39th St, Brooklyn, NY 11218", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/certo-logo_061b67cf.jpg" },
+      { name: "Breadberry", address: "1689 60th St, Brooklyn, NY 11204", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/breadberry-logo_fb38d917.jpg" },
+    ],
+  },
+  {
+    name: "Flatbush",
+    vendors: [
+      { name: "Pomegranate", address: "1507 Coney Island Ave, Brooklyn, NY 11230", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/pomegranate-logo_9c9b8a9e.png" },
+      { name: "Moisha's Discount", address: "325 Avenue M, Brooklyn, NY 11230", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/moishas-logo_bc71f759.png" },
+    ],
+  },
+  {
+    name: "Monsey",
+    vendors: [
+      { name: "Evergreen", address: "59 NY-59, Monsey, NY 10952", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/evergreen-logo_7c3a66e5.png" },
+      { name: "Hatzlacha", address: "80 West St, Spring Valley, NY 10977", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/hatzlacha-logo_7eaaa1a4.jpg" },
+    ],
+  },
+  {
+    name: "Monroe",
+    vendors: [
+      { name: "Refresh", address: "52 Bakertown Rd, Monroe, NY 10950", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/refresh-logo_d7e96b49.png" },
+      { name: "Landau's", address: "51 Forest Rd, Monroe, NY 10950", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/landaus-logo_13de03b0.png" },
+    ],
+  },
 ];
+
+const ALL_VENDORS = NEIGHBORHOODS.flatMap((n) => n.vendors.map((v) => ({ ...v, neighborhood: n.name })));
 
 const HEALTH_CATEGORIES = [
   "Pregnant",
@@ -283,7 +321,8 @@ function validateStep3(form: FormData): FormErrors {
 
 function validateStep4(form: FormData): FormErrors {
   const e: FormErrors = {};
-  if (!form.supermarket) e.supermarket = "Please select a vendor";
+  if (!form.neighborhood) e.neighborhood = "Please select a neighborhood";
+  else if (!form.supermarket) e.supermarket = "Please select a vendor";
   return e;
 }
 
@@ -1659,7 +1698,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* ─── STEP 4: Grocery Selection ─────────────────────────── */}
+            {/* ─── STEP 4: Neighborhood & Vendor Selection ─────────────────────────── */}
             {step === 4 && (
               <div className="space-y-8">
                 <div className="text-center mb-6">
@@ -1667,50 +1706,76 @@ export default function Home() {
                     <Store className="w-7 h-7 text-green-700" />
                   </div>
                   <h2 className="text-2xl font-bold text-green-800 font-serif">Choose Your Vendor</h2>
-                  <p className="text-stone-500 text-sm mt-1">Select your preferred vendor for pickup or delivery.</p>
+                  <p className="text-stone-500 text-sm mt-1">First select your neighborhood, then pick your preferred vendor.</p>
                 </div>
 
-                {errors.supermarket && (
+                {(errors.supermarket || errors.neighborhood) && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
                     <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-                    <p className="text-sm text-red-700">{errors.supermarket}</p>
+                    <p className="text-sm text-red-700">{errors.neighborhood || errors.supermarket}</p>
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {VENDORS.map((store) => (
-                    <Card
-                      key={store.name}
-                      className={`cursor-pointer transition-all hover:shadow-md ${
-                        form.supermarket === store.name
-                          ? "border-green-500 bg-green-50 ring-2 ring-green-200"
-                          : "border-stone-200 hover:border-green-300"
-                      }`}
-                      onClick={() => update("supermarket", store.name)}
-                    >
-                      <CardContent className="p-6 text-center">
-                        <div className="w-16 h-16 mx-auto mb-3 rounded-lg overflow-hidden bg-white flex items-center justify-center">
-                          {store.logo ? (
-                            <img src={store.logo} alt={store.name} className="w-full h-full object-contain" />
-                          ) : (
-                            <span className="text-4xl">{store.icon}</span>
-                          )}
-                        </div>
-                        <h3 className="font-bold text-stone-800 text-lg">{store.name}</h3>
-                        <p className="text-sm text-stone-500 flex items-center justify-center gap-1 mt-2">
-                          <MapPin className="w-3 h-3" /> {store.address}
-                        </p>
-                        {form.supermarket === store.name && (
-                          <div className="mt-3">
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-3 py-1 rounded-full">
-                              <CheckCircle2 className="w-3 h-3" /> Selected
-                            </span>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
+                {/* Neighborhood Selection */}
+                <div>
+                  <h3 className="text-lg font-semibold text-stone-700 mb-3">Select Your Neighborhood</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                    {NEIGHBORHOODS.map((hood) => (
+                      <button
+                        key={hood.name}
+                        type="button"
+                        className={`px-4 py-3 rounded-lg border-2 text-sm font-semibold transition-all ${
+                          form.neighborhood === hood.name
+                            ? "border-green-500 bg-green-50 text-green-800 ring-2 ring-green-200"
+                            : "border-stone-200 text-stone-600 hover:border-green-300 hover:bg-green-50/50"
+                        }`}
+                        onClick={() => {
+                          update("neighborhood", hood.name);
+                          update("supermarket", "");
+                        }}
+                      >
+                        {hood.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                {/* Vendor Selection (shown after neighborhood is picked) */}
+                {form.neighborhood && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-stone-700 mb-3">Vendors in {form.neighborhood}</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {NEIGHBORHOODS.find((n) => n.name === form.neighborhood)?.vendors.map((store) => (
+                        <Card
+                          key={store.name}
+                          className={`cursor-pointer transition-all hover:shadow-md ${
+                            form.supermarket === store.name
+                              ? "border-green-500 bg-green-50 ring-2 ring-green-200"
+                              : "border-stone-200 hover:border-green-300"
+                          }`}
+                          onClick={() => update("supermarket", store.name)}
+                        >
+                          <CardContent className="p-6 text-center">
+                            <div className="w-16 h-16 mx-auto mb-3 rounded-lg overflow-hidden bg-white flex items-center justify-center border border-stone-100">
+                              <img src={store.logo} alt={store.name} className="w-full h-full object-contain" />
+                            </div>
+                            <h3 className="font-bold text-stone-800 text-lg">{store.name}</h3>
+                            <p className="text-sm text-stone-500 flex items-center justify-center gap-1 mt-2">
+                              <MapPin className="w-3 h-3" /> {store.address}
+                            </p>
+                            {form.supermarket === store.name && (
+                              <div className="mt-3">
+                                <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-3 py-1 rounded-full">
+                                  <CheckCircle2 className="w-3 h-3" /> Selected
+                                </span>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </motion.div>

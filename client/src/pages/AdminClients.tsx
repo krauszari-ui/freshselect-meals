@@ -58,13 +58,22 @@ interface AddClientForm {
   state: string;
   zipcode: string;
   language: string;
+  neighborhood: string;
   supermarket: string;
 }
+
+const NEIGHBORHOODS_LIST = [
+  { name: "Williamsburg", vendors: ["Foodoo Kosher", "Rosemary Kosher", "Chestnut", "Central Market"] },
+  { name: "Borough Park", vendors: ["KRM", "Certo Market", "Breadberry"] },
+  { name: "Flatbush", vendors: ["Pomegranate", "Moisha's Discount"] },
+  { name: "Monsey", vendors: ["Evergreen", "Hatzlacha"] },
+  { name: "Monroe", vendors: ["Refresh", "Landau's"] },
+];
 
 const INITIAL_ADD_FORM: AddClientForm = {
   firstName: "", lastName: "", dateOfBirth: "", medicaidId: "",
   cellPhone: "", email: "", streetAddress: "", city: "Brooklyn",
-  state: "NY", zipcode: "", language: "English", supermarket: "Foodoo Kosher",
+  state: "NY", zipcode: "", language: "English", neighborhood: "Williamsburg", supermarket: "Foodoo Kosher",
 };
 
 function AddClientDialog({
@@ -112,6 +121,7 @@ function AddClientDialog({
 
     submitMutation.mutate({
       ...form,
+      neighborhood: form.neighborhood,
       homePhone: "",
       aptUnit: "",
       healthCategories: ["Chronic Condition"],
@@ -222,11 +232,22 @@ function AddClientDialog({
               </Select>
             </div>
             <div>
+              <Label className="text-xs text-slate-600">Neighborhood</Label>
+              <Select value={form.neighborhood} onValueChange={(v) => { update("neighborhood", v); const hood = NEIGHBORHOODS_LIST.find(n => n.name === v); if (hood) update("supermarket", hood.vendors[0]); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {NEIGHBORHOODS_LIST.map((n) => (
+                    <SelectItem key={n.name} value={n.name}>{n.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <Label className="text-xs text-slate-600">Vendor</Label>
               <Select value={form.supermarket} onValueChange={(v) => update("supermarket", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["Foodoo Kosher", "Rosemary Kosher", "Chestnut", "Central Market"].map((s) => (
+                  {(NEIGHBORHOODS_LIST.find(n => n.name === form.neighborhood)?.vendors || []).map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>
@@ -253,7 +274,7 @@ function AddClientDialog({
 
 /* ─── Export Dropdown ─────────────────────────────────────────────────── */
 
-function ExportDropdown() {
+function ExportDropdown({ filters }: { filters?: Record<string, string | undefined> }) {
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -282,7 +303,7 @@ function ExportDropdown() {
     setExporting(true);
     setOpen(false);
     try {
-      const result = await exportMutation.mutateAsync({});
+      const result = await exportMutation.mutateAsync(filters || {});
       const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8;" });
       const date = new Date().toISOString().slice(0, 10);
       triggerDownload(blob, `freshselect-clients-${date}.csv`);
@@ -298,7 +319,7 @@ function ExportDropdown() {
     setExporting(true);
     setOpen(false);
     try {
-      const result = await exportMutation.mutateAsync({});
+      const result = await exportMutation.mutateAsync(filters || {});
       const wsData = [result.headers, ...result.data];
       const ws = XLSX.utils.aoa_to_sheet(wsData);
       // Auto-size columns
@@ -370,6 +391,8 @@ export default function AdminClients() {
   const [stageFilter, setStageFilter] = useState(initialStage);
   const [languageFilter, setLanguageFilter] = useState("all");
   const [boroughFilter, setBoroughFilter] = useState("all");
+  const [neighborhoodFilter, setNeighborhoodFilter] = useState("all");
+  const [vendorFilter, setVendorFilter] = useState("all");
   const [programFilter, setProgramFilter] = useState("all");
   const [workerFilter, setWorkerFilter] = useState("all");
   const [repFilter, setRepFilter] = useState("all");
@@ -412,9 +435,15 @@ export default function AdminClients() {
   }, [rows, sortDir]);
 
   const filteredRows = useMemo(() => {
-    if (programFilter === "all") return sortedRows;
-    return sortedRows.filter((r: any) => r.program === programFilter);
-  }, [sortedRows, programFilter]);
+    let result = sortedRows;
+    if (programFilter !== "all") result = result.filter((r: any) => r.program === programFilter);
+    if (neighborhoodFilter !== "all") result = result.filter((r: any) => {
+      const fd = (r.formData as any) || {};
+      return fd.neighborhood === neighborhoodFilter;
+    });
+    if (vendorFilter !== "all") result = result.filter((r: any) => r.supermarket === vendorFilter);
+    return result;
+  }, [sortedRows, programFilter, neighborhoodFilter, vendorFilter]);
 
   const staffList = (staffQuery.data ?? []) as any[];
 
@@ -434,7 +463,14 @@ export default function AdminClients() {
             <p className="text-slate-500 text-sm mt-0.5">{totalCount} total clients</p>
           </div>
           <div className="flex items-center gap-2">
-            <ExportDropdown />
+            <ExportDropdown filters={{
+              stage: stageFilter !== "all" ? stageFilter : undefined,
+              supermarket: vendorFilter !== "all" ? vendorFilter : undefined,
+              neighborhood: neighborhoodFilter !== "all" ? neighborhoodFilter : undefined,
+              language: languageFilter !== "all" ? languageFilter : undefined,
+              borough: boroughFilter !== "all" ? boroughFilter : undefined,
+              search: debouncedSearch || undefined,
+            }} />
             <Button
               onClick={() => setShowAddDialog(true)}
               className="bg-green-700 hover:bg-green-800 text-white gap-1.5 h-9 px-4 text-sm"
@@ -495,6 +531,33 @@ export default function AdminClients() {
               <SelectItem value="Queens">Queens</SelectItem>
               <SelectItem value="Bronx">Bronx</SelectItem>
               <SelectItem value="Staten Island">Staten Island</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={neighborhoodFilter} onValueChange={(v) => { setNeighborhoodFilter(v); setVendorFilter("all"); setPage(1); }}>
+            <SelectTrigger className="w-[150px] h-9 text-sm bg-white border-slate-200">
+              <SelectValue placeholder="Neighborhood" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Neighborhood</SelectItem>
+              {NEIGHBORHOODS_LIST.map((n) => (
+                <SelectItem key={n.name} value={n.name}>{n.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={vendorFilter} onValueChange={(v) => { setVendorFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
+              <SelectValue placeholder="Vendor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Vendors</SelectItem>
+              {(neighborhoodFilter !== "all"
+                ? NEIGHBORHOODS_LIST.find(n => n.name === neighborhoodFilter)?.vendors || []
+                : NEIGHBORHOODS_LIST.flatMap(n => n.vendors)
+              ).map((v) => (
+                <SelectItem key={v} value={v}>{v}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
 

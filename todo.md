@@ -210,3 +210,18 @@
 - [x] Add Export to Excel (.xlsx) button on Admin Clients page
 - [x] Add Export to CSV option
 - [x] Include all client fields in export (name, CIN, DOB, address, language, household, health categories, stage, vendor, referral, guardian name, etc.)
+
+## Vendor/Neighborhood Restructuring (April 2026)
+- [x] Restructure vendors by neighborhood (Williamsburg, Borough Park, Flatbush, Monsey, Monroe)
+- [x] Williamsburg: Foodoo Kosher, Rosemary Kosher, Chestnut, Central Market
+- [x] Borough Park: KRM, Certo Market, Breadberry
+- [x] Flatbush: Pomegranate, Moisha's Discount
+- [x] Monsey: Evergreen, Hatzlacha
+- [x] Monroe: Refresh, Landau's
+- [x] Find logos and correct addresses for all vendors
+- [x] Add neighborhood filter dropdown to Admin Clients page
+- [x] Add vendor filter dropdown to Admin Clients page
+- [x] Make export (Excel/CSV) respect all active filters including neighborhood
+- [x] Update vendor selection UI in Home.tsx to group by neighborhood
+- [x] Update AdminClients Add Client dialog with neighborhood + vendor dropdowns
+- [x] 75 tests passing, 0 TypeScript errors
