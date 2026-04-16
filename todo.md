@@ -173,3 +173,14 @@
 - [x] Verify admin auth protection (adminProcedure guards all admin routes)
 - [x] Referral links use window.location.origin (auto-resolves to freshselectmeals.com in prod)
 - [x] 75 tests passing, 0 TypeScript errors
+
+## Electronic Signature & Attestation
+- [x] Install signature_pad library
+- [x] Build reusable SignaturePad component (canvas draw + clear + typed fallback)
+- [x] Add Household Attestation block near HIPAA checkbox in Step 3
+- [x] Add Acknowledgment block with Member/Parent/Guardian Name field
+- [x] Add electronic signature canvas (draw or type name)
+- [x] Update Zod schema to include signatureDataUrl and guardianName fields
+- [x] Signature stored in formData JSON (no separate column needed)
+- [x] Update backend Zod schema to validate signature fields
+- [x] Update tests for new signature fields (75 passing)

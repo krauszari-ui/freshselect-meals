@@ -58,6 +58,8 @@ function validInput() {
     needsMicrowave: "No",
     needsCookingUtensils: "No",
     hipaaConsent: true,
+    guardianName: "Jane Doe",
+    signatureDataUrl: "data:image/png;base64,iVBORw0KGgo=",
   };
 }
 
