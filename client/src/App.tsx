@@ -17,6 +17,7 @@ import AdminClientDetail from "./pages/AdminClientDetail";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AdminReferrals from "./pages/AdminReferrals";
 import ReferrerPortal from "./pages/ReferrerPortal";
+import ComponentsShowcase from "./pages/ComponentShowcase";
 
 function Router() {
   return (
@@ -40,6 +41,9 @@ function Router() {
       {/* Referrer Portal */}
       <Route path={"/referrer"} component={ReferrerPortal} />
 
+      {/* Components Showcase */}
+      <Route path={"/components"} component={ComponentsShowcase} />
+
       {/* Fallback */}
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
@@ -50,7 +54,7 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="light">
+      <ThemeProvider defaultTheme="light" switchable={true}>
         <TooltipProvider>
           <Toaster />
           <Router />
