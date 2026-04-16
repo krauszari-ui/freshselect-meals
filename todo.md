@@ -225,3 +225,14 @@
 - [x] Update vendor selection UI in Home.tsx to group by neighborhood
 - [x] Update AdminClients Add Client dialog with neighborhood + vendor dropdowns
 - [x] 75 tests passing, 0 TypeScript errors
+
+## Form Submission Error Fix (April 2026)
+- [x] Root cause: Resend email API returns 403 (domain not verified), error leaked into response
+- [x] Fix: Use setTimeout(0) to fully detach email/referral tracking from request lifecycle
+- [x] Add .passthrough() to Zod submissionInputSchema to prevent unknown field rejections
+- [x] Add additionalMembersCount field to Zod schema (sent by frontend but not in schema)
+- [x] Wrap email sends with individual .catch() handlers for granular error logging
+- [x] DB save returns success IMMEDIATELY; emails fire in background and never block user
+- [x] Update tests to use vi.useFakeTimers() to properly handle setTimeout(0) in tests
+- [x] email.ts already has defensive try-catch wrappers (no changes needed)
+- [x] 75 tests passing, 0 TypeScript errors

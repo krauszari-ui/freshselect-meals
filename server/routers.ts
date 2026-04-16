@@ -70,6 +70,7 @@ const submissionInputSchema = z.object({
   dietaryRestrictions: z.string().optional(),
   newApplicant: z.string().min(1),
   transferAgencyName: z.string().optional(),
+  additionalMembersCount: z.string().optional().default("0"),
   householdMembers: z.array(householdMemberSchema),
   mealFocus: z.array(z.string()),
   breakfastItems: z.string().optional(), lunchItems: z.string().optional(),
@@ -81,7 +82,7 @@ const submissionInputSchema = z.object({
   ref: z.string().optional(),
   screeningQuestions: screeningQuestionsSchema.optional(),
   uploadedDocuments: z.record(z.string(), z.string()).optional(),
-});
+}).passthrough();
 
 
 export const appRouter = router({
@@ -134,7 +135,7 @@ export const appRouter = router({
       const refNumber = Math.random().toString(36).substring(2, 8).toUpperCase();
       const consentAt = new Date();
 
-      // Step 1: Save to database (this is the only critical step)
+      // Step 1: Save to database (this is the ONLY critical step)
       try {
         await createSubmission({
           referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName,
@@ -150,19 +151,25 @@ export const appRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to save application. Please try again." });
       }
 
-      // Step 2: Everything below is fire-and-forget - never blocks the user
-      // Track referral link usage
-      if (input.ref) {
-        incrementReferralUsage(input.ref).catch((err) => console.warn("[Referral] Failed to track:", err));
-      }
+      // ── Everything below is FIRE-AND-FORGET ──
+      // These run in the background and NEVER affect the response to the user.
+      // We use setTimeout(0) to fully detach from the request lifecycle.
+      setTimeout(() => {
+        try {
+          // Track referral link usage
+          if (input.ref) {
+            incrementReferralUsage(input.ref).catch((err) => console.warn("[Referral] Failed to track:", err));
+          }
+          // Send emails (non-blocking, with individual try-catch)
+          const emailPayload = { referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName, email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId, supermarket: input.supermarket, formData: input as unknown as Record<string, unknown> };
+          sendApplicantConfirmation(emailPayload).catch((err) => console.warn("[Email] Applicant confirmation failed:", err));
+          sendAdminNotification(emailPayload).catch((err) => console.warn("[Email] Admin notification failed:", err));
+        } catch (bgErr) {
+          console.warn("[Submission] Background tasks error (non-blocking):", bgErr);
+        }
+      }, 0);
 
-      // Send emails (non-blocking)
-      const emailPayload = { referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName, email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId, supermarket: input.supermarket, formData: input as unknown as Record<string, unknown> };
-      Promise.all([
-        sendApplicantConfirmation(emailPayload),
-        sendAdminNotification(emailPayload),
-      ]).catch((err) => console.warn("[Email] Non-blocking failure:", err));
-
+      // Return success IMMEDIATELY after DB save
       return { success: true, referenceNumber: refNumber };
     }),
   }),

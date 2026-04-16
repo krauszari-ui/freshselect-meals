@@ -36,8 +36,9 @@ export function SignaturePad({ value, onChange, error, label }: SignaturePadProp
     }
 
     pad.addEventListener("endStroke", () => {
-      const dataUrl = pad.toDataURL("image/png");
       setIsEmpty(pad.isEmpty());
+      // Use JPEG at 50% quality to keep payload small (PNG signatures can be 100KB+)
+      const dataUrl = pad.toDataURL("image/jpeg", 0.5);
       onChange(pad.isEmpty() ? "" : dataUrl);
     });
 
