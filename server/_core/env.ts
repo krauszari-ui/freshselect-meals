@@ -1,12 +1,15 @@
 export const ENV = {
-  appId: process.env.VITE_APP_ID ?? "",
+  /** Used as the JWT audience claim */
+  appId: process.env.VITE_APP_ID ?? "freshselect-meals",
+  /** Secret used to sign / verify session JWTs — must be set in production */
   cookieSecret: process.env.JWT_SECRET ?? "",
+  /** MySQL connection string */
   databaseUrl: process.env.DATABASE_URL ?? "",
-  oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
-  ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
+  /** Production flag */
   isProduction: process.env.NODE_ENV === "production",
+  /** Resend API key for transactional email */
+  resendApiKey: process.env.RESEND_API_KEY ?? "",
+  // ── Forge API (storage, LLM, maps, etc.) ──────────────────────────────────
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
-  clickupApiKey: process.env.CLICKUP_API_KEY ?? "",
-  resendApiKey: process.env.RESEND_API_KEY ?? "",
 };

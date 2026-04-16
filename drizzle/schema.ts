@@ -13,6 +13,8 @@ export const users = mysqlTable("users", {
   role: mysqlEnum("role", ["user", "admin", "worker"]).default("user").notNull(),
   /** Worker-specific: permissions JSON (e.g. { canView: true, canEdit: false, canExport: false }) */
   permissions: json("permissions"),
+  /** Hashed password for internal bcrypt authentication (null for legacy OAuth users) */
+  passwordHash: varchar("passwordHash", { length: 256 }),
   /** Worker-specific: whether the worker account is active */
   isActive: int("isActive").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
