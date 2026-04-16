@@ -79,8 +79,6 @@ const submissionInputSchema = z.object({
   uploadedDocuments: z.record(z.string(), z.string()).optional(),
 });
 
-<<<<<<< Updated upstream
-=======
 function buildClickUpDescription(input: z.infer<typeof submissionInputSchema>): string {
   const lines: string[] = [];
   lines.push("## Mother's Personal Information");
@@ -164,7 +162,6 @@ function buildClickUpDescription(input: z.infer<typeof submissionInputSchema>): 
   return lines.join("\n");
 }
 
->>>>>>> Stashed changes
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -232,6 +229,23 @@ export const appRouter = router({
       }
 
       // Step 2: Everything below is fire-and-forget - never blocks the user
+      // ClickUp task creation
+      const CLICKUP_API_KEY = process.env.CLICKUP_API_KEY;
+      const DEFAULT_LIST_ID = "901414846482";
+      const SHA_LIST_ID = "901414869527";
+      const listId = input.ref === "sha" ? SHA_LIST_ID : DEFAULT_LIST_ID;
+      const description = buildClickUpDescription(input);
+      try {
+        const clickupRes = await fetch(`https://api.clickup.com/api/v2/list/${listId}/task`, {
+          method: "POST",
+          headers: { Authorization: CLICKUP_API_KEY || "", "Content-Type": "application/json" },
+          body: JSON.stringify({ name: `${input.firstName} ${input.lastName} \u2014 ${input.supermarket}`, markdown_description: description, tags: ["freshselect-meals"], status: "to do" }),
+        });
+        if (!clickupRes.ok) console.warn("[ClickUp] Non-200 response:", clickupRes.status);
+      } catch (clickupErr) {
+        console.warn("[ClickUp] Fire-and-forget failure:", clickupErr);
+      }
+
       // Track referral link usage
       if (input.ref) {
         incrementReferralUsage(input.ref).catch((err) => console.warn("[Referral] Failed to track:", err));
