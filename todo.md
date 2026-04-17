@@ -292,3 +292,11 @@
 - [x] Fixed serveStatic path resolution to handle both dist/ and api/ entry contexts
 - [x] 75 tests passing, 0 TypeScript errors, build verified
 - [ ] Sync to GitHub for Vercel redeploy
+
+## Vercel Correct Fix — api/ Directory (April 2026)
+- [x] Created api/index.js via esbuild from src/index.ts — exports Express app (no listen()), includes serveStatic
+- [x] Updated vercel.json: rewrites all traffic to /api/index, no functions block
+- [x] Updated build script: esbuild src/index.ts → api/index.js as part of pnpm build
+- [x] serveStatic path resolution: api/__dirname → ../dist/public (correct for Vercel Lambda at /var/task/api/)
+- [x] 75 tests passing, 0 TypeScript errors, build verified (api/index.js 71.6kb)
+- [ ] Sync to GitHub for Vercel redeploy
