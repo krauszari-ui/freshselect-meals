@@ -259,4 +259,13 @@
 - [x] Push schema to PlanetScale via drizzle-kit push — verified column exists (type: int, default: 0)
 - [x] Update submit logic in routers.ts to map form field to new column (parseInt with fallback to 0)
 - [x] Run tests — 75 passing, 0 TypeScript errors
-- [ ] Sync to GitHub for Vercel redeployment
+- [x] Sync to GitHub for Vercel redeployment (checkpoint 16bc7f7c)
+
+## Root Cause: DATABASE_URL Missing on Render (April 2026)
+- [x] Confirmed additionalMembersCount is NULL with DEFAULT 0 — not the issue
+- [x] Confirmed all direct PlanetScale inserts succeed from sandbox
+- [x] Confirmed production server (Render) returns 500 on every submit
+- [x] Root cause: DATABASE_URL env var is not set on Render deployment
+- [x] Improved error logging in db.ts and routers.ts to surface this clearly
+- [x] 75 tests passing, 0 TypeScript errors
+- [ ] User must add DATABASE_URL to Render environment variables

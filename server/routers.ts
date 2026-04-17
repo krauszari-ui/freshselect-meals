@@ -152,7 +152,12 @@ export const appRouter = router({
         });
         console.log(`[Submission] ✓ Saved to database (ref: ${refNumber})`);
       } catch (dbErr: any) {
-        console.error(`[Submission] ✗ Database save failed (ref: ${refNumber}):`, dbErr?.message || dbErr);
+        const errMsg = dbErr?.message || String(dbErr);
+        console.error(`[Submission] ✗ Database save failed (ref: ${refNumber}): ${errMsg}`);
+        // Surface DB_URL missing error clearly in logs
+        if (errMsg.includes("DATABASE_URL")) {
+          console.error("[Submission] CRITICAL: DATABASE_URL environment variable is not configured on this server!");
+        }
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to save application. Please try again." });
       }
 
