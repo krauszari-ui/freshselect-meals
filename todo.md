@@ -348,3 +348,9 @@
 - [x] Verify function size under 250MB Vercel limit (45MB total)
 - [x] Verify dev server still works (200 on / and /api/trpc)
 - [ ] Push and verify live deployment
+
+## Admin Login & Referral Program Audit (April 17 2026)
+- [ ] Test admin login on live site (freshselectmeals.com/admin/login)
+- [ ] Test referral link generation and tracking
+- [ ] Test referral person login and dashboard
+- [ ] Fix any issues found
