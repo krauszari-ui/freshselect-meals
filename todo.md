@@ -316,3 +316,20 @@
 - [ ] Ensure dist/public is bundled correctly for frontend assets
 - [ ] Verify build and tests pass after changes
 - [ ] Sync to GitHub for Vercel redeploy
+
+## Definitive Vercel Fix Round 2 (April 17 2026)
+- [ ] Read and understand every file in the build chain
+- [ ] Create api/index.js compiled entry point with @vercel/node builds config
+- [ ] Create vercel.json with explicit builds + routes (NOT rewrites)
+- [ ] Stop build from creating public/ (prevents Vercel static site detection)
+- [ ] Test build locally, verify all paths
+- [ ] Push and verify live deployment
+
+## Definitive Vercel Fix Round 3 — Express Auto-Detection (April 17 2026)
+- [x] Fix vercel.json: add outputDirectory pointing to dist/public
+- [x] Fix build script: compile index.mjs at root for Vercel Express auto-detection
+- [x] Fix build script: remove cp -r dist/public public (prevents Vercel static site detection)
+- [x] Fix .gitignore: remove 'public' entry so Vercel can see build output if needed
+- [x] Verify build works locally
+- [x] Verify dev server still works
+- [ ] Push and verify live deployment
