@@ -17,9 +17,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, Loader2, FileText, Plus, ChevronDown, ChevronUp,
-  Pencil, Trash2, Upload, ExternalLink, Link2,
+  Pencil, Trash2, Upload, ExternalLink, Link2, Save,
 } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -168,6 +168,40 @@ export default function AdminClientDetail() {
   const updateTaskStatusMutation = trpc.admin.tasks.updateStatus.useMutation({
     onSuccess: () => { utils.admin.tasks.byClient.invalidate({ submissionId: id }); toast.success("Task status updated"); },
   });
+
+  // Admin Notes (Assessment) — pre-populate from loaded client data
+  const [adminNotesText, setAdminNotesText] = useState("");
+  const [adminNotesChanged, setAdminNotesChanged] = useState(false);
+  useEffect(() => {
+    if (client && !adminNotesChanged) {
+      setAdminNotesText((client as any).adminNotes || "");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(client as any)?.adminNotes]);
+  const updateAdminNotesMutation = trpc.admin.updateAdminNotes.useMutation({
+    onSuccess: () => { utils.admin.getById.invalidate({ id }); setAdminNotesChanged(false); toast.success("Assessment notes saved"); },
+    onError: (err) => toast.error(err.message),
+  });
+  const handleSaveAdminNotes = () => {
+    updateAdminNotesMutation.mutate({ id, adminNotes: adminNotesText });
+  };
+
+  // PDF Generation
+  const generatePdfMutation = trpc.admin.generateAttestationPdf.useMutation({
+    onSuccess: (data) => {
+      // Open the PDF URL in a new tab for download
+      const a = document.createElement("a");
+      a.href = data.url;
+      a.download = data.filename;
+      a.target = "_blank";
+      a.click();
+      toast.success("PDF generated — downloading now");
+    },
+    onError: (err) => toast.error("Failed to generate PDF: " + err.message),
+  });
+  const handleDownloadPdf = () => {
+    generatePdfMutation.mutate({ id });
+  };
 
   const staffList = (staffQuery.data ?? []) as any[];
   const getWorkerName = (wId: number | null) => {
@@ -366,6 +400,7 @@ export default function AdminClientDetail() {
                 <InfoLine label="Address" value={[fd.streetAddress, fd.aptUnit, fd.city || "Brooklyn", fd.state || "NY", fd.zipcode].filter(Boolean).join(" ")} />
                 <InfoLine label="Language" value={(client as any).language || "English"} />
                 <InfoLine label="Program" value={(client as any).program || "PHS"} />
+                <InfoLine label="Vendor" value={(client as any).supermarket} />
                 {client.referralSource && <InfoLine label="Referred By" value={client.referralSource} />}
               </SectionCard>
 
@@ -555,7 +590,56 @@ export default function AdminClientDetail() {
 
         {/* Assessment Tab */}
         {activeTab === "assessment" && (
-          <div className="bg-white rounded-lg border border-slate-200 p-6">
+          <div className="space-y-5">
+            {/* Admin Notes / Assessment Notes */}
+            <div className="bg-white rounded-lg border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Assessment Notes</h2>
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 h-7 text-xs px-3"
+                  onClick={handleSaveAdminNotes}
+                  disabled={updateAdminNotesMutation.isPending || !adminNotesChanged}
+                >
+                  {updateAdminNotesMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                  Save Notes
+                </Button>
+              </div>
+              <Textarea
+                value={adminNotesText}
+                onChange={(e) => { setAdminNotesText(e.target.value); setAdminNotesChanged(true); }}
+                placeholder="Add assessment notes, observations, or case comments here..."
+                className="text-sm resize-none min-h-[120px] border-slate-200"
+              />
+              {updateAdminNotesMutation.isSuccess && !adminNotesChanged && (
+                <p className="text-xs text-emerald-600 mt-1.5">Notes saved successfully.</p>
+              )}
+            </div>
+
+            {/* PDF Download */}
+            <div className="bg-white rounded-lg border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Documents</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Generate official PDF documents for this client</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 h-8 text-xs px-3 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                  onClick={handleDownloadPdf}
+                  disabled={generatePdfMutation.isPending}
+                >
+                  {generatePdfMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                  {generatePdfMutation.isPending ? "Generating..." : "Download Attestation + HIPAA PDF"}
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500">
+                The PDF includes: Household Attestation Statement, HIPAA Consent record with timestamp, all household members, and the applicant's electronic signature.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-lg border border-slate-200 p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-slate-900">SCN Screening Questionnaire</h2>
             </div>
@@ -593,6 +677,7 @@ export default function AdminClientDetail() {
               <InfoLine label="Needs refrigerator" value={fd.needsRefrigerator || "—"} />
               <InfoLine label="Needs microwave" value={fd.needsMicrowave || "—"} />
               <InfoLine label="Needs cooking utensils/supplies" value={fd.needsCookingUtensils || "—"} />
+            </div>
             </div>
           </div>
         )}
