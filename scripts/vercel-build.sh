@@ -12,13 +12,16 @@ echo "[2/6] Building local server..."
 npx esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist
 
 # 3. Build Vercel serverless function
+# IMPORTANT: Use --format=cjs (CommonJS) NOT esm.
+# pdfkit and several other deps use dynamic require() internally which
+# is not supported in ESM bundles — it causes a crash at cold start.
 echo "[3/6] Building Vercel serverless function..."
 mkdir -p .vercel/output/functions/api.func
 npx esbuild src/index.ts \
   --bundle \
   --platform=node \
-  --format=esm \
-  --outfile=.vercel/output/functions/api.func/index.mjs \
+  --format=cjs \
+  --outfile=.vercel/output/functions/api.func/index.cjs \
   --alias:@shared=./shared \
   --alias:@=./client/src \
   --external:express \
@@ -51,17 +54,12 @@ echo "[4/6] Creating Vercel function config..."
 cat > .vercel/output/functions/api.func/.vc-config.json << 'EOF'
 {
   "runtime": "nodejs20.x",
-  "handler": "index.mjs",
+  "handler": "index.cjs",
   "launcherType": "Nodejs"
 }
 EOF
 
-# Create package.json for the function (ESM)
-cat > .vercel/output/functions/api.func/package.json << 'EOF'
-{
-  "type": "module"
-}
-EOF
+# NOTE: No package.json with "type":"module" — CJS is the default, no override needed.
 
 # 5. Copy only required node_modules (not all 612MB)
 echo "[5/6] Copying required dependencies..."

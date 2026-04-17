@@ -4,9 +4,12 @@ import { type Server } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Reliable __dirname equivalent for ESM (works in Vercel Lambda and local)
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Safe __dirname that works in both ESM (import.meta.url is defined) and CJS bundles
+// compiled by esbuild --format=cjs (where import.meta.url becomes undefined).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _importMeta = (typeof import.meta !== "undefined" ? import.meta : {}) as any;
+const __filename2 = _importMeta.url ? fileURLToPath(_importMeta.url) : "";
+const __dirname2 = __filename2 ? path.dirname(__filename2) : process.cwd();
 
 export async function setupVite(app: Express, server: Server) {
   // Dynamic imports for dev-only dependencies (vite is a devDependency)
@@ -33,7 +36,7 @@ export async function setupVite(app: Express, server: Server) {
 
     try {
       const clientTemplate = path.resolve(
-        __dirname,
+        __dirname2,
         "../..",
         "client",
         "index.html"
@@ -60,11 +63,11 @@ function findPublicDir(): string {
     // Vercel: process.cwd() is the project root, public/ is at root
     path.resolve(process.cwd(), "public"),
     // Local production (dist/index.js): public at dist/public (sibling)
-    path.resolve(__dirname, "public"),
+    path.resolve(__dirname2, "public"),
     // Fallback: one level up from dist/ then into dist/public
-    path.resolve(__dirname, "..", "dist", "public"),
+    path.resolve(__dirname2, "..", "dist", "public"),
     // Development: two levels up from server/_core/ then into dist/public
-    path.resolve(__dirname, "../..", "dist", "public"),
+    path.resolve(__dirname2, "../..", "dist", "public"),
   ];
 
   for (const candidate of candidates) {
