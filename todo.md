@@ -333,3 +333,18 @@
 - [x] Verify build works locally
 - [x] Verify dev server still works
 - [ ] Push and verify live deployment
+
+## Fix Vercel API Routing (April 17 2026)
+- [ ] Diagnose: tRPC API calls return HTML instead of JSON on production
+- [ ] Fix API routing so Express serverless function handles /api/* requests
+- [ ] Verify form submission works on live site
+
+## Definitive Vercel Fix Round 4 — Build Output API (April 17 2026)
+- [x] Create scripts/vercel-build.sh with Build Output API structure
+- [x] Create scripts/copy-deps.mjs for selective dependency copying (pnpm-aware)
+- [x] Update vercel.json: buildCommand → bash scripts/vercel-build.sh, outputDirectory → .vercel/output
+- [x] Update .gitignore for .vercel/output/
+- [x] Verify all imports resolve in the function bundle (12 packages + 83 transitive deps)
+- [x] Verify function size under 250MB Vercel limit (45MB total)
+- [x] Verify dev server still works (200 on / and /api/trpc)
+- [ ] Push and verify live deployment
