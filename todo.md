@@ -269,3 +269,11 @@
 - [x] Improved error logging in db.ts and routers.ts to surface this clearly
 - [x] 75 tests passing, 0 TypeScript errors
 - [ ] User must add DATABASE_URL to Render environment variables
+
+## Production DB Migration — TiDB (April 2026)
+- [x] Identified production DB is TiDB Cloud (gateway05.us-east-1.prod.aws.tidbcloud.com), not PlanetScale
+- [x] Added neighborhood varchar(64) NULL column to production TiDB submissions table
+- [x] Added additionalMembersCount int NULL DEFAULT 0 column to production TiDB submissions table
+- [x] Verified test insert with 6-char ref number succeeds with all columns
+- [x] 75 tests passing, 0 TypeScript errors
+- [ ] Sync to GitHub and redeploy on Render
