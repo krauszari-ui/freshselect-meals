@@ -277,3 +277,10 @@
 - [x] Verified test insert with 6-char ref number succeeds with all columns
 - [x] 75 tests passing, 0 TypeScript errors
 - [ ] Sync to GitHub and redeploy on Render
+
+## Vercel 404 Fix
+- [x] Inspected package.json build scripts — build outputs dist/index.js + dist/public/
+- [x] Fixed vercel.json: removed broken static asset route, route all traffic through dist/index.js
+- [x] Fixed server/_core/vite.ts: replaced import.meta.dirname with fileURLToPath(__filename) for Vercel ESM compatibility
+- [x] 75 tests passing, 0 TypeScript errors, production build verified
+- [ ] Sync to GitHub for Vercel rebuild
