@@ -70,10 +70,19 @@ node scripts/copy-deps.mjs
 # 6. Assemble the Build Output API structure
 echo "[6/6] Assembling Vercel Build Output..."
 
-# Copy frontend assets to static/
-cp -r dist/public .vercel/output/static
+# Clean and recreate static/ to avoid stale files from previous builds
+rm -rf .vercel/output/static
+mkdir -p .vercel/output/static
+
+# Copy frontend assets to static/ (copy CONTENTS of dist/public, not the directory itself)
+cp -r dist/public/. .vercel/output/static/
 
 # Create the routing config
+# Route order:
+# 1. /assets/* - serve from CDN with long cache (continue so filesystem also handles)
+# 2. /api/* - route to Express serverless function
+# 3. handle: filesystem - serve any exact static file matches (e.g. /favicon.ico)
+# 4. /(.*) - SPA catch-all: serve /index.html from static CDN (NOT the Express function)
 cat > .vercel/output/config.json << 'EOF'
 {
   "version": 3,
@@ -94,7 +103,7 @@ cat > .vercel/output/config.json << 'EOF'
     },
     {
       "src": "/(.*)",
-      "dest": "/api"
+      "dest": "/index.html"
     }
   ]
 }

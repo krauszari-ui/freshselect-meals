@@ -78,6 +78,13 @@ function findPublicDir(): string {
 }
 
 export function serveStatic(app: Express) {
+  // On Vercel, static files are served by the CDN from .vercel/output/static/
+  // and SPA routing is handled by config.json (/(.*) → /index.html).
+  // The Express function only handles /api/* routes, so skip static serving entirely.
+  if (process.env.VERCEL) {
+    return;
+  }
+
   const distPath = findPublicDir();
 
   if (!fs.existsSync(distPath)) {
@@ -86,13 +93,9 @@ export function serveStatic(app: Express) {
     );
   }
 
-  // On Vercel, express.static() is ignored by the platform,
-  // but static assets are served from public/ by Vercel's CDN.
-  // We still register it for non-Vercel environments.
   app.use(express.static(distPath));
 
   // SPA catch-all: serve index.html for any unmatched route.
-  // This handles client-side routing (React Router / Wouter).
   app.use("*", (_req, res) => {
     const indexPath = path.resolve(distPath, "index.html");
     if (fs.existsSync(indexPath)) {

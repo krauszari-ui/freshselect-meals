@@ -354,3 +354,10 @@
 - [ ] Test referral link generation and tracking
 - [ ] Test referral person login and dashboard
 - [ ] Fix any issues found
+
+## Fix SPA Routing — Remove serveStatic from Serverless Function (April 17 2026)
+- [x] Remove serveStatic() call from src/index.ts (Express function must not serve static files on Vercel — use VERCEL env check)
+- [x] Vercel config.json routes /(.*) → /index.html — SPA routing handled by CDN
+- [x] Rebuild Vercel bundle and verify static/index.html + assets/ are correct
+- [x] Verify /api/* routes still work (tRPC + OAuth) — dev server returns 200
+- [x] Push and redeploy on Vercel
