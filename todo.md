@@ -361,3 +361,10 @@
 - [x] Rebuild Vercel bundle and verify static/index.html + assets/ are correct
 - [x] Verify /api/* routes still work (tRPC + OAuth) — dev server returns 200
 - [x] Push and redeploy on Vercel
+
+## Admin Dashboard Enhancements (Apr 2026)
+
+- [x] Show vendor/supermarket in AdminClientDetail Overview tab (Client Information card)
+- [x] Add editable adminNotes (Assessment notes) to AdminClientDetail Assessment tab with Save button
+- [x] Add server-side PDF generation endpoint for Household Attestation + HIPAA document
+- [x] Add "Download PDF" button in AdminClientDetail to download Household Attestation + HIPAA PDF

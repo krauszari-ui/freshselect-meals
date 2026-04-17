@@ -606,3 +606,77 @@ describe("admin.referrerPortal", () => {
     expect(result.referrerName).toBe("John Smith");
   });
 });
+
+// ─── Update Admin Notes ───────────────────────────────────────────────
+describe("admin.updateAdminNotes", () => {
+  it("saves admin notes for a client (staff)", async () => {
+    const caller = appRouter.createCaller(createWorkerContext());
+    const result = await caller.admin.updateAdminNotes({
+      id: 1,
+      adminNotes: "Client called to confirm delivery address. Notes updated.",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("saves admin notes for a client (admin)", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.updateAdminNotes({
+      id: 1,
+      adminNotes: "Approved after eligibility check.",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts empty string to clear notes", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.updateAdminNotes({ id: 1, adminNotes: "" });
+    expect(result.success).toBe(true);
+  });
+
+  it("throws FORBIDDEN for non-staff", async () => {
+    const caller = appRouter.createCaller(createUserContext());
+    await expect(
+      caller.admin.updateAdminNotes({ id: 1, adminNotes: "Hacked" })
+    ).rejects.toThrow("Staff access required");
+  });
+});
+
+// ─── Generate Attestation PDF ─────────────────────────────────────────
+vi.mock("./generatePdf", () => ({
+  generateAttestationPdf: vi.fn().mockResolvedValue(Buffer.from("fake-pdf-bytes")),
+}));
+
+vi.mock("./storage", () => ({
+  storagePut: vi.fn().mockResolvedValue({ key: "attestations/ABC123-abc123.pdf", url: "https://cdn.example.com/attestations/ABC123-abc123.pdf" }),
+}));
+
+describe("admin.generateAttestationPdf", () => {
+  it("generates a PDF and returns a URL for admin", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.generateAttestationPdf({ id: 1 });
+    expect(result.success).toBe(true);
+    expect(result.url).toContain("https://");
+    expect(result.filename).toContain("Sarah");
+    expect(result.filename).toContain("Cohen");
+    expect(result.filename).toContain("attestation");
+  });
+
+  it("generates a PDF for worker staff", async () => {
+    const caller = appRouter.createCaller(createWorkerContext());
+    const result = await caller.admin.generateAttestationPdf({ id: 1 });
+    expect(result.success).toBe(true);
+    expect(result.url).toBeDefined();
+  });
+
+  it("throws NOT_FOUND when client does not exist", async () => {
+    const { getSubmissionById } = await import("./db");
+    vi.mocked(getSubmissionById).mockResolvedValueOnce(undefined);
+    const caller = appRouter.createCaller(createAdminContext());
+    await expect(caller.admin.generateAttestationPdf({ id: 9999 })).rejects.toThrow("Client not found");
+  });
+
+  it("throws FORBIDDEN for non-staff", async () => {
+    const caller = appRouter.createCaller(createUserContext());
+    await expect(caller.admin.generateAttestationPdf({ id: 1 })).rejects.toThrow("Staff access required");
+  });
+});
