@@ -4,7 +4,6 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "../server/_core/oauth";
 import { appRouter } from "../server/routers";
 import { createContext } from "../server/_core/context";
-import { serveStatic } from "../server/_core/vite";
 
 const app = express();
 
@@ -24,7 +23,5 @@ app.use(
   })
 );
 
-// Serve static frontend files (dist/public)
-serveStatic(app);
-
+// Export the Express app — Vercel handles serving public/ as static CDN automatically
 export default app;
