@@ -53,10 +53,15 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
+  // Support multiple entry point locations:
+  // - dist/index.js (local production / Render): __dirname = dist/, public at dist/public
+  // - api/index.js (Vercel serverless): __dirname = api/, public at dist/public (one level up + dist/public)
   const distPath =
     process.env.NODE_ENV === "development"
       ? path.resolve(__dirname, "../..", "dist", "public")
-      : path.resolve(__dirname, "public");
+      : fs.existsSync(path.resolve(__dirname, "public"))
+        ? path.resolve(__dirname, "public")
+        : path.resolve(__dirname, "..", "dist", "public");
   if (!fs.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`

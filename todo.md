@@ -284,3 +284,11 @@
 - [x] Fixed server/_core/vite.ts: replaced import.meta.dirname with fileURLToPath(__filename) for Vercel ESM compatibility
 - [x] 75 tests passing, 0 TypeScript errors, production build verified
 - [ ] Sync to GitHub for Vercel rebuild
+
+## Vercel Serverless Entry Fix
+- [x] Created api/index.ts — Express app exported without listen() for Vercel serverless
+- [x] Updated vercel.json with functions config (nodejs20.x) pointing to api/index.js
+- [x] Updated build script to compile api/index.ts → api/index.js via esbuild
+- [x] Fixed serveStatic path resolution to handle both dist/ and api/ entry contexts
+- [x] 75 tests passing, 0 TypeScript errors, build verified
+- [ ] Sync to GitHub for Vercel redeploy
