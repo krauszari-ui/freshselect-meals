@@ -300,3 +300,12 @@
 - [x] serveStatic path resolution: api/__dirname → ../dist/public (correct for Vercel Lambda at /var/task/api/)
 - [x] 75 tests passing, 0 TypeScript errors, build verified (api/index.js 71.6kb)
 - [ ] Sync to GitHub for Vercel redeploy
+
+## FINAL Vercel Fix — Zero Config Express Detection
+- [x] Deleted vercel.json entirely — Vercel auto-detects Express from src/index.ts
+- [x] Deleted api/index.js — not needed, Vercel compiles src/index.ts itself
+- [x] src/index.ts exports default Express app (no listen())
+- [x] Build script: vite build + esbuild dist/index.js + cp dist/public to public/
+- [x] public/ created by build for Vercel CDN static assets (express.static() ignored by Vercel)
+- [x] 75 tests passing, 0 TypeScript errors
+- [ ] Sync to GitHub for Vercel redeploy
