@@ -73,7 +73,11 @@ export async function getUserByEmail(email: string) {
 
 export async function createSubmission(data: InsertSubmission): Promise<void> {
   const db = await getDb();
-  if (!db) throw new Error("Database not available");
+  if (!db) {
+    const reason = process.env.DATABASE_URL ? "connection failed" : "DATABASE_URL env var is not set";
+    console.error(`[Database] createSubmission failed: ${reason}`);
+    throw new Error(`Database not available: ${reason}`);
+  }
   await db.insert(submissions).values(data);
 }
 
