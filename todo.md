@@ -252,4 +252,11 @@
 - [x] Added server-side logging for submission processing (success/failure with ref numbers)
 - [x] Improved frontend error display to show actual backend error message
 - [x] 75 tests passing, 0 TypeScript errors
-- [ ] Sync to GitHub for redeployment
+- [x] Sync to GitHub for redeployment (checkpoint 4d9abf27)
+
+## Add additionalMembersCount Column (April 2026)
+- [x] Add additionalMembersCount column to Drizzle schema (int, default 0)
+- [x] Push schema to PlanetScale via drizzle-kit push — verified column exists (type: int, default: 0)
+- [x] Update submit logic in routers.ts to map form field to new column (parseInt with fallback to 0)
+- [x] Run tests — 75 passing, 0 TypeScript errors
+- [ ] Sync to GitHub for Vercel redeployment

@@ -148,6 +148,7 @@ export const appRouter = router({
           hipaaConsentAt: consentAt,
           borough: input.city === "Brooklyn" ? "Brooklyn" : input.city,
           neighborhood: input.neighborhood || null,
+          additionalMembersCount: parseInt(input.additionalMembersCount || "0") || 0,
         });
         console.log(`[Submission] ✓ Saved to database (ref: ${refNumber})`);
       } catch (dbErr: any) {
