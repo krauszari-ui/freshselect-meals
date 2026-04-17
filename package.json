@@ -6,7 +6,7 @@
   "engines": { "node": ">=20.0.0" },
   "scripts": {
     "dev": "NODE_ENV=development tsx watch server/_core/index.ts",
-    "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && cp -r dist/public public",
+    "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild src/index.ts --bundle --platform=node --format=esm --outfile=index.mjs --alias:@shared=./shared --alias:@=./client/src --external:express --external:@trpc/server --external:@trpc/client --external:bcryptjs --external:cookie --external:drizzle-orm --external:drizzle-orm/mysql2 --external:jose --external:mysql2 --external:resend --external:superjson --external:zod --external:dotenv --external:nanoid --external:vite --external:@aws-sdk/client-s3 --external:@aws-sdk/s3-request-presigner --external:axios --external:xlsx --external:@tailwindcss/* --external:@vitejs/* --external:@babel/* --external:lightningcss --external:tailwindcss ",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc --noEmit",
     "format": "prettier --write .",
