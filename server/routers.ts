@@ -23,7 +23,6 @@ import bcrypt from "bcryptjs";
 import { sdk } from "./_core/sdk";
 import { sendAdminNotification, sendApplicantConfirmation } from "./email";
 import { storagePut } from "./storage";
-import { generateAttestationPdf } from "./generatePdf";
 import { z } from "zod";
 
 // Admin-only guard middleware
@@ -380,31 +379,6 @@ export const appRouter = router({
       await deleteSubmission(input.id);
       return { success: true };
     }),
-
-    // ─── Generate Attestation + HIPAA PDF ─────────────────────────────────
-    generateAttestationPdf: staffProcedure.input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
-        const submission = await getSubmissionById(input.id);
-        if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
-        const pdfBuffer = await generateAttestationPdf({
-          referenceNumber: submission.referenceNumber,
-          firstName: submission.firstName,
-          lastName: submission.lastName,
-          email: submission.email,
-          cellPhone: submission.cellPhone,
-          medicaidId: submission.medicaidId,
-          supermarket: submission.supermarket,
-          referralSource: submission.referralSource,
-          hipaaConsentAt: submission.hipaaConsentAt,
-          createdAt: submission.createdAt,
-          formData: (submission.formData as Record<string, unknown>) || {},
-        });
-        // Upload to S3 and return a presigned URL
-        const suffix = Math.random().toString(36).substring(2, 8);
-        const key = `attestations/${submission.referenceNumber}-${suffix}.pdf`;
-        const { url } = await storagePut(key, pdfBuffer, "application/pdf");
-        return { success: true, url, filename: `${submission.firstName}-${submission.lastName}-attestation.pdf` };
-      }),
 
     // ─── Update admin notes (assessment) ──────────────────────────────────
     updateAdminNotes: staffProcedure.input(z.object({

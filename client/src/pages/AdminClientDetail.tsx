@@ -186,22 +186,7 @@ export default function AdminClientDetail() {
     updateAdminNotesMutation.mutate({ id, adminNotes: adminNotesText });
   };
 
-  // PDF Generation
-  const generatePdfMutation = trpc.admin.generateAttestationPdf.useMutation({
-    onSuccess: (data) => {
-      // Open the PDF URL in a new tab for download
-      const a = document.createElement("a");
-      a.href = data.url;
-      a.download = data.filename;
-      a.target = "_blank";
-      a.click();
-      toast.success("PDF generated — downloading now");
-    },
-    onError: (err) => toast.error("Failed to generate PDF: " + err.message),
-  });
-  const handleDownloadPdf = () => {
-    generatePdfMutation.mutate({ id });
-  };
+
 
   const staffList = (staffQuery.data ?? []) as any[];
   const getWorkerName = (wId: number | null) => {
@@ -616,28 +601,7 @@ export default function AdminClientDetail() {
               )}
             </div>
 
-            {/* PDF Download */}
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Documents</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Generate official PDF documents for this client</p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 h-8 text-xs px-3 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                  onClick={handleDownloadPdf}
-                  disabled={generatePdfMutation.isPending}
-                >
-                  {generatePdfMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                  {generatePdfMutation.isPending ? "Generating..." : "Download Attestation + HIPAA PDF"}
-                </Button>
-              </div>
-              <p className="text-xs text-slate-500">
-                The PDF includes: Household Attestation Statement, HIPAA Consent record with timestamp, all household members, and the applicant's electronic signature.
-              </p>
-            </div>
+
 
             <div className="bg-white rounded-lg border border-slate-200 p-6">
             <div className="flex items-center justify-between mb-6">
