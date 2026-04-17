@@ -94,6 +94,22 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+    dbStatus: publicProcedure.query(async () => {
+      const { getDb } = await import("./db");
+      const db = await getDb();
+      const hasDbUrl = !!process.env.DATABASE_URL;
+      const dbConnected = !!db;
+      let userCount = 0;
+      if (db) {
+        try {
+          const { users } = await import("../drizzle/schema");
+          const { sql } = await import("drizzle-orm");
+          const result = await db.select({ count: sql<number>`count(*)` }).from(users);
+          userCount = Number(result[0]?.count ?? 0);
+        } catch (e) { userCount = -1; }
+      }
+      return { hasDbUrl, dbConnected, userCount };
+    }),
     adminLogin: publicProcedure
       .input(z.object({ email: z.string().email(), password: z.string().min(1) }))
       .mutation(async ({ ctx, input }) => {
