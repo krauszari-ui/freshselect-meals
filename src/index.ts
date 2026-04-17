@@ -24,7 +24,10 @@ app.use(
   })
 );
 
-// Serve static files (React frontend from dist/public or public/)
+// Serve static files and SPA catch-all.
+// On Vercel: express.static() is ignored (CDN serves public/**),
+// but the catch-all still handles SPA routing via res.sendFile().
+// On other platforms: express.static() serves assets normally.
 serveStatic(app);
 
 // Export the Express app — Vercel handles invoking it as a serverless function
