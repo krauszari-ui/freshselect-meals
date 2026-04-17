@@ -1,15 +1,20 @@
 {
   "version": 2,
-  "buildCommand": "pnpm build",
-  "outputDirectory": "dist",
   "builds": [
     {
-      "src": "dist/index.js",
-      "use": "@vercel/node"
+      "src": "package.json",
+      "use": "@vercel/node",
+      "config": {
+        "buildCommand": "pnpm build",
+        "outputDirectory": "dist"
+      }
     }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "dist/index.js" }
+    {
+      "src": "/(.*)",
+      "dest": "/dist/index.js"
+    }
   ],
   "headers": [
     {
