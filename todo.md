@@ -309,3 +309,10 @@
 - [x] public/ created by build for Vercel CDN static assets (express.static() ignored by Vercel)
 - [x] 75 tests passing, 0 TypeScript errors
 - [ ] Sync to GitHub for Vercel redeploy
+
+## DEFINITIVE Vercel Fix — @vercel/node Runtime (April 2026)
+- [ ] Create api/index.js as CommonJS serverless function entry point
+- [ ] Create vercel.json with functions (@vercel/node runtime) and rewrites
+- [ ] Ensure dist/public is bundled correctly for frontend assets
+- [ ] Verify build and tests pass after changes
+- [ ] Sync to GitHub for Vercel redeploy
