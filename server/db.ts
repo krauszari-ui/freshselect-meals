@@ -1,5 +1,6 @@
 import { and, desc, eq, like, ne, or, sql, isNull, isNotNull, asc, gte, lte } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
 import {
   InsertSubmission, InsertUser, Submission, submissions, users,
   tasks, InsertTask, Task,
@@ -9,19 +10,30 @@ import {
   referralLinks, InsertReferralLink, ReferralLink,
 } from "../drizzle/schema";
 
-let _db: ReturnType<typeof drizzle> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _db: MySql2Database<Record<string, unknown>> | null = null;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      // PlanetScale requires SSL. We append ?ssl={"rejectUnauthorized":true} to
-      // the connection string so the drizzle string-overload handles the pool
-      // creation internally — no FK constraints are defined in the schema.
       const url = new URL(process.env.DATABASE_URL);
-      if (!url.searchParams.has("ssl")) {
-        url.searchParams.set("ssl", JSON.stringify({ rejectUnauthorized: true }));
-      }
-      _db = drizzle(url.toString());
+      // TiDB Cloud / PlanetScale require SSL
+      const sslConfig = url.hostname.includes("localhost") || url.hostname.includes("127.0.0.1")
+        ? undefined
+        : { rejectUnauthorized: true };
+      // Explicit pool: 2-5 connections is ideal for serverless (Vercel) where
+      // each function invocation is short-lived. Keeps warm connections without
+      // exhausting the DB's connection limit.
+      const pool = mysql.createPool({
+        uri: url.toString(),
+        ssl: sslConfig,
+        connectionLimit: 5,
+        waitForConnections: true,
+        queueLimit: 10,
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 10000,
+      });
+      _db = drizzle(pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
