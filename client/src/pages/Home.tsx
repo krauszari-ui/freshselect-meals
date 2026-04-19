@@ -171,7 +171,7 @@ const INITIAL_FORM: FormData = {
   dietaryRestrictions: "",
   newApplicant: "",
   transferAgencyName: "",
-  additionalMembersCount: "0",
+  additionalMembersCount: "",
   householdMembers: [],
   mealFocus: [],
   breakfastItems: "",
@@ -307,8 +307,7 @@ function validateStep2(form: FormData): FormErrors {
 function validateStep3(form: FormData): FormErrors {
   const e: FormErrors = {};
   // Household members required
-  const memberCount = parseInt(form.additionalMembersCount) || 0;
-  // 0 members (None) is now acceptable
+  if (!form.additionalMembersCount) e.householdMembers = "Please select the number of household members";
   if (form.mealFocus.length === 0) e.mealFocus = "Select at least one meal type";
   if (!form.needsRefrigerator) e.needsRefrigerator = "Required";
   if (!form.needsMicrowave) e.needsMicrowave = "Required";
@@ -733,7 +732,7 @@ export default function Home() {
   };
 
   useEffect(() => {
-    const count = parseInt(form.additionalMembersCount) || 0;
+    const count = form.additionalMembersCount ? parseInt(form.additionalMembersCount) || 0 : 0;
     setForm((prev) => {
       const current = [...prev.householdMembers];
       while (current.length < count) current.push({ name: "", dateOfBirth: "", medicaidId: "", relationship: "" });
@@ -1355,7 +1354,7 @@ export default function Home() {
                     <h3 className="font-bold text-stone-800 flex items-center gap-2">
                       <Users className="w-4 h-4 text-green-600" /> Household Members *
                     </h3>
-                    <p className="text-sm text-stone-500">You must add at least one household member.</p>
+                    <p className="text-sm text-stone-500">Select the number of household members in your household.</p>
                     {errors.householdMembers && <p className="text-red-500 text-xs">{errors.householdMembers}</p>}
                     <div>
                       <Label className="text-stone-700">Number of household members *</Label>
@@ -1363,15 +1362,17 @@ export default function Home() {
                         value={form.additionalMembersCount}
                         onValueChange={(v) => update("additionalMembersCount", v)}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select..." />
+                        <SelectTrigger className={errors.householdMembers ? "border-red-400" : ""}>
+                          <SelectValue placeholder="Please select..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {Array.from({ length: 10 }, (_, i) => (
-                            <SelectItem key={i} value={String(i)}>
-                              {i === 0 ? "None" : `${i} additional member${i > 1 ? "s" : ""}`}
-                            </SelectItem>
-                          ))}
+                          {Array.from({ length: 10 }, (_, i) =>
+                            i === 0 ? null : (
+                              <SelectItem key={i} value={String(i)}>
+                                {`${i} member${i > 1 ? "s" : ""}`}
+                              </SelectItem>
+                            )
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1442,7 +1443,7 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Per-child document uploads */}
+                        {/* Per-member document uploads */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
                           <FileUploadField
                             label={`Member ${idx + 1} Medicaid Card`}
@@ -1460,6 +1461,16 @@ export default function Home() {
                             uploading={uploading}
                             setUploading={setUploading}
                           />
+                          {member.relationship === "Husband" && (
+                            <FileUploadField
+                              label="Marriage License"
+                              category={`memberMarriageLicense_${idx}`}
+                              uploads={uploads}
+                              setUploads={setUploads}
+                              uploading={uploading}
+                              setUploading={setUploading}
+                            />
+                          )}
                         </div>
                       </div>
                     ))}
