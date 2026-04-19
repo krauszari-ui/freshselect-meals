@@ -11,8 +11,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText,
+  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText, Trash2,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import * as XLSX from "xlsx";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { Link, useSearch } from "wouter";
@@ -396,9 +401,12 @@ export default function AdminClients() {
   const [programFilter, setProgramFilter] = useState("all");
   const [workerFilter, setWorkerFilter] = useState("all");
   const [repFilter, setRepFilter] = useState("all");
+  const [referralFilter, setReferralFilter] = useState("all");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 400);
@@ -414,11 +422,23 @@ export default function AdminClients() {
     borough: boroughFilter !== "all" ? boroughFilter : undefined,
     assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
     intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
+    referralSource: referralFilter !== "all" ? referralFilter : undefined,
     page,
     pageSize: 25,
   });
 
   const staffQuery = trpc.admin.staffList.useQuery();
+  const referralLinksQuery = trpc.admin.referrals.list.useQuery();
+  const referralLinks = (referralLinksQuery.data ?? []) as any[];
+
+  const bulkDeleteMutation = trpc.admin.bulkDeleteClients.useMutation({
+    onSuccess: (data) => {
+      toast.success(`${data.deleted} client${data.deleted === 1 ? '' : 's'} deleted`);
+      setSelectedIds(new Set());
+      utils.admin.list.invalidate();
+    },
+    onError: () => toast.error("Failed to delete selected clients"),
+  });
 
   const listData = listQuery.data as any;
   const rows = listData?.rows ?? [];
@@ -606,7 +626,39 @@ export default function AdminClients() {
               ))}
             </SelectContent>
           </Select>
+
+          <Select value={referralFilter} onValueChange={(v) => { setReferralFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
+              <SelectValue placeholder="Referral Source" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Referral Source</SelectItem>
+              {referralLinks.map((r: any) => (
+                <SelectItem key={r.code} value={r.code}>{r.referrerName || r.code}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+
+        {/* Bulk Delete Toolbar */}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2.5 bg-red-50 border border-red-200 rounded-lg">
+            <span className="text-sm font-medium text-red-700">{selectedIds.size} client{selectedIds.size === 1 ? '' : 's'} selected</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 border-red-300 text-red-700 hover:bg-red-100"
+              onClick={() => setShowBulkDeleteConfirm(true)}
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Delete Selected
+            </Button>
+            <Button variant="ghost" size="sm" className="h-8 text-slate-500" onClick={() => setSelectedIds(new Set())}>
+              Clear Selection
+            </Button>
+          </div>
+        )}
 
         {/* Table */}
         <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
@@ -623,6 +675,19 @@ export default function AdminClients() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-200">
+                    <th className="px-4 py-3 w-10">
+                      <Checkbox
+                        checked={filteredRows.length > 0 && filteredRows.every((c: any) => selectedIds.has(c.id))}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedIds(new Set(filteredRows.map((c: any) => c.id)));
+                          } else {
+                            setSelectedIds(new Set());
+                          }
+                        }}
+                        aria-label="Select all"
+                      />
+                    </th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Client</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">CIN</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">DOB</th>
@@ -649,8 +714,20 @@ export default function AdminClients() {
                     const householdMembers = fd.householdMembers || [];
                     const householdDisplay = householdMembers.length > 0 ? householdMembers[0]?.name || "\u2014" : "\u2014";
 
+                    const isSelected = selectedIds.has(client.id);
                     return (
-                      <tr key={client.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                      <tr key={client.id} className={`border-b border-slate-100 hover:bg-slate-50/50 transition-colors ${isSelected ? 'bg-red-50/40' : ''}`}>
+                        <td className="px-4 py-3 w-10" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={(checked) => {
+                              const next = new Set(selectedIds);
+                              if (checked) next.add(client.id); else next.delete(client.id);
+                              setSelectedIds(next);
+                            }}
+                            aria-label={`Select ${client.firstName} ${client.lastName}`}
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           <Link href={`/admin/clients/${client.id}`}>
                             <div className="flex items-center gap-3 cursor-pointer">
@@ -709,6 +786,27 @@ export default function AdminClients() {
         onClose={() => setShowAddDialog(false)}
         onSuccess={() => utils.admin.list.invalidate()}
       />
+
+      {/* Bulk Delete Confirmation */}
+      <AlertDialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} client{selectedIds.size === 1 ? '' : 's'}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {selectedIds.size} client record{selectedIds.size === 1 ? '' : 's'} and all associated data (documents, notes, tasks). This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => bulkDeleteMutation.mutate({ ids: Array.from(selectedIds) })}
+            >
+              Delete {selectedIds.size} client{selectedIds.size === 1 ? '' : 's'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }

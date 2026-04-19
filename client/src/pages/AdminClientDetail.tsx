@@ -209,7 +209,39 @@ export default function AdminClientDetail() {
   const additionalAddresses = fd.additionalAddresses || [];
   const additionalPhones = fd.additionalPhones || [];
   const additionalEmails = fd.additionalEmails || [];
-  const documents = fd.documents || fd.uploadedDocuments || {};
+  const uploadedDocuments = fd.uploadedDocuments || fd.documents || {} as Record<string, string>;
+
+  // Build a human-readable label map for document keys
+  const DOC_LABEL_MAP: Record<string, string> = {
+    childMedicaidCard_0: "Child Medicaid Card",
+    childBirthCertificate_0: "Child Birth Certificate",
+    memberMedicaidCard_0: "Member 1 — Medicaid Card",
+    memberBirthCertificate_0: "Member 1 — Birth Certificate",
+    memberMarriageLicense_0: "Member 1 — Marriage License",
+    memberMedicaidCard_1: "Member 2 — Medicaid Card",
+    memberBirthCertificate_1: "Member 2 — Birth Certificate",
+    memberMarriageLicense_1: "Member 2 — Marriage License",
+    memberMedicaidCard_2: "Member 3 — Medicaid Card",
+    memberBirthCertificate_2: "Member 3 — Birth Certificate",
+    memberMarriageLicense_2: "Member 3 — Marriage License",
+    memberMedicaidCard_3: "Member 4 — Medicaid Card",
+    memberBirthCertificate_3: "Member 4 — Birth Certificate",
+    memberMarriageLicense_3: "Member 4 — Marriage License",
+    memberMedicaidCard_4: "Member 5 — Medicaid Card",
+    memberBirthCertificate_4: "Member 5 — Birth Certificate",
+    memberMarriageLicense_4: "Member 5 — Marriage License",
+  };
+  function getDocLabel(key: string): string {
+    if (DOC_LABEL_MAP[key]) return DOC_LABEL_MAP[key];
+    // Auto-label: memberMedicaidCard_N → Member N+1 — Medicaid Card
+    const m = key.match(/^(member|child)([A-Za-z]+)_?(\d+)?$/);
+    if (m) {
+      const prefix = m[1] === 'child' ? 'Child' : `Member ${parseInt(m[3] || '0') + 1}`;
+      const docType = m[2].replace(/([A-Z])/g, ' $1').trim();
+      return `${prefix} — ${docType}`;
+    }
+    return key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase());
+  }
 
   const stageInfo = STAGE_CONFIG[client.stage] || { label: client.stage, bg: "bg-slate-100", text: "text-slate-700" };
   const isReferral = client.stage === "referral";
@@ -568,31 +600,45 @@ export default function AdminClientDetail() {
                   <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
                 </label>
                 {uploadDocMutation.isPending && <div className="flex items-center gap-2 text-sm text-blue-600 mb-2"><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</div>}
+                {/* Form-submitted documents (uploaded during application) */}
+                {Object.keys(uploadedDocuments).length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Submitted with Application</p>
+                    <div className="space-y-2">
+                      {Object.entries(uploadedDocuments).map(([key, url]) => (
+                        <div key={key} className="flex items-center justify-between p-2 rounded bg-emerald-50 border border-emerald-100">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-emerald-500" />
+                            <span className="text-sm text-slate-700">{getDocLabel(key)}</span>
+                          </div>
+                          <a href={url as string} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" />
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Admin-uploaded documents */}
                 {clientDocs && (clientDocs as any[]).length > 0 ? (
-                  <div className="space-y-2">
-                    {(clientDocs as any[]).map((doc: any) => (
-                      <div key={doc.id} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-slate-400" />
-                          <span className="text-sm text-slate-700">{doc.name}</span>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Admin Uploads</p>
+                    <div className="space-y-2">
+                      {(clientDocs as any[]).map((doc: any) => (
+                        <div key={doc.id} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-slate-400" />
+                            <span className="text-sm text-slate-700">{doc.name}</span>
+                          </div>
+                          <a href={doc.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" /></a>
                         </div>
-                        <a href={doc.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" /></a>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                ) : Object.keys(documents).length > 0 ? (
-                  <div className="space-y-2">
-                    {Object.entries(documents).map(([key, url]) => (
-                      <div key={key} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-slate-400" />
-                          <span className="text-sm text-slate-700">{key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}</span>
-                        </div>
-                        <a href={url as string} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" /></a>
-                      </div>
-                    ))}
-                  </div>
-                ) : <p className="text-sm text-slate-400">No documents yet. Upload one above.</p>}
+                ) : Object.keys(uploadedDocuments).length === 0 ? (
+                  <p className="text-sm text-slate-400">No documents yet. Upload one above.</p>
+                ) : null}
               </div>
             </div>
           </div>

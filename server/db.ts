@@ -116,6 +116,7 @@ export interface ListSubmissionsOptions {
   borough?: string;
   assignedTo?: number;
   intakeRep?: number;
+  referralSource?: string;
   page?: number;
   pageSize?: number;
 }
@@ -123,7 +124,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, supermarket, language, borough, assignedTo, intakeRep, page = 1, pageSize = 20 } = opts;
+  const { search, status, stage, supermarket, language, borough, assignedTo, intakeRep, referralSource, page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -142,6 +143,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   if (borough && borough !== "all") conditions.push(eq(submissions.borough, borough));
   if (assignedTo) conditions.push(eq(submissions.assignedTo, assignedTo));
   if (intakeRep) conditions.push(eq(submissions.intakeRep, intakeRep));
+  if (referralSource && referralSource !== "all") conditions.push(eq(submissions.referralSource, referralSource));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const [rows, countResult] = await Promise.all([
@@ -202,15 +204,20 @@ export async function updateSubmissionEmailSent(id: number): Promise<void> {
 export async function getSubmissionStats() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const [statusResult, stageResult] = await Promise.all([
+  const [statusResult, stageResult, membersResult] = await Promise.all([
     db.select({ status: submissions.status, count: sql<number>`count(*)` }).from(submissions).groupBy(submissions.status),
     db.select({ stage: submissions.stage, count: sql<number>`count(*)` }).from(submissions).groupBy(submissions.stage),
+    db.select({ totalAdditional: sql<number>`COALESCE(SUM(additionalMembersCount), 0)`, totalApplications: sql<number>`count(*)` }).from(submissions),
   ]);
   const stats: Record<string, number> = { total: 0, new: 0, in_review: 0, approved: 0, rejected: 0, on_hold: 0 };
   for (const row of statusResult) { stats[row.status] = Number(row.count); stats.total += Number(row.count); }
   const stages: Record<string, number> = {};
   for (const row of stageResult) { stages[row.stage] = Number(row.count); }
-  return { ...stats, stages };
+  // Total members = sum of all additionalMembersCount + 1 per application (primary applicant)
+  const totalAdditional = Number(membersResult[0]?.totalAdditional ?? 0);
+  const totalApplications = Number(membersResult[0]?.totalApplications ?? 0);
+  const totalMembers = totalAdditional + totalApplications;
+  return { ...stats, stages, totalMembers };
 }
 
 export async function getRecentSubmissions(days: number = 7, limit: number = 10) {
@@ -416,6 +423,21 @@ export async function deleteSubmission(id: number): Promise<void> {
   await db.delete(documents).where(eq(documents.submissionId, id));
   await db.delete(services).where(eq(services.submissionId, id));
   await db.delete(submissions).where(eq(submissions.id, id));
+}
+
+export async function bulkDeleteSubmissions(ids: number[]): Promise<void> {
+  if (!ids.length) return;
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Delete related records for all ids first
+  for (const id of ids) {
+    await db.delete(tasks).where(eq(tasks.submissionId, id));
+    await db.delete(caseNotes).where(eq(caseNotes.submissionId, id));
+    await db.delete(documents).where(eq(documents.submissionId, id));
+    await db.delete(services).where(eq(services.submissionId, id));
+  }
+  // Delete all submissions in one query using IN clause
+  await db.delete(submissions).where(sql`id IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`);
 }
 
 // ─── Referral Link helpers ───────────────────────────────────────────────
