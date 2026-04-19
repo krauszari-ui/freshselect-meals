@@ -1397,6 +1397,7 @@ export default function Home() {
                               <SelectContent>
                                 <SelectItem value="Child">Child</SelectItem>
                                 <SelectItem value="Husband">Husband</SelectItem>
+                                <SelectItem value="Wife">Wife</SelectItem>
                                 <SelectItem value="Mother">Mother</SelectItem>
                                 <SelectItem value="Other">Other</SelectItem>
                               </SelectContent>
@@ -1461,7 +1462,7 @@ export default function Home() {
                             uploading={uploading}
                             setUploading={setUploading}
                           />
-                          {member.relationship === "Husband" && (
+                          {(member.relationship === "Husband" || member.relationship === "Wife") && (
                             <FileUploadField
                               label="Marriage License"
                               category={`memberMarriageLicense_${idx}`}

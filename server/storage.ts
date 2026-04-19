@@ -4,8 +4,13 @@
  */
 
 function getForgeConfig() {
-  const apiUrl = process.env.BUILT_IN_FORGE_API_URL;
-  const apiKey = process.env.BUILT_IN_FORGE_API_KEY;
+  // Try server-side key first, then fall back to the frontend key (available in Vercel as a VITE_ var)
+  const apiUrl =
+    process.env.BUILT_IN_FORGE_API_URL ||
+    process.env.VITE_FRONTEND_FORGE_API_URL;
+  const apiKey =
+    process.env.BUILT_IN_FORGE_API_KEY ||
+    process.env.VITE_FRONTEND_FORGE_API_KEY;
   if (!apiUrl || !apiKey) {
     throw new Error(
       "Manus Forge storage not configured: BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY must be set"
