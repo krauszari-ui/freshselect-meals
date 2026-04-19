@@ -390,5 +390,18 @@
 
 ## Production Issues (April 19, 2026 - Session 2)
 - [x] Fix document uploads not working on production (storage.ts now falls back to VITE_FRONTEND_FORGE_API_KEY; Vercel needs BUILT_IN_FORGE_API_KEY env var added manually)
-- [ ] Fix custom domain https://www.freshselectmeals.com/ not working
+- [x] Fix custom domain https://www.freshselectmeals.com/ not working (domain resolves correctly to Vercel; upload fix is the real issue)
 - [x] Add "Wife" relationship option that also triggers marriage license upload
+
+## Platform Independence Migration (April 19, 2026)
+- [x] Rewrite email.ts: retry logic (3 attempts, exponential backoff), idempotency keys, RESEND_FROM_EMAIL env var
+- [x] Rewrite storage.ts: Cloudflare R2 primary (AWS SDK v3), Manus Forge fallback for local dev
+- [x] Update env.ts: add R2 config fields, resendFromEmail field, keep Forge as optional fallback
+- [x] Update security.ts: remove manus.space from ALLOWED_ORIGINS, remove manus.im from CSP, add R2 CDN domains
+- [x] Add @aws-sdk/client-s3 and @aws-sdk/s3-request-presigner to copy-deps.mjs for Vercel bundle
+- [ ] User action: Set up Cloudflare R2 bucket and add R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL to Vercel env vars
+- [ ] User action: Verify freshselectmeals.com domain in Resend dashboard (add SPF + DKIM DNS records)
+- [ ] User action: After domain verification, set RESEND_FROM_EMAIL = "FreshSelect Meals <noreply@freshselectmeals.com>" in Vercel env vars
+- [ ] User action: Add BUILT_IN_FORGE_API_KEY to Vercel env vars (temporary, until R2 is configured)
+- [ ] Optional: Set up Sentry or BetterStack for error monitoring
+- [ ] Optional: Set up BetterStack Uptime for uptime monitoring and alerting
