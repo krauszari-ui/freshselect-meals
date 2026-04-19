@@ -405,3 +405,12 @@
 - [ ] User action: Add BUILT_IN_FORGE_API_KEY to Vercel env vars (temporary, until R2 is configured)
 - [ ] Optional: Set up Sentry or BetterStack for error monitoring
 - [ ] Optional: Set up BetterStack Uptime for uptime monitoring and alerting
+
+## Admin Dashboard Improvements (April 19, 2026 - Session 3)
+- [x] Show uploaded documents (with download links) in client application detail view
+- [x] Add filter by referral source to admin clients list
+- [x] Add bulk select + select-all checkbox + bulk delete to admin clients list
+- [x] Show total household members count in admin dashboard stats card
+- [x] Trigger Vercel redeploy to activate RESEND_FROM_EMAIL env var (done via browser)
+- [ ] Set up Sentry error monitoring (frontend + backend)
+- [x] Add GitHub Actions CI workflow (.github/workflows/ci.yml — runs type check + tests + build on every push/PR)

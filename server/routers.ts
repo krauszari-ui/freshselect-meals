@@ -13,7 +13,7 @@ import {
   createCaseNote, getCaseNotesBySubmission,
   createDocument, getDocumentsBySubmission, getLibraryDocuments, deleteDocument,
   createService, getServicesBySubmission, updateServiceStatus,
-  updateSubmissionFields, deleteSubmission,
+  updateSubmissionFields, deleteSubmission, bulkDeleteSubmissions,
   createReferralLink, listReferralLinks, getReferralLinkByCode,
   updateReferralLink, deleteReferralLink, incrementReferralUsage, getReferralStats,
   getReferralLinkByEmail, getClientsByReferralCode, getUserByEmail,
@@ -262,6 +262,7 @@ export const appRouter = router({
       borough: z.string().optional(),
       assignedTo: z.number().optional(),
       intakeRep: z.number().optional(),
+      referralSource: z.string().optional(),
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional(),
     })).query(async ({ input }) => listSubmissions(input)),
@@ -420,6 +421,11 @@ export const appRouter = router({
     deleteClient: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
       await deleteSubmission(input.id);
       return { success: true };
+    }),
+
+    bulkDeleteClients: adminProcedure.input(z.object({ ids: z.array(z.number()).min(1).max(100) })).mutation(async ({ input }) => {
+      await bulkDeleteSubmissions(input.ids);
+      return { success: true, deleted: input.ids.length };
     }),
 
     // ─── Update admin notes (assessment) ──────────────────────────────────

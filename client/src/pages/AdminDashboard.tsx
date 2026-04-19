@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
-  Users, ClipboardCheck, CheckCircle2, Loader2, ArrowRight,
+  Users, ClipboardCheck, CheckCircle2, Loader2, ArrowRight, UserCheck,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -50,6 +50,7 @@ export default function AdminDashboard() {
   const stages = (stats as any)?.stages ?? {};
   const openTasks = taskStats?.open ?? 0;
   const completedTasks = taskStats?.completed ?? 0;
+  const totalMembers = (stats as any)?.totalMembers ?? 0;
 
   const PIPELINE_STAGES = [
     "referral", "assessment", "level_one_only", "level_one_household", "level_2_active",
@@ -68,7 +69,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Link href="/admin/clients">
             <div className="bg-white rounded-lg border border-slate-200 p-5 hover:shadow-md transition-shadow cursor-pointer">
               <div className="flex items-start gap-3">
@@ -107,6 +108,21 @@ export default function AdminDashboard() {
               <div>
                 <p className="text-3xl font-bold text-slate-900">{completedTasks}</p>
                 <p className="text-sm text-slate-500">Completed Tasks</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-slate-200 p-5">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-lg bg-violet-50 flex items-center justify-center">
+                <UserCheck className="h-5 w-5 text-violet-600" />
+              </div>
+              <div>
+                <p className="text-3xl font-bold text-slate-900">
+                  {statsLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : totalMembers}
+                </p>
+                <p className="text-sm text-slate-500">Total Members</p>
+                <p className="text-xs text-slate-400 mt-0.5">Clients + household</p>
               </div>
             </div>
           </div>
