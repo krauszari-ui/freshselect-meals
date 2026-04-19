@@ -368,3 +368,12 @@
 - [x] Add editable adminNotes (Assessment notes) to AdminClientDetail Assessment tab with Save button
 - [x] Add server-side PDF generation endpoint for Household Attestation + HIPAA document
 - [x] Add "Download PDF" button in AdminClientDetail to download Household Attestation + HIPAA PDF
+
+## Document Upload Fix & Household Form (Apr 2026)
+
+- [x] Fix document upload: replace broken custom AWS S3 with Manus built-in storage (storagePut via Forge API)
+- [x] Fix household member count dropdown: remove None, add "Please select..." placeholder, make required
+- [x] Add marriage license upload field when Husband is selected as relationship
+- [x] Verify uploaded documents appear in admin portal Documents section (confirmed end-to-end)
+- [x] Remove PDF generation feature (pdfkit CJS/ESM conflict broke Vercel bundle) — restore clean ESM build
+- [x] 79 tests passing, 0 TypeScript errors, Vercel bundle verified clean
