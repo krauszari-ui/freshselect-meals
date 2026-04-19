@@ -387,3 +387,8 @@
 - [x] Add admin dashboard button to view/download the signed attestation PDF
 - [x] Verify Vercel ESM bundle builds and starts cleanly with pdf-lib
 - [x] End-to-end test: submit form → verify PDF appears in admin portal
+
+## Production Issues (April 19, 2026 - Session 2)
+- [x] Fix document uploads not working on production (storage.ts now falls back to VITE_FRONTEND_FORGE_API_KEY; Vercel needs BUILT_IN_FORGE_API_KEY env var added manually)
+- [ ] Fix custom domain https://www.freshselectmeals.com/ not working
+- [x] Add "Wife" relationship option that also triggers marriage license upload
