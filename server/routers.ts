@@ -17,11 +17,13 @@ import {
   createReferralLink, listReferralLinks, getReferralLinkByCode,
   updateReferralLink, deleteReferralLink, incrementReferralUsage, getReferralStats,
   getReferralLinkByEmail, getClientsByReferralCode, getUserByEmail,
+  getSubmissionByRef,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
 import { sdk } from "./_core/sdk";
 import { sendAdminNotification, sendApplicantConfirmation } from "./email";
+import { generateAttestationPdf } from "./generateAttestationPdf";
 import { storagePut } from "./storage";
 import { z } from "zod";
 
@@ -190,6 +192,46 @@ export const appRouter = router({
           const emailPayload = { referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName, email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId, supermarket: input.supermarket, formData: input as unknown as Record<string, unknown> };
           sendApplicantConfirmation(emailPayload).catch((err) => console.warn("[Email] Applicant confirmation failed:", err));
           sendAdminNotification(emailPayload).catch((err) => console.warn("[Email] Admin notification failed:", err));
+
+          // Generate Household Attestation + HIPAA PDF (non-blocking)
+          generateAttestationPdf({
+            applicantName: `${input.firstName} ${input.lastName}`,
+            guardianName: input.guardianName,
+            referenceNumber: refNumber,
+            signatureDataUrl: input.signatureDataUrl,
+            hipaaConsentAt: consentAt,
+            householdMembers: input.householdMembers || [],
+            medicaidId: input.medicaidId,
+            supermarket: input.supermarket,
+          }).then(async (pdfBytes) => {
+            if (!pdfBytes) {
+              console.warn(`[PDF] Attestation PDF generation returned null (ref: ${refNumber})`);
+              return;
+            }
+            try {
+              const suffix = Math.random().toString(36).substring(2, 8);
+              const key = `attestations/${refNumber}-${suffix}.pdf`;
+              const { url } = await storagePut(key, Buffer.from(pdfBytes), "application/pdf");
+              console.log(`[PDF] ✓ Attestation PDF uploaded (ref: ${refNumber}): ${url}`);
+
+              // Link the PDF to the submission in the documents table
+              const submission = await getSubmissionByRef(refNumber);
+              if (submission) {
+                await createDocument({
+                  submissionId: submission.id,
+                  name: `Attestation & HIPAA Consent - ${input.firstName} ${input.lastName}`,
+                  category: "consent",
+                  url,
+                  fileKey: key,
+                  mimeType: "application/pdf",
+                  fileSize: pdfBytes.length,
+                });
+                console.log(`[PDF] ✓ Attestation PDF linked to submission ${submission.id}`);
+              }
+            } catch (uploadErr) {
+              console.error(`[PDF] Failed to upload/link attestation PDF (ref: ${refNumber}):`, uploadErr);
+            }
+          }).catch((pdfErr) => console.error(`[PDF] Attestation generation error (ref: ${refNumber}):`, pdfErr));
         } catch (bgErr) {
           console.warn("[Submission] Background tasks error (non-blocking):", bgErr);
         }

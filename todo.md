@@ -377,3 +377,13 @@
 - [x] Verify uploaded documents appear in admin portal Documents section (confirmed end-to-end)
 - [x] Remove PDF generation feature (pdfkit CJS/ESM conflict broke Vercel bundle) — restore clean ESM build
 - [x] 79 tests passing, 0 TypeScript errors, Vercel bundle verified clean
+
+## Household Attestation + HIPAA PDF Generation (April 19, 2026)
+- [x] Install pdf-lib (pure ESM, no CJS conflicts) for server-side PDF generation
+- [x] Create server/generateAttestationPdf.ts helper that produces a 1-page professional PDF
+- [x] Integrate PDF generation into submission flow with try/catch error isolation (never blocks form submission)
+- [x] Store generated PDF in Manus built-in storage and save URL in documents table
+- [x] Add signature validation — form cannot submit without a signature
+- [x] Add admin dashboard button to view/download the signed attestation PDF
+- [x] Verify Vercel ESM bundle builds and starts cleanly with pdf-lib
+- [x] End-to-end test: submit form → verify PDF appears in admin portal
