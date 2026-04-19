@@ -525,6 +525,31 @@ export default function AdminClientDetail() {
                 ) : <p className="text-sm text-slate-400">No notes yet.</p>}
               </div>
 
+              {/* Signed Attestation & HIPAA PDF */}
+              {clientDocs && (clientDocs as any[]).some((d: any) => d.category === "consent" && d.mimeType === "application/pdf") && (
+                <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                        <FileText className="h-4 w-4 text-emerald-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-emerald-900">Signed Attestation & HIPAA Consent</p>
+                        <p className="text-xs text-emerald-600">Auto-generated PDF with electronic signature</p>
+                      </div>
+                    </div>
+                    <a
+                      href={(clientDocs as any[]).find((d: any) => d.category === "consent" && d.mimeType === "application/pdf")?.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-md transition-colors"
+                    >
+                      <ExternalLink className="h-3 w-3" /> View PDF
+                    </a>
+                  </div>
+                </div>
+              )}
+
               {/* Documents */}
               <div className="bg-white rounded-lg border border-slate-200 p-5">
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Documents</h3>
