@@ -1,5 +1,19 @@
+/**
+ * Email service using Resend.
+ *
+ * Best practices implemented:
+ * - Idempotency keys prevent duplicate sends on retry
+ * - Exponential back-off retry (up to 3 attempts) for 429 / 5xx errors
+ * - FROM_EMAIL reads from RESEND_FROM_EMAIL env var so it can be changed
+ *   without a code deploy (falls back to onboarding@resend.dev for local dev)
+ * - All errors are caught and logged; functions return boolean so callers
+ *   can decide whether to surface the failure to the user
+ */
+
 import { Resend } from "resend";
 import { ENV } from "./_core/env";
+
+// ─── Client singleton ────────────────────────────────────────────────────────
 
 let _resend: Resend | null = null;
 
@@ -10,8 +24,65 @@ function getResend(): Resend {
   return _resend;
 }
 
-const FROM_EMAIL = "FreshSelect Meals <onboarding@resend.dev>";
+// ─── Configuration ───────────────────────────────────────────────────────────
+
+/**
+ * FROM_EMAIL is read from the RESEND_FROM_EMAIL environment variable.
+ * Once you verify freshselectmeals.com in Resend, set:
+ *   RESEND_FROM_EMAIL = "FreshSelect Meals <noreply@freshselectmeals.com>"
+ *
+ * Until then, the fallback uses Resend's shared testing address which only
+ * delivers to the account owner's email (scn@levelupresources.org).
+ */
+const FROM_EMAIL =
+  process.env.RESEND_FROM_EMAIL ?? "FreshSelect Meals <onboarding@resend.dev>";
+
 const ADMIN_EMAIL = "info@freshselectmeals.com";
+
+// ─── Retry helper ────────────────────────────────────────────────────────────
+
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 500;
+
+async function sendWithRetry(
+  sendFn: (idempotencyKey: string) => Promise<{ error: unknown }>,
+  idempotencyKey: string
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const { error } = await sendFn(idempotencyKey);
+      if (!error) return true;
+
+      // Resend error objects have a statusCode field
+      const statusCode = (error as { statusCode?: number }).statusCode;
+      if (statusCode && !RETRYABLE_STATUS_CODES.has(statusCode)) {
+        // Non-retryable error (e.g. 403 domain not verified, 422 invalid address)
+        console.error(`[Email] Non-retryable error (${statusCode}):`, error);
+        return false;
+      }
+
+      if (attempt < MAX_RETRIES) {
+        const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1); // 500ms, 1s, 2s
+        console.warn(`[Email] Attempt ${attempt} failed (${statusCode}), retrying in ${delay}ms...`);
+        await new Promise((r) => setTimeout(r, delay));
+      } else {
+        console.error(`[Email] All ${MAX_RETRIES} attempts failed:`, error);
+      }
+    } catch (err) {
+      if (attempt < MAX_RETRIES) {
+        const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        console.warn(`[Email] Attempt ${attempt} threw, retrying in ${delay}ms:`, err);
+        await new Promise((r) => setTimeout(r, delay));
+      } else {
+        console.error(`[Email] All ${MAX_RETRIES} attempts threw:`, err);
+      }
+    }
+  }
+  return false;
+}
+
+// ─── Email data types ─────────────────────────────────────────────────────────
 
 interface SubmissionEmailData {
   referenceNumber: string;
@@ -23,6 +94,8 @@ interface SubmissionEmailData {
   supermarket: string;
   formData: Record<string, unknown>;
 }
+
+// ─── HTML builder ─────────────────────────────────────────────────────────────
 
 function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
   const fd = data.formData as Record<string, unknown>;
@@ -90,7 +163,6 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
       utilityShutoff: "Utility Shutoff Threat",
       receivesSnap: "Receives SNAP",
       receivesWic: "Receives WIC",
-
       hasChronicIllness: "Has Chronic Illness",
       otherHealthIssues: "Other Health Issues",
       medicationsRequireRefrigeration: "Medications Require Refrigeration",
@@ -179,42 +251,57 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
   return html;
 }
 
+// ─── Public send functions ────────────────────────────────────────────────────
+
 export async function sendApplicantConfirmation(data: SubmissionEmailData): Promise<boolean> {
-  try {
-    const resend = getResend();
-    const { error } = await resend.emails.send({
-      from: FROM_EMAIL,
-      to: [data.email],
-      subject: `FreshSelect Meals - Application Received (Ref: ${data.referenceNumber})`,
-      html: buildEmailHtml(data, false),
-    });
-    if (error) {
-      console.error("[Email] Failed to send applicant confirmation:", error);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error("[Email] Error sending applicant confirmation:", err);
-    return false;
+  const resend = getResend();
+  const subject = `FreshSelect Meals - Application Received (Ref: ${data.referenceNumber})`;
+  const html = buildEmailHtml(data, false);
+  // Idempotency key: applicant + ref prevents duplicate sends on retry
+  const idempotencyKey = `applicant-${data.referenceNumber}`;
+
+  const success = await sendWithRetry(
+    (key) =>
+      resend.emails.send({
+        from: FROM_EMAIL,
+        to: [data.email],
+        subject,
+        html,
+        headers: { "X-Idempotency-Key": key },
+      }),
+    idempotencyKey
+  );
+
+  if (success) {
+    console.log(`[Email] ✓ Applicant confirmation sent to ${data.email} (ref: ${data.referenceNumber})`);
+  } else {
+    console.error(`[Email] ✗ Failed to send applicant confirmation to ${data.email} (ref: ${data.referenceNumber})`);
   }
+  return success;
 }
 
 export async function sendAdminNotification(data: SubmissionEmailData): Promise<boolean> {
-  try {
-    const resend = getResend();
-    const { error } = await resend.emails.send({
-      from: FROM_EMAIL,
-      to: [ADMIN_EMAIL],
-      subject: `New Application: ${data.firstName} ${data.lastName} (Ref: ${data.referenceNumber})`,
-      html: buildEmailHtml(data, true),
-    });
-    if (error) {
-      console.error("[Email] Failed to send admin notification:", error);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error("[Email] Error sending admin notification:", err);
-    return false;
+  const resend = getResend();
+  const subject = `New Application: ${data.firstName} ${data.lastName} (Ref: ${data.referenceNumber})`;
+  const html = buildEmailHtml(data, true);
+  const idempotencyKey = `admin-${data.referenceNumber}`;
+
+  const success = await sendWithRetry(
+    (key) =>
+      resend.emails.send({
+        from: FROM_EMAIL,
+        to: [ADMIN_EMAIL],
+        subject,
+        html,
+        headers: { "X-Idempotency-Key": key },
+      }),
+    idempotencyKey
+  );
+
+  if (success) {
+    console.log(`[Email] ✓ Admin notification sent for ${data.firstName} ${data.lastName} (ref: ${data.referenceNumber})`);
+  } else {
+    console.error(`[Email] ✗ Failed to send admin notification (ref: ${data.referenceNumber})`);
   }
+  return success;
 }

@@ -20,11 +20,8 @@ import { nanoid } from "nanoid";
 const ALLOWED_ORIGINS = [
   "https://freshselectmeals.com",
   "https://www.freshselectmeals.com",
-  "https://freshmeals-axnnnkd6.manus.space",
   // Vercel preview deployments
   /^https:\/\/freshselect-meals[a-z0-9-]*\.vercel\.app$/,
-  // Manus dev tunnels
-  /^https:\/\/[a-z0-9-]+\.us2\.manus\.computer$/,
   // Local development
   /^https?:\/\/localhost(:\d+)?$/,
   /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
@@ -107,12 +104,12 @@ export const helmetMiddleware = helmet({
         "https:",
         "https://maps.googleapis.com",
         "https://maps.gstatic.com",
-        "https://d2xsxph8kpxj0f.cloudfront.net", // Manus CDN
+        "https://*.r2.dev",           // Cloudflare R2 public bucket URLs
+        "https://*.cloudflarestorage.com", // Cloudflare R2 presigned URLs
       ],
       connectSrc: [
         "'self'",
-        "https://api.manus.im",
-        "https://*.manus.computer",
+        "https://api.resend.com",
         "https://maps.googleapis.com",
         "wss:", // WebSocket for Vite HMR
       ],

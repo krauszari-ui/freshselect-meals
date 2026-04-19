@@ -27,6 +27,9 @@ const REQUIRED = [
   "zod",
   "mysql2",
   "nanoid",
+  "@aws-sdk/client-s3",
+  "@aws-sdk/s3-request-presigner",
+  "pdf-lib",
 ];
 
 const copied = new Set();
