@@ -334,9 +334,9 @@ export const appRouter = router({
       // Use a client-specific reply-to so inbound replies are automatically matched to this client.
       // Format: reply-{submissionId}@freshselectmeals.com
       // Resend inbound webhook at /api/inbound-email parses this to find the right client record.
-      const INBOUND_DOMAIN = process.env.RESEND_INBOUND_DOMAIN ?? "freshselectmeals.com";
+      const INBOUND_DOMAIN = process.env.RESEND_INBOUND_DOMAIN ?? "inbound.freshselectmeals.com";
       const replyTo = `reply-${input.submissionId}@${INBOUND_DOMAIN}`;
-      const fromEmail = `FreshSelect Meals <info@freshselectmeals.com>`;
+      const fromEmail = `FreshSelect Meals <admin@freshselectmeals.com>`;
       const success = await sendEmail({
         to: submission.email,
         subject: input.subject,
@@ -345,7 +345,7 @@ export const appRouter = router({
           <p style="color:#2d5a27;font-weight:bold;">FreshSelect Meals</p>
           ${input.body.replace(/\n/g, "<br/>")}
           ${input.attachmentUrls && input.attachmentUrls.length > 0 ? `<hr/><p style="font-size:13px;color:#666;">Attachments: ${input.attachmentUrls.map((u, i) => `<a href="${u}">Attachment ${i + 1}</a>`).join(", ")}</p>` : ""}
-          <hr/><p style="font-size:12px;color:#999;">FreshSelect Meals &mdash; (718) 307-4664 | info@freshselectmeals.com<br/>To reply, simply reply to this email.</p>
+          <hr/><p style="font-size:12px;color:#999;">FreshSelect Meals &mdash; (718) 307-4664 | admin@freshselectmeals.com<br/>To reply, simply reply to this email.</p>
         </div>`,
       });
       if (!success) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to send email" });

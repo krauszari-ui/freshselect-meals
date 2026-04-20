@@ -145,7 +145,7 @@ export async function generateAttestationPdf(data: AttestationData): Promise<Uin
     // ── Footer ──
     page.drawLine({ start: { x: margin, y: 50 }, end: { x: 612 - margin, y: 50 }, thickness: 0.5, color: gray });
     page.drawText(
-      `FreshSelect Meals — SCN Approved Vendor  |  (718) 307-4664  |  info@freshselectmeals.com`,
+      `FreshSelect Meals — SCN Approved Vendor  |  (718) 307-4664  |  admin@freshselectmeals.com`,
       { x: margin, y: 38, font: helvetica, size: 7, color: gray }
     );
     page.drawText(
