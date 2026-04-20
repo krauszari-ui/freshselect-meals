@@ -8,6 +8,7 @@ import {
   documents, InsertDocument, Document,
   services, InsertService, Service,
   referralLinks, InsertReferralLink, ReferralLink,
+  stageHistory, InsertStageHistory,
 } from "../drizzle/schema";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -154,7 +155,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   return { rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
 }
 
-export async function getAllSubmissions(opts: { status?: string; supermarket?: string; stage?: string; neighborhood?: string; language?: string; borough?: string; search?: string } = {}) {
+export async function getAllSubmissions(opts: { status?: string; supermarket?: string; stage?: string; neighborhood?: string; language?: string; borough?: string; search?: string; assignedTo?: number; intakeRep?: number; referralSource?: string } = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const conditions = [];
@@ -164,6 +165,9 @@ export async function getAllSubmissions(opts: { status?: string; supermarket?: s
   if (opts.language && opts.language !== "all") conditions.push(eq(submissions.language, opts.language));
   if (opts.borough && opts.borough !== "all") conditions.push(eq(submissions.borough, opts.borough));
   if (opts.neighborhood && opts.neighborhood !== "all") conditions.push(eq(submissions.neighborhood, opts.neighborhood));
+  if (opts.assignedTo) conditions.push(eq(submissions.assignedTo, opts.assignedTo));
+  if (opts.intakeRep) conditions.push(eq(submissions.intakeRep, opts.intakeRep));
+  if (opts.referralSource && opts.referralSource !== "all") conditions.push(eq(submissions.referralSource, opts.referralSource));
   if (opts.search) {
     const term = `%${opts.search}%`;
     conditions.push(or(like(submissions.firstName, term), like(submissions.lastName, term), like(submissions.medicaidId, term)) as any);
@@ -685,4 +689,20 @@ export async function deleteClientEmailById(id: number): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(clientEmails).where(eq(clientEmails.id, id));
+}
+
+// ─── Stage History ────────────────────────────────────────────────────────────
+
+export async function createStageHistoryEntry(data: InsertStageHistory): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(stageHistory).values(data);
+}
+
+export async function getStageHistoryBySubmission(submissionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(stageHistory)
+    .where(eq(stageHistory.submissionId, submissionId))
+    .orderBy(asc(stageHistory.createdAt));
 }

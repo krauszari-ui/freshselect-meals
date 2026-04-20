@@ -279,7 +279,7 @@ function AddClientDialog({
 
 /* ─── Export Dropdown ─────────────────────────────────────────────────── */
 
-function ExportDropdown({ filters }: { filters?: Record<string, string | undefined> }) {
+function ExportDropdown({ filters }: { filters?: Record<string, string | number | boolean | undefined> }) {
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -308,7 +308,7 @@ function ExportDropdown({ filters }: { filters?: Record<string, string | undefin
     setExporting(true);
     setOpen(false);
     try {
-      const result = await exportMutation.mutateAsync(filters || {});
+      const result = await exportMutation.mutateAsync(filters as any || {});
       const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8;" });
       const date = new Date().toISOString().slice(0, 10);
       triggerDownload(blob, `freshselect-clients-${date}.csv`);
@@ -324,7 +324,7 @@ function ExportDropdown({ filters }: { filters?: Record<string, string | undefin
     setExporting(true);
     setOpen(false);
     try {
-      const result = await exportMutation.mutateAsync(filters || {});
+      const result = await exportMutation.mutateAsync(filters as any || {});
       const wsData = [result.headers, ...result.data];
       const ws = XLSX.utils.aoa_to_sheet(wsData);
       // Auto-size columns
@@ -402,6 +402,7 @@ export default function AdminClients() {
   const [workerFilter, setWorkerFilter] = useState("all");
   const [repFilter, setRepFilter] = useState("all");
   const [referralFilter, setReferralFilter] = useState("all");
+  const [assessmentCompletedFilter, setAssessmentCompletedFilter] = useState("all"); // "all" | "completed" | "not_completed"
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -415,9 +416,12 @@ export default function AdminClients() {
 
   const utils = trpc.useUtils();
 
+  // "assessment_completed" is a virtual stage filter — handled client-side
+  const effectiveStageFilter = stageFilter === "assessment_completed" ? undefined : stageFilter;
+
   const listQuery = trpc.admin.list.useQuery({
     search: debouncedSearch || undefined,
-    stage: stageFilter !== "all" ? stageFilter : undefined,
+    stage: effectiveStageFilter !== "all" ? effectiveStageFilter : undefined,
     language: languageFilter !== "all" ? languageFilter : undefined,
     borough: boroughFilter !== "all" ? boroughFilter : undefined,
     assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
@@ -462,8 +466,12 @@ export default function AdminClients() {
       return fd.neighborhood === neighborhoodFilter;
     });
     if (vendorFilter !== "all") result = result.filter((r: any) => r.supermarket === vendorFilter);
+    // Virtual filter: Assessment Completed
+    if (stageFilter === "assessment_completed") result = result.filter((r: any) => r.assessmentCompletedAt != null);
+    if (assessmentCompletedFilter === "completed") result = result.filter((r: any) => r.assessmentCompletedAt != null);
+    if (assessmentCompletedFilter === "not_completed") result = result.filter((r: any) => r.assessmentCompletedAt == null);
     return result;
-  }, [sortedRows, programFilter, neighborhoodFilter, vendorFilter]);
+  }, [sortedRows, programFilter, neighborhoodFilter, vendorFilter, stageFilter, assessmentCompletedFilter]);
 
   const staffList = (staffQuery.data ?? []) as any[];
 
@@ -484,12 +492,17 @@ export default function AdminClients() {
           </div>
           <div className="flex items-center gap-2">
             <ExportDropdown filters={{
-              stage: stageFilter !== "all" ? stageFilter : undefined,
+              stage: (stageFilter !== "all" && stageFilter !== "assessment_completed") ? stageFilter : undefined,
               supermarket: vendorFilter !== "all" ? vendorFilter : undefined,
               neighborhood: neighborhoodFilter !== "all" ? neighborhoodFilter : undefined,
               language: languageFilter !== "all" ? languageFilter : undefined,
               borough: boroughFilter !== "all" ? boroughFilter : undefined,
               search: debouncedSearch || undefined,
+              assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
+              intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
+              referralSource: referralFilter !== "all" ? referralFilter : undefined,
+              program: programFilter !== "all" ? programFilter : undefined,
+              assessmentCompleted: stageFilter === "assessment_completed" ? true : assessmentCompletedFilter === "completed" ? true : assessmentCompletedFilter === "not_completed" ? false : undefined,
             }} />
             <Button
               onClick={() => setShowAddDialog(true)}
@@ -515,7 +528,7 @@ export default function AdminClients() {
         {/* Filter Row */}
         <div className="flex flex-wrap gap-2">
           <Select value={stageFilter} onValueChange={(v) => { setStageFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[140px] h-9 text-sm bg-white border-slate-200">
+            <SelectTrigger className="w-[180px] h-9 text-sm bg-white border-slate-200">
               <SelectValue placeholder="Stage" />
             </SelectTrigger>
             <SelectContent>
@@ -523,6 +536,7 @@ export default function AdminClients() {
               {Object.entries(STAGE_CONFIG).map(([key, { label }]) => (
                 <SelectItem key={key} value={key}>{label}</SelectItem>
               ))}
+              <SelectItem value="assessment_completed">Assessment Completed</SelectItem>
             </SelectContent>
           </Select>
 
