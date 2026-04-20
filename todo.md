@@ -443,3 +443,7 @@
 - [x] Add Referrer Notes section to client detail page (AdminApplicationDetail), next to Case Notes
 - [x] Referrer Notes: admin can write a message tagged to this client, sends via referrerMessages table
 - [x] Show referrer messages on /referrer portal page so referrers can see action items from admin
+
+## Referrer Messages UX
+- [x] Include client firstName + lastName in referrer message list (join submissions table in listReferrerMessages)
+- [x] Display "Re: Client Name" label on each message in the referrer portal Messages tab

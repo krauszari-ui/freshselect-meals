@@ -345,7 +345,14 @@ export default function ReferrerPortal() {
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <p className="text-sm text-gray-800 flex-1">{msg.message}</p>
+                        <div className="flex-1">
+                          {(msg.clientFirstName || msg.clientLastName) && (
+                            <p className="text-xs font-semibold text-amber-700 mb-1">
+                              Re: {[msg.clientFirstName, msg.clientLastName].filter(Boolean).join(" ")}
+                            </p>
+                          )}
+                          <p className="text-sm text-gray-800">{msg.message}</p>
+                        </div>
                         {!msg.readAt && (
                           <span className="shrink-0 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
                             NEW
