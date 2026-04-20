@@ -226,6 +226,8 @@ export const referrerMessages = mysqlTable("referrerMessages", {
   message: text("message").notNull(),
   /** Direction: 'admin' = sent by staff to referrer, 'referrer' = reply from referrer */
   direction: varchar("direction", { length: 16 }).notNull().default("admin"),
+  /** Optional file attachment URL */
+  attachmentUrl: text("attachmentUrl"),
   /** When the referrer read/acknowledged the message (null = unread) */
   readAt: timestamp("readAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

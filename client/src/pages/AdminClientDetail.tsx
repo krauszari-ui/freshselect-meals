@@ -171,6 +171,9 @@ export default function AdminClientDetail() {
 
   // Referrer Notes state
   const [referrerNoteText, setReferrerNoteText] = useState("");
+  const [referrerNoteAttachmentUrl, setReferrerNoteAttachmentUrl] = useState<string | null>(null);
+  const [uploadingReferrerAttachment, setUploadingReferrerAttachment] = useState(false);
+  const referrerAttachRef = useRef<HTMLInputElement>(null);
   const { data: referrerNotes } = trpc.admin.listReferrerNotes.useQuery(
     { submissionId: id },
     { enabled: id > 0 }
@@ -179,10 +182,37 @@ export default function AdminClientDetail() {
     onSuccess: () => {
       utils.admin.listReferrerNotes.invalidate({ submissionId: id });
       setReferrerNoteText("");
+      setReferrerNoteAttachmentUrl(null);
       toast.success("Note sent to referrer");
     },
     onError: (err) => toast.error(err.message),
   });
+  const deleteReferrerNoteMutation = trpc.admin.deleteReferrerNote.useMutation({
+    onSuccess: () => {
+      utils.admin.listReferrerNotes.invalidate({ submissionId: id });
+      toast.success("Note deleted");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const handleReferrerAttachUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingReferrerAttachment(true);
+    try {
+      const reader = new FileReader();
+      const fileData = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadDocumentMutation.mutateAsync({
+        fileName: file.name, fileData, contentType: file.type || "application/octet-stream", category: "referrer-note",
+      });
+      setReferrerNoteAttachmentUrl(result.url);
+      toast.success(`Attached: ${file.name}`);
+    } catch { toast.error("Failed to upload attachment"); }
+    finally { setUploadingReferrerAttachment(false); e.target.value = ""; }
+  };
 
   // Client Email Thread state
   const [emailSubject, setEmailSubject] = useState("");
@@ -625,41 +655,91 @@ export default function AdminClientDetail() {
               {/* Referrer Notes */}
               {(client as any).referralSource && (
                 <div className="bg-white rounded-lg border border-amber-200 p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4 text-amber-600" />
-                      <h3 className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Referrer Notes</h3>
-                      <span className="text-xs text-slate-400">Visible to referrer</span>
+                  <div className="flex items-center gap-2 mb-3">
+                    <MessageSquare className="h-4 w-4 text-amber-600" />
+                    <h3 className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Referrer Notes</h3>
+                    <span className="text-xs text-slate-400">Visible to referrer</span>
+                  </div>
+                  {/* Thread log */}
+                  {referrerNotes && (referrerNotes as any[]).length > 0 ? (
+                    <div className="space-y-2 mb-3 max-h-64 overflow-y-auto">
+                      {(referrerNotes as any[]).map((note: any) => (
+                        <div key={note.id} className={`p-3 rounded-lg border text-sm group relative ${
+                          note.direction === "referrer"
+                            ? "bg-blue-50 border-blue-200 ml-6"
+                            : "bg-amber-50 border-amber-100"
+                        }`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1">
+                              <span className={`text-xs font-semibold block mb-1 ${
+                                note.direction === "referrer" ? "text-blue-600" : "text-amber-700"
+                              }`}>{note.direction === "referrer" ? "Referrer" : "You"}</span>
+                              <p className="text-sm text-slate-700 whitespace-pre-wrap">{note.message}</p>
+                              {note.attachmentUrl && (
+                                <a href={note.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-1.5 text-xs text-amber-600 hover:underline">
+                                  <Paperclip className="w-3 h-3" /> Attachment
+                                </a>
+                              )}
+                              <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-400">
+                                <span>{new Date(note.createdAt).toLocaleString()}</span>
+                                {note.readAt && note.direction === "admin" && <span className="text-emerald-600">· Seen</span>}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => deleteReferrerNoteMutation.mutate({ messageId: note.id })}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-red-500 p-1 rounded"
+                              title="Delete note"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
+                  ) : <p className="text-sm text-slate-400 mb-3">No notes yet. Use this to request missing info from the referrer.</p>}
+                  {/* Compose */}
+                  <input ref={referrerAttachRef} type="file" className="hidden" onChange={handleReferrerAttachUpload} />
+                  <Textarea
+                    placeholder={`Send a note to ${(client as any).referralSource} about this client...`}
+                    value={referrerNoteText}
+                    onChange={(e) => setReferrerNoteText(e.target.value)}
+                    className="text-sm min-h-[60px] border-amber-200 focus:border-amber-400"
+                  />
+                  {referrerNoteAttachmentUrl && (
+                    <div className="flex items-center gap-1 mt-1.5">
+                      <span className="inline-flex items-center gap-1 text-xs bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                        <Paperclip className="w-3 h-3 text-amber-500" /> Attachment ready
+                        <button onClick={() => setReferrerNoteAttachmentUrl(null)} className="text-red-400 hover:text-red-600 ml-1">&times;</button>
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 mt-2">
+                    <Button
+                      type="button" variant="outline" size="sm"
+                      className="h-7 text-xs gap-1 border-amber-200 text-amber-600"
+                      onClick={() => referrerAttachRef.current?.click()}
+                      disabled={uploadingReferrerAttachment}
+                    >
+                      {uploadingReferrerAttachment ? <Loader2 className="h-3 w-3 animate-spin" /> : <Paperclip className="h-3 w-3" />}
+                      Attach
+                    </Button>
                     <Button
                       size="sm"
-                      className="bg-amber-500 hover:bg-amber-600 text-white gap-1 h-7 text-xs px-2.5"
-                      onClick={() => { if (referrerNoteText.trim()) sendReferrerNoteMutation.mutate({ submissionId: id, message: referrerNoteText.trim() }); }}
+                      className="bg-amber-500 hover:bg-amber-600 text-white gap-1 h-7 text-xs px-2.5 ml-auto"
+                      onClick={() => {
+                        if (!referrerNoteText.trim()) return;
+                        sendReferrerNoteMutation.mutate({
+                          submissionId: id,
+                          message: referrerNoteText.trim(),
+                          attachmentUrl: referrerNoteAttachmentUrl ?? undefined,
+                        });
+                      }}
                       disabled={!referrerNoteText.trim() || sendReferrerNoteMutation.isPending}
                     >
                       {sendReferrerNoteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
                       Send to Referrer
                     </Button>
                   </div>
-                  <Textarea
-                    placeholder={`Send a note to ${(client as any).referralSource} about this client...`}
-                    value={referrerNoteText}
-                    onChange={(e) => setReferrerNoteText(e.target.value)}
-                    className="text-sm min-h-[60px] mb-3 border-amber-200 focus:border-amber-400"
-                  />
-                  {referrerNotes && (referrerNotes as any[]).length > 0 ? (
-                    <div className="space-y-2">
-                      {(referrerNotes as any[]).map((note: any) => (
-                        <div key={note.id} className="p-3 rounded-lg bg-amber-50 border border-amber-100">
-                          <p className="text-sm text-slate-700">{note.message}</p>
-                          <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
-                            <span>{new Date(note.createdAt).toLocaleString()}</span>
-                            {note.readAt && <span className="text-emerald-600">· Seen by referrer</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : <p className="text-sm text-slate-400">No notes sent yet. Use this to request missing info from the referrer.</p>}
                 </div>
               )}
 

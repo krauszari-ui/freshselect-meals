@@ -456,3 +456,12 @@
 - [x] Add sendClientEmail tRPC procedure (sends via Resend from info@freshselectmeals.com, stores in DB)
 - [x] Add inbound email webhook endpoint to receive client replies via Resend
 - [x] Build email thread UI on client detail page (compose with file attach, view thread with sent/received bubbles)
+
+## Messaging & Email Thread Improvements
+- [x] Add delete referrer note by admin (deleteReferrerNote procedure)
+- [x] Add delete referrer note by referrer in portal (referrerPortal.deleteMessage procedure)
+- [x] Auto-mark all messages as read when referrer opens Messages tab
+- [x] Unify admin notes + referrer replies into one chronological thread log (single list, both directions)
+- [x] Add attachment support to referrer notes (admin can attach file when sending note)
+- [x] Client email replies (inbound) appear in the Email Thread log on client detail page
+- [x] Confirm /api/inbound-email webhook correctly stores inbound emails in clientEmails table

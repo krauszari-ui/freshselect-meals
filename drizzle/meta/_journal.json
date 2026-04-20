@@ -71,6 +71,13 @@
       "when": 1776662434371,
       "tag": "0009_unknown_talisman",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1776664117014,
+      "tag": "0010_shallow_skin",
+      "breakpoints": true
     }
   ]
 }

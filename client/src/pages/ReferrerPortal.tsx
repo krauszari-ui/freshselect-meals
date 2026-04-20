@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   LogIn, LogOut, Users, Eye, Loader2, Mail, Lock, Search,
   UserCheck, Clock, AlertCircle, ChevronLeft, ChevronRight,
-  Bell, MessageSquare, Send, Reply,
+  Bell, MessageSquare, Send, Reply, Trash2, Paperclip,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -87,15 +87,61 @@ export default function ReferrerPortal() {
   const [replyingToId, setReplyingToId] = useState<number | null>(null);
 
   const utils = trpc.useUtils();
+  const [replyAttachmentUrl, setReplyAttachmentUrl] = useState<string | null>(null);
+  const [uploadingReplyAttachment, setUploadingReplyAttachment] = useState(false);
+  const replyAttachRef = useRef<HTMLInputElement>(null);
+  const uploadDocMutation = trpc.upload.document.useMutation();
+
   const replyMutation = trpc.admin.referrerPortal.reply.useMutation({
     onSuccess: () => {
       setReplyText("");
       setReplyingToId(null);
+      setReplyAttachmentUrl(null);
       utils.admin.referrerPortal.myMessages.invalidate();
       toast.success("Reply sent!");
     },
     onError: (err) => toast.error(err.message || "Failed to send reply"),
   });
+
+  const markAllReadMutation = trpc.admin.referrerPortal.markAllRead.useMutation({
+    onSuccess: () => utils.admin.referrerPortal.myMessages.invalidate(),
+  });
+
+  const deleteMessageMutation = trpc.admin.referrerPortal.deleteMessage.useMutation({
+    onSuccess: () => {
+      utils.admin.referrerPortal.myMessages.invalidate();
+      toast.success("Message deleted");
+    },
+    onError: (err) => toast.error(err.message || "Failed to delete message"),
+  });
+
+  // Auto-mark all messages as read when the Messages tab is opened
+  useEffect(() => {
+    if (activeTab === "messages" && session && unreadCount > 0) {
+      markAllReadMutation.mutate({ code: session.code });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const handleReplyAttachUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingReplyAttachment(true);
+    try {
+      const reader = new FileReader();
+      const fileData = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadDocMutation.mutateAsync({
+        fileName: file.name, fileData, contentType: file.type || "application/octet-stream", category: "referrer-reply",
+      });
+      setReplyAttachmentUrl(result.url);
+      toast.success(`Attached: ${file.name}`);
+    } catch { toast.error("Failed to upload attachment"); }
+    finally { setUploadingReplyAttachment(false); e.target.value = ""; }
+  };
 
   const handleLogout = () => {
     setSession(null);
@@ -347,34 +393,41 @@ export default function ReferrerPortal() {
                   <p className="text-sm mt-1">The FreshSelect Meals team will send you action items here.</p>
                 </div>
               ) : (
+                <>
+                <input ref={replyAttachRef} type="file" className="hidden" onChange={handleReplyAttachUpload} />
                 <div className="space-y-3">
                   {(messages as any[]).map((msg: any) => (
                     <div
                       key={msg.id}
-                      className={`rounded-lg p-4 border ${
+                      className={`rounded-lg p-4 border group ${
                         msg.direction === "referrer"
                           ? "bg-blue-50 border-blue-200 ml-6"
-                          : msg.readAt
-                          ? "bg-gray-50 border-gray-200"
-                          : "bg-amber-50 border-amber-300"
+                          : "bg-gray-50 border-gray-200"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
                           {msg.direction === "referrer" ? (
                             <p className="text-xs font-semibold text-blue-600 mb-1">Your reply</p>
-                          ) : (msg.clientFirstName || msg.clientLastName) && (
+                          ) : (msg.clientFirstName || msg.clientLastName) ? (
                             <p className="text-xs font-semibold text-amber-700 mb-1">
                               Re: {[msg.clientFirstName, msg.clientLastName].filter(Boolean).join(" ")}
                             </p>
+                          ) : null}
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{msg.message}</p>
+                          {msg.attachmentUrl && (
+                            <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-1.5 text-xs text-emerald-600 hover:underline">
+                              <Paperclip className="w-3 h-3" /> Attachment
+                            </a>
                           )}
-                          <p className="text-sm text-gray-800">{msg.message}</p>
                         </div>
-                        {!msg.readAt && msg.direction !== "referrer" && (
-                          <span className="shrink-0 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
-                            NEW
-                          </span>
-                        )}
+                        <button
+                          onClick={() => session && deleteMessageMutation.mutate({ code: session.code, messageId: msg.id })}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-500 p-1 rounded shrink-0"
+                          title="Delete message"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                       <div className="flex items-center justify-between mt-2">
                         <p className="text-xs text-gray-400">
@@ -382,7 +435,7 @@ export default function ReferrerPortal() {
                         </p>
                         {msg.direction !== "referrer" && (
                           <button
-                            onClick={() => setReplyingToId(replyingToId === msg.id ? null : msg.id)}
+                            onClick={() => { setReplyingToId(replyingToId === msg.id ? null : msg.id); setReplyAttachmentUrl(null); }}
                             className="text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1 font-medium"
                           >
                             <Reply className="w-3.5 h-3.5" /> Reply
@@ -390,34 +443,54 @@ export default function ReferrerPortal() {
                         )}
                       </div>
                       {replyingToId === msg.id && (
-                        <div className="mt-3 flex gap-2">
+                        <div className="mt-3 space-y-2">
                           <textarea
                             value={replyText}
                             onChange={(e) => setReplyText(e.target.value)}
                             placeholder="Type your reply..."
                             rows={2}
-                            className="flex-1 text-sm border border-gray-200 rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full text-sm border border-gray-200 rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white self-end"
-                            disabled={!replyText.trim() || replyMutation.isPending}
-                            onClick={() => {
-                              if (!session || !replyText.trim()) return;
-                              replyMutation.mutate({
-                                code: session.code,
-                                message: replyText.trim(),
-                                submissionId: msg.submissionId ?? undefined,
-                              });
-                            }}
-                          >
-                            {replyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                          </Button>
+                          {replyAttachmentUrl && (
+                            <span className="inline-flex items-center gap-1 text-xs bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5">
+                              <Paperclip className="w-3 h-3 text-emerald-500" /> Attachment ready
+                              <button onClick={() => setReplyAttachmentUrl(null)} className="text-red-400 hover:text-red-600 ml-1">&times;</button>
+                            </span>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button" variant="outline" size="sm"
+                              className="h-8 text-xs gap-1 border-gray-200 text-gray-600"
+                              onClick={() => replyAttachRef.current?.click()}
+                              disabled={uploadingReplyAttachment}
+                            >
+                              {uploadingReplyAttachment ? <Loader2 className="w-3 h-3 animate-spin" /> : <Paperclip className="w-3 h-3" />}
+                              Attach
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 ml-auto"
+                              disabled={!replyText.trim() || replyMutation.isPending}
+                              onClick={() => {
+                                if (!session || !replyText.trim()) return;
+                                replyMutation.mutate({
+                                  code: session.code,
+                                  message: replyText.trim(),
+                                  submissionId: msg.submissionId ?? undefined,
+                                  attachmentUrl: replyAttachmentUrl ?? undefined,
+                                });
+                              }}
+                            >
+                              {replyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                              Send Reply
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>
                   ))}
                 </div>
+                </>
               )}
             </CardContent>
           </Card>
