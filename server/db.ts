@@ -368,7 +368,7 @@ export async function updateServiceStatus(id: number, status: Service["status"])
 
 // ─── Worker management helpers ────────────────────────────────────────────
 
-export interface WorkerPermissions { canView: boolean; canEdit: boolean; canExport: boolean; }
+export interface WorkerPermissions { canView: boolean; canEdit: boolean; canExport: boolean; canDelete: boolean; }
 
 export async function listWorkers() {
   const db = await getDb();
@@ -379,7 +379,52 @@ export async function listWorkers() {
 export async function listStaffUsers() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.select().from(users).where(or(eq(users.role, "worker"), eq(users.role, "admin"))).orderBy(desc(users.createdAt));
+  return db.select().from(users).where(
+    or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"))
+  ).orderBy(desc(users.createdAt));
+}
+
+export async function createStaffUser(data: {
+  email: string;
+  name: string;
+  passwordHash: string;
+  role: "admin" | "worker" | "viewer";
+  permissions?: WorkerPermissions;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Generate a unique openId for internal staff accounts
+  const openId = `staff_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const [result] = await db.insert(users).values({
+    openId,
+    email: data.email,
+    name: data.name,
+    passwordHash: data.passwordHash,
+    role: data.role,
+    loginMethod: "password",
+    permissions: (data.permissions ?? { canView: true, canEdit: false, canExport: false, canDelete: false }) as unknown as null,
+    isActive: 1,
+  });
+  return (result as any).insertId;
+}
+
+export async function setPasswordResetToken(userId: number, token: string, expires: Date): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ passwordResetToken: token, passwordResetExpires: expires }).where(eq(users.id, userId));
+}
+
+export async function getUserByResetToken(token: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select().from(users).where(eq(users.passwordResetToken, token)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function clearPasswordResetToken(userId: number, newPasswordHash: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ passwordHash: newPasswordHash, passwordResetToken: null, passwordResetExpires: null }).where(eq(users.id, userId));
 }
 
 export async function updateWorkerPermissions(userId: number, permissions: WorkerPermissions): Promise<void> {
@@ -394,7 +439,7 @@ export async function toggleWorkerActive(userId: number, isActive: boolean): Pro
   await db.update(users).set({ isActive: isActive ? 1 : 0 }).where(eq(users.id, userId));
 }
 
-export async function setUserRole(userId: number, role: "user" | "admin" | "worker"): Promise<void> {
+export async function setUserRole(userId: number, role: "user" | "admin" | "worker" | "super_admin" | "viewer"): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(users).set({ role }).where(eq(users.id, userId));

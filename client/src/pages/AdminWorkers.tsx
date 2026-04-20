@@ -1,13 +1,13 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
-  Leaf,
   Users,
   Shield,
   ShieldCheck,
-  ShieldX,
   UserPlus,
   Eye,
   Pencil,
@@ -17,322 +17,375 @@ import {
   ToggleRight,
   Trash2,
   Loader2,
+  Settings2,
+  KeyRound,
+  Crown,
 } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { useState } from "react";
+
+type Role = "admin" | "worker" | "viewer";
+
+const ROLE_LABELS: Record<string, { label: string; color: string; icon: React.ElementType }> = {
+  super_admin: { label: "Super Admin", color: "bg-purple-100 text-purple-800", icon: Crown },
+  admin: { label: "Admin", color: "bg-blue-100 text-blue-800", icon: ShieldCheck },
+  worker: { label: "Worker", color: "bg-green-100 text-green-800", icon: Shield },
+  viewer: { label: "Viewer", color: "bg-stone-100 text-stone-700", icon: Eye },
+};
+
+const DEFAULT_PERMISSIONS = { canView: true, canEdit: false, canExport: false, canDelete: false };
+
+const PERM_LIST = [
+  { key: "canView" as const, label: "View Applications", icon: Eye },
+  { key: "canEdit" as const, label: "Edit Status & Notes", icon: Pencil },
+  { key: "canExport" as const, label: "Export CSV Reports", icon: Download },
+  { key: "canDelete" as const, label: "Delete Records", icon: Trash2 },
+];
 
 export default function AdminWorkers() {
   const { user, loading: authLoading } = useAuth();
-  const [, navigate] = useLocation();
-  const [showPromoteModal, setShowPromoteModal] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [permissions, setPermissions] = useState({ canView: true, canEdit: false, canExport: false });
 
-  const workersQuery = trpc.admin.workers.list.useQuery();
-  const allUsersQuery = trpc.admin.workers.allUsers.useQuery();
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    email: "", name: "", password: "", role: "worker" as Role,
+    permissions: { ...DEFAULT_PERMISSIONS },
+  });
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editTarget, setEditTarget] = useState<{ id: number; name: string; email: string; role: string } | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "", role: "worker" as Role, newPassword: "",
+    permissions: { ...DEFAULT_PERMISSIONS },
+  });
+
   const utils = trpc.useUtils();
-
-  const promoteMutation = trpc.admin.workers.promote.useMutation({
-    onSuccess: () => {
-      toast.success("User promoted to worker");
-      utils.admin.workers.list.invalidate();
-      utils.admin.workers.allUsers.invalidate();
-      setShowPromoteModal(false);
-      setSelectedUserId(null);
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const updatePermsMutation = trpc.admin.workers.updatePermissions.useMutation({
-    onSuccess: () => {
-      toast.success("Permissions updated");
-      utils.admin.workers.list.invalidate();
-    },
-    onError: (err) => toast.error(err.message),
-  });
+  const staffQuery = trpc.admin.workers.listStaff.useQuery();
 
   const toggleActiveMutation = trpc.admin.workers.toggleActive.useMutation({
+    onSuccess: () => { toast.success("Account status updated"); utils.admin.workers.listStaff.invalidate(); },
+    onError: (err) => toast.error(err.message),
+  });
+  const demoteMutation = trpc.admin.workers.demote.useMutation({
+    onSuccess: () => { toast.success("Staff access revoked"); utils.admin.workers.listStaff.invalidate(); },
+    onError: (err) => toast.error(err.message),
+  });
+  const createMutation = trpc.admin.workers.createStaff.useMutation({
     onSuccess: () => {
-      toast.success("Worker status updated");
-      utils.admin.workers.list.invalidate();
+      toast.success("Staff account created");
+      utils.admin.workers.listStaff.invalidate();
+      setShowCreateModal(false);
+      setCreateForm({ email: "", name: "", password: "", role: "worker", permissions: { ...DEFAULT_PERMISSIONS } });
     },
     onError: (err) => toast.error(err.message),
   });
-
-  const demoteMutation = trpc.admin.workers.demote.useMutation({
-    onSuccess: () => {
-      toast.success("Worker removed");
-      utils.admin.workers.list.invalidate();
-      utils.admin.workers.allUsers.invalidate();
-    },
+  const updateMutation = trpc.admin.workers.updateStaff.useMutation({
+    onSuccess: () => { toast.success("Staff member updated"); utils.admin.workers.listStaff.invalidate(); setShowEditModal(false); },
     onError: (err) => toast.error(err.message),
   });
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-50">
-        <Loader2 className="w-8 h-8 animate-spin text-green-700" />
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-green-700" /></div>;
   }
 
-  if (!user || user.role !== "admin") {
-    navigate("/admin");
-    return null;
-  }
+  const isSuperAdmin = user?.role === "super_admin";
+  const staffList = staffQuery.data ?? [];
 
-  const workers = workersQuery.data ?? [];
-  const allUsers = allUsersQuery.data ?? [];
-  const nonWorkerUsers = allUsers.filter(
-    (u) => u.role === "user" && u.id !== user.id
-  );
+  const openEdit = (member: typeof staffList[0]) => {
+    setEditTarget({ id: member.id, name: member.name || "", email: member.email || "", role: member.role || "worker" });
+    const perms = (member.permissions as Record<string, boolean> | null) ?? {};
+    setEditForm({
+      name: member.name || "",
+      role: (member.role as Role) || "worker",
+      newPassword: "",
+      permissions: {
+        canView: perms.canView ?? true,
+        canEdit: perms.canEdit ?? false,
+        canExport: perms.canExport ?? false,
+        canDelete: perms.canDelete ?? false,
+      },
+    });
+    setShowEditModal(true);
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-stone-50 to-white">
+    <div className="min-h-screen bg-[#faf8f5]">
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-stone-200 sticky top-0 z-50">
+      <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-700 rounded-xl flex items-center justify-center">
-              <Leaf className="w-6 h-6 text-white" />
-            </div>
+            <Link href="/admin/dashboard">
+              <button className="p-2 hover:bg-stone-100 rounded-lg transition-colors">
+                <ChevronLeft className="w-5 h-5 text-stone-600" />
+              </button>
+            </Link>
             <div>
-              <h1 className="text-lg font-bold text-green-800 font-serif">Worker Management</h1>
-              <p className="text-xs text-stone-500">Manage staff access and permissions</p>
+              <h1 className="text-xl font-bold text-stone-800 flex items-center gap-2">
+                <Users className="w-5 h-5 text-green-700" /> Staff Management
+              </h1>
+              <p className="text-xs text-stone-500">Manage team access, roles, and permissions</p>
             </div>
           </div>
-          <Link href="/admin/dashboard" className="flex items-center gap-1 text-sm text-stone-600 hover:text-green-700">
-            <ChevronLeft className="w-4 h-4" /> Back to Dashboard
-          </Link>
+          {isSuperAdmin && (
+            <Button onClick={() => setShowCreateModal(true)} className="bg-green-700 hover:bg-green-800 text-white gap-2">
+              <UserPlus className="w-4 h-4" /> Add Staff Member
+            </Button>
+          )}
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        {/* Add Worker Button */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-green-700" />
-            <h2 className="text-xl font-bold text-stone-800 font-serif">
-              Active Workers ({workers.length})
-            </h2>
-          </div>
-          <Button
-            onClick={() => setShowPromoteModal(true)}
-            className="bg-green-700 hover:bg-green-800 text-white"
-            disabled={nonWorkerUsers.length === 0}
-          >
-            <UserPlus className="w-4 h-4 mr-2" /> Add Worker
-          </Button>
+      <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        {/* Role legend */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {Object.entries(ROLE_LABELS).map(([role, { label, color, icon: Icon }]) => (
+            <div key={role} className="bg-white border border-stone-200 rounded-xl p-4 flex items-center gap-3">
+              <Icon className="w-5 h-5 text-stone-500 shrink-0" />
+              <div>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${color}`}>{label}</span>
+                <p className="text-xs text-stone-500 mt-1">
+                  {role === "super_admin" && "Full control, manages staff"}
+                  {role === "admin" && "Manage applications & data"}
+                  {role === "worker" && "Custom per-permission access"}
+                  {role === "viewer" && "Read-only access"}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {nonWorkerUsers.length === 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-sm text-amber-800">
-            No eligible users to promote. Users must first log in to the site via the Manus login to appear here.
+        {/* Staff table */}
+        <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-stone-100">
+            <h2 className="font-semibold text-stone-800">Team Members ({staffList.length})</h2>
           </div>
-        )}
 
-        {/* Workers Table */}
-        {workers.length === 0 ? (
-          <div className="bg-white border border-stone-200 rounded-xl p-12 text-center">
-            <Shield className="w-12 h-12 text-stone-300 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-stone-700 mb-2">No Workers Yet</h3>
-            <p className="text-stone-500 text-sm">
-              Add workers to give them access to view and manage applications.
-            </p>
-          </div>
-        ) : (
-          <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-stone-50 border-b border-stone-200">
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider">Worker</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider">View</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider">Edit</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider">Export</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider">Status</th>
-                    <th className="text-right px-6 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {workers.map((w) => {
-                    const perms = (w as unknown as { permissions: { canView: boolean; canEdit: boolean; canExport: boolean } | null }).permissions;
-                    const isActive = (w as unknown as { isActive: boolean | null }).isActive !== false;
-                    return (
-                      <tr key={w.id} className="border-b border-stone-100 hover:bg-stone-50/50">
-                        <td className="px-6 py-4">
-                          <div className="font-medium text-stone-800">{w.name || "Unnamed"}</div>
-                          <div className="text-xs text-stone-500">{w.email || "No email"}</div>
-                        </td>
-                        <td className="text-center px-4 py-4">
-                          <button
-                            onClick={() => {
-                              const newPerms = { canView: !perms?.canView, canEdit: perms?.canEdit ?? false, canExport: perms?.canExport ?? false };
-                              updatePermsMutation.mutate({ userId: w.id, permissions: newPerms });
-                            }}
-                            className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${perms?.canView ? "bg-green-100 text-green-700" : "bg-stone-100 text-stone-400"}`}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </td>
-                        <td className="text-center px-4 py-4">
-                          <button
-                            onClick={() => {
-                              const newPerms = { canView: perms?.canView ?? true, canEdit: !perms?.canEdit, canExport: perms?.canExport ?? false };
-                              updatePermsMutation.mutate({ userId: w.id, permissions: newPerms });
-                            }}
-                            className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${perms?.canEdit ? "bg-green-100 text-green-700" : "bg-stone-100 text-stone-400"}`}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                        </td>
-                        <td className="text-center px-4 py-4">
-                          <button
-                            onClick={() => {
-                              const newPerms = { canView: perms?.canView ?? true, canEdit: perms?.canEdit ?? false, canExport: !perms?.canExport };
-                              updatePermsMutation.mutate({ userId: w.id, permissions: newPerms });
-                            }}
-                            className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${perms?.canExport ? "bg-green-100 text-green-700" : "bg-stone-100 text-stone-400"}`}
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
-                        </td>
-                        <td className="text-center px-4 py-4">
-                          <button
-                            onClick={() => toggleActiveMutation.mutate({ userId: w.id, isActive: !isActive })}
-                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
-                          >
-                            {isActive ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}
-                            {isActive ? "Active" : "Inactive"}
-                          </button>
-                        </td>
-                        <td className="text-right px-6 py-4">
-                          <button
-                            onClick={() => {
-                              if (confirm("Remove this worker? They will lose all staff access.")) {
-                                demoteMutation.mutate({ userId: w.id });
-                              }
-                            }}
-                            className="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {staffQuery.isLoading ? (
+            <div className="p-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-green-700 mx-auto" /></div>
+          ) : staffList.length === 0 ? (
+            <div className="p-12 text-center text-stone-500">
+              <Users className="w-10 h-10 mx-auto mb-3 text-stone-300" />
+              <p className="font-medium">No staff members yet</p>
+              {isSuperAdmin && <p className="text-sm mt-1">Click "Add Staff Member" to create the first account.</p>}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="divide-y divide-stone-100">
+              {staffList.map((member) => {
+                const roleInfo = ROLE_LABELS[member.role ?? "worker"] ?? ROLE_LABELS.worker;
+                const RoleIcon = roleInfo.icon;
+                const perms = (member.permissions as Record<string, boolean> | null) ?? {};
+                const isSelf = user?.id === member.id;
+                const isMemberSuperAdmin = member.role === "super_admin";
 
-        {/* Permission Legend */}
-        <div className="mt-6 bg-white border border-stone-200 rounded-xl p-6">
+                return (
+                  <div key={member.id} className={`px-6 py-4 flex items-center gap-4 ${!member.isActive ? "opacity-50" : ""}`}>
+                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                      <span className="text-sm font-bold text-green-700">
+                        {(member.name || member.email || "?")[0].toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-stone-800 truncate">{member.name || "Unnamed"}</span>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${roleInfo.color} flex items-center gap-1`}>
+                          <RoleIcon className="w-3 h-3" /> {roleInfo.label}
+                        </span>
+                        {!member.isActive && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">Inactive</span>}
+                        {isSelf && <span className="text-xs bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full">You</span>}
+                      </div>
+                      <p className="text-sm text-stone-500 truncate">{member.email}</p>
+                      {member.role === "worker" && (
+                        <div className="flex gap-2 mt-1 flex-wrap">
+                          {perms.canView && <span className="text-xs text-stone-400 flex items-center gap-1"><Eye className="w-3 h-3" /> View</span>}
+                          {perms.canEdit && <span className="text-xs text-stone-400 flex items-center gap-1"><Pencil className="w-3 h-3" /> Edit</span>}
+                          {perms.canExport && <span className="text-xs text-stone-400 flex items-center gap-1"><Download className="w-3 h-3" /> Export</span>}
+                          {perms.canDelete && <span className="text-xs text-stone-400 flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</span>}
+                        </div>
+                      )}
+                    </div>
+                    {isSuperAdmin && !isSelf && !isMemberSuperAdmin && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          title={member.isActive ? "Deactivate" : "Activate"}
+                          onClick={() => toggleActiveMutation.mutate({ userId: member.id, isActive: !member.isActive })}
+                          className="p-2 hover:bg-stone-100 rounded-lg text-stone-500 hover:text-stone-700 transition-colors"
+                        >
+                          {member.isActive ? <ToggleRight className="w-5 h-5 text-green-600" /> : <ToggleLeft className="w-5 h-5" />}
+                        </button>
+                        <button
+                          title="Edit"
+                          onClick={() => openEdit(member)}
+                          className="p-2 hover:bg-stone-100 rounded-lg text-stone-500 hover:text-stone-700 transition-colors"
+                        >
+                          <Settings2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          title="Revoke staff access"
+                          onClick={() => {
+                            if (confirm(`Revoke staff access for ${member.name || member.email}?`))
+                              demoteMutation.mutate({ userId: member.id });
+                          }}
+                          className="p-2 hover:bg-red-50 rounded-lg text-stone-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Permission guide */}
+        <div className="bg-white border border-stone-200 rounded-xl p-6">
           <h3 className="font-bold text-stone-700 mb-3 flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-green-700" /> Permission Guide
           </h3>
-          <div className="grid md:grid-cols-3 gap-4 text-sm">
-            <div className="flex items-start gap-3">
-              <Eye className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
-              <div>
-                <p className="font-medium text-stone-800">View</p>
-                <p className="text-stone-500">Can view application list and details</p>
+          <div className="grid md:grid-cols-4 gap-4 text-sm">
+            {PERM_LIST.map(({ icon: Icon, label, key }) => (
+              <div key={key} className="flex items-start gap-3">
+                <Icon className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium text-stone-800">{label.split(" ")[0]}</p>
+                  <p className="text-stone-500 text-xs">{label}</p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <Pencil className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
-              <div>
-                <p className="font-medium text-stone-800">Edit</p>
-                <p className="text-stone-500">Can update application status and notes</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <Download className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
-              <div>
-                <p className="font-medium text-stone-800">Export</p>
-                <p className="text-stone-500">Can download CSV reports</p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </main>
 
-      {/* Promote Modal */}
-      {showPromoteModal && (
+      {/* ─── Create Staff Modal ─── */}
+      {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-stone-800 mb-4 flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-green-700" /> Add New Worker
+          <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-stone-800 mb-5 flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-green-700" /> Create Staff Account
             </h3>
-
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-stone-700 block mb-1">Select User</label>
+              <div className="space-y-1">
+                <Label>Full Name</Label>
+                <Input placeholder="Jane Smith" value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Email Address</Label>
+                <Input type="email" placeholder="jane@example.com" value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Temporary Password</Label>
+                <Input type="password" placeholder="Min. 8 characters" value={createForm.password} onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))} />
+                <p className="text-xs text-stone-500">Staff can reset this via "Forgot Password" on first login.</p>
+              </div>
+              <div className="space-y-1">
+                <Label>Role</Label>
                 <select
-                  value={selectedUserId ?? ""}
-                  onChange={(e) => setSelectedUserId(Number(e.target.value) || null)}
-                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  value={createForm.role}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value as Role }))}
+                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500"
                 >
-                  <option value="">Choose a user...</option>
-                  {nonWorkerUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name || "Unnamed"} ({u.email || "No email"})
-                    </option>
-                  ))}
+                  <option value="admin">Admin — full access to all applications</option>
+                  <option value="worker">Worker — custom permissions below</option>
+                  <option value="viewer">Viewer — read-only access</option>
                 </select>
               </div>
-
-              <div>
-                <label className="text-sm font-medium text-stone-700 block mb-2">Permissions</label>
+              {createForm.role === "worker" && (
                 <div className="space-y-2">
-                  {[
-                    { key: "canView" as const, label: "View Applications", icon: Eye },
-                    { key: "canEdit" as const, label: "Edit Status & Notes", icon: Pencil },
-                    { key: "canExport" as const, label: "Export CSV Reports", icon: Download },
-                  ].map(({ key, label, icon: Icon }) => (
+                  <Label>Permissions</Label>
+                  {PERM_LIST.map(({ key, label, icon: Icon }) => (
                     <label key={key} className="flex items-center gap-3 p-2 rounded-lg hover:bg-stone-50 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={permissions[key]}
-                        onChange={(e) => setPermissions((p) => ({ ...p, [key]: e.target.checked }))}
-                        className="w-4 h-4 text-green-600 border-stone-300 rounded focus:ring-green-500"
+                        checked={createForm.permissions[key]}
+                        onChange={(e) => setCreateForm((f) => ({ ...f, permissions: { ...f.permissions, [key]: e.target.checked } }))}
+                        className="w-4 h-4 text-green-600 border-stone-300 rounded"
                       />
                       <Icon className="w-4 h-4 text-stone-500" />
                       <span className="text-sm text-stone-700">{label}</span>
                     </label>
                   ))}
                 </div>
-              </div>
+              )}
             </div>
-
             <div className="flex gap-3 mt-6">
+              <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">Cancel</Button>
               <Button
-                variant="outline"
-                onClick={() => {
-                  setShowPromoteModal(false);
-                  setSelectedUserId(null);
-                }}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  if (!selectedUserId) {
-                    toast.error("Please select a user");
-                    return;
-                  }
-                  promoteMutation.mutate({ userId: selectedUserId, permissions });
-                }}
-                disabled={!selectedUserId || promoteMutation.isPending}
+                onClick={() => createMutation.mutate(createForm)}
+                disabled={createMutation.isPending || !createForm.email || !createForm.name || !createForm.password}
                 className="flex-1 bg-green-700 hover:bg-green-800 text-white"
               >
-                {promoteMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  "Add Worker"
-                )}
+                {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Account"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Edit Staff Modal ─── */}
+      {showEditModal && editTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-stone-800 mb-1 flex items-center gap-2">
+              <Settings2 className="w-5 h-5 text-green-700" /> Edit Staff Member
+            </h3>
+            <p className="text-sm text-stone-500 mb-5">{editTarget.email}</p>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <Label>Full Name</Label>
+                <Input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>Role</Label>
+                <select
+                  value={editForm.role}
+                  onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value as Role }))}
+                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="worker">Worker</option>
+                  <option value="viewer">Viewer</option>
+                </select>
+              </div>
+              {editForm.role === "worker" && (
+                <div className="space-y-2">
+                  <Label>Permissions</Label>
+                  {PERM_LIST.map(({ key, label, icon: Icon }) => (
+                    <label key={key} className="flex items-center gap-3 p-2 rounded-lg hover:bg-stone-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editForm.permissions[key]}
+                        onChange={(e) => setEditForm((f) => ({ ...f, permissions: { ...f.permissions, [key]: e.target.checked } }))}
+                        className="w-4 h-4 text-green-600 border-stone-300 rounded"
+                      />
+                      <Icon className="w-4 h-4 text-stone-500" />
+                      <span className="text-sm text-stone-700">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <div className="space-y-1 border-t border-stone-100 pt-4">
+                <Label className="flex items-center gap-2"><KeyRound className="w-4 h-4" /> Reset Password (optional)</Label>
+                <Input
+                  type="password"
+                  placeholder="Leave blank to keep current password"
+                  value={editForm.newPassword}
+                  onChange={(e) => setEditForm((f) => ({ ...f, newPassword: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <Button variant="outline" onClick={() => setShowEditModal(false)} className="flex-1">Cancel</Button>
+              <Button
+                onClick={() => updateMutation.mutate({
+                  userId: editTarget.id,
+                  name: editForm.name || undefined,
+                  role: editForm.role,
+                  permissions: editForm.role === "worker" ? editForm.permissions : undefined,
+                  newPassword: editForm.newPassword || undefined,
+                })}
+                disabled={updateMutation.isPending}
+                className="flex-1 bg-green-700 hover:bg-green-800 text-white"
+              >
+                {updateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Changes"}
               </Button>
             </div>
           </div>

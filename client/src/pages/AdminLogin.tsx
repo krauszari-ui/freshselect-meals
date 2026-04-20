@@ -17,7 +17,8 @@ export default function AdminLogin() {
 
   useEffect(() => {
     if (!loading && user) {
-      if (user.role === "admin" || user.role === "worker") {
+      const staffRoles = ["admin", "worker", "super_admin", "viewer"];
+      if (staffRoles.includes(user.role)) {
         navigate("/admin/dashboard");
       }
     }
@@ -48,7 +49,7 @@ export default function AdminLogin() {
   }
 
   const isLoggedInButNotAdmin =
-    user && user.role !== "admin" && user.role !== "worker";
+    user && !["admin", "worker", "super_admin", "viewer"].includes(user.role);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f0f7f0] via-background to-[#fdf6f0] flex items-center justify-center p-4">
@@ -142,6 +143,12 @@ export default function AdminLogin() {
                   )}
                   {loginMutation.isPending ? "Signing in…" : "Sign In"}
                 </Button>
+
+                <div className="text-center">
+                  <a href="/admin/forgot-password" className="text-xs text-primary hover:underline">
+                    Forgot your password?
+                  </a>
+                </div>
 
                 <div className="flex items-center gap-2 text-xs text-muted-foreground justify-center pt-1">
                   <ShieldCheck className="w-3.5 h-3.5" />

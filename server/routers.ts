@@ -18,6 +18,7 @@ import {
   updateReferralLink, deleteReferralLink, incrementReferralUsage, getReferralStats,
   getReferralLinkByEmail, getClientsByReferralCode, getUserByEmail,
   getSubmissionByRef,
+  createStaffUser, setPasswordResetToken, getUserByResetToken, clearPasswordResetToken,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -29,13 +30,21 @@ import { z } from "zod";
 
 // Admin-only guard middleware
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+  if (ctx.user.role !== "admin" && ctx.user.role !== "super_admin")
+    throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+  return next({ ctx });
+});
+
+// Super-admin only guard
+const superAdminProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "super_admin")
+    throw new TRPCError({ code: "FORBIDDEN", message: "Super admin access required" });
   return next({ ctx });
 });
 
 // Worker or Admin guard
 const staffProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== "admin" && ctx.user.role !== "worker")
+  if (ctx.user.role !== "admin" && ctx.user.role !== "worker" && ctx.user.role !== "super_admin" && ctx.user.role !== "viewer")
     throw new TRPCError({ code: "FORBIDDEN", message: "Staff access required" });
   return next({ ctx });
 });
@@ -123,8 +132,8 @@ export const appRouter = router({
         if (!valid) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
         }
-        if (user.role !== "admin" && user.role !== "worker") {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: admin or worker role required" });
+        if (user.role !== "admin" && user.role !== "worker" && user.role !== "super_admin" && user.role !== "viewer") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: staff role required" });
         }
         const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || "" });
         const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -528,15 +537,106 @@ export const appRouter = router({
       list: adminProcedure.query(async () => listWorkers()),
       allUsers: adminProcedure.query(async () => listAllUsers()),
       promote: adminProcedure.input(z.object({
-        userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean() }),
+        userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean().default(false) }),
       })).mutation(async ({ input }) => { await setUserRole(input.userId, "worker"); await updateWorkerPermissions(input.userId, input.permissions); return { success: true }; }),
       updatePermissions: adminProcedure.input(z.object({
-        userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean() }),
+        userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean().default(false) }),
       })).mutation(async ({ input }) => { await updateWorkerPermissions(input.userId, input.permissions); return { success: true }; }),
       toggleActive: adminProcedure.input(z.object({ userId: z.number(), isActive: z.boolean() }))
         .mutation(async ({ input }) => { await toggleWorkerActive(input.userId, input.isActive); return { success: true }; }),
       demote: adminProcedure.input(z.object({ userId: z.number() }))
         .mutation(async ({ input }) => { await setUserRole(input.userId, "user"); return { success: true }; }),
+      // Create a new staff account directly (no OAuth needed)
+      createStaff: superAdminProcedure.input(z.object({
+        email: z.string().email(),
+        name: z.string().min(1),
+        password: z.string().min(8, "Password must be at least 8 characters"),
+        role: z.enum(["admin", "worker", "viewer"]),
+        permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean() }).optional(),
+      })).mutation(async ({ input }) => {
+        const existing = await getUserByEmail(input.email);
+        if (existing) throw new TRPCError({ code: "CONFLICT", message: "A user with this email already exists" });
+        const passwordHash = await bcrypt.hash(input.password, 12);
+        const id = await createStaffUser({ email: input.email, name: input.name, passwordHash, role: input.role, permissions: input.permissions });
+        return { success: true, id };
+      }),
+      // Update an existing staff member's name, role, or permissions
+      updateStaff: superAdminProcedure.input(z.object({
+        userId: z.number(),
+        name: z.string().min(1).optional(),
+        role: z.enum(["admin", "worker", "viewer"]).optional(),
+        permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean() }).optional(),
+        newPassword: z.string().min(8).optional(),
+      })).mutation(async ({ input }) => {
+        const { userId, name, role, permissions, newPassword } = input;
+        const updates: Record<string, unknown> = {};
+        if (name) updates.name = name;
+        if (role) updates.role = role;
+        if (permissions) updates.permissions = permissions;
+        if (newPassword) updates.passwordHash = await bcrypt.hash(newPassword, 12);
+        if (Object.keys(updates).length) {
+          const { getDb } = await import("./db");
+          const { users } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          const db = await getDb();
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+          await db.update(users).set(updates as any).where(eq(users.id, userId));
+        }
+        return { success: true };
+      }),
+      // List all staff (super_admin, admin, worker, viewer)
+      listStaff: adminProcedure.query(async () => listStaffUsers()),
+    }),
+  }),
+
+  // ─── Password Reset (public — no auth required) ───────────────────────────
+  passwordReset: router({
+    forgotPassword: publicProcedure.input(z.object({
+      email: z.string().email(),
+      origin: z.string().url(),
+    })).mutation(async ({ input }) => {
+      // Always return success to prevent email enumeration
+      const user = await getUserByEmail(input.email);
+      if (!user || !user.passwordHash) return { success: true };
+      if (user.role !== "admin" && user.role !== "worker" && user.role !== "super_admin" && user.role !== "viewer") return { success: true };
+      const token = require("crypto").randomBytes(32).toString("hex");
+      const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+      await setPasswordResetToken(user.id, token, expires);
+      const resetUrl = `${input.origin}/admin/reset-password?token=${token}`;
+      const { sendEmail } = await import("./email");
+      await sendEmail({
+        to: user.email!,
+        subject: "Reset your FreshSelect Meals password",
+        html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+  <h2 style="color:#2d6a4f">Password Reset Request</h2>
+  <p>Hi ${user.name || "there"},</p>
+  <p>We received a request to reset your password for the FreshSelect Meals admin portal.</p>
+  <p style="margin:24px 0">
+    <a href="${resetUrl}" style="background:#2d6a4f;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Reset Password</a>
+  </p>
+  <p style="color:#666;font-size:13px">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+  <p style="color:#666;font-size:13px">Or copy this link: ${resetUrl}</p>
+</div>`,
+      });
+      return { success: true };
+    }),
+    resetPassword: publicProcedure.input(z.object({
+      token: z.string().min(1),
+      newPassword: z.string().min(8, "Password must be at least 8 characters"),
+    })).mutation(async ({ input }) => {
+      const user = await getUserByResetToken(input.token);
+      if (!user) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired reset link" });
+      if (!user.passwordResetExpires || new Date() > user.passwordResetExpires)
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This reset link has expired. Please request a new one." });
+      const passwordHash = await bcrypt.hash(input.newPassword, 12);
+      await clearPasswordResetToken(user.id, passwordHash);
+      return { success: true };
+    }),
+    validateToken: publicProcedure.input(z.object({ token: z.string() })).query(async ({ input }) => {
+      const user = await getUserByResetToken(input.token);
+      if (!user || !user.passwordResetExpires || new Date() > user.passwordResetExpires)
+        return { valid: false };
+      return { valid: true, email: user.email, name: user.name };
     }),
   }),
 });

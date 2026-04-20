@@ -414,3 +414,13 @@
 - [x] Trigger Vercel redeploy to activate RESEND_FROM_EMAIL env var (done via browser)
 - [ ] Set up Sentry error monitoring (frontend + backend)
 - [x] Add GitHub Actions CI workflow (.github/workflows/ci.yml — runs type check + tests + build on every push/PR)
+
+## Admin User Management System (April 19, 2026 - Session 4)
+- [x] Update DB schema: add super_admin/viewer roles, passwordResetToken, passwordResetExpires fields to users table
+- [x] Build forgot password flow: generate secure token, send reset email via Resend
+- [x] Build reset password page: validate token, set new password
+- [x] Build admin user management page: list workers, add new worker, edit role, deactivate/reactivate
+- [x] Add permission guards: super_admin can do everything, admin can manage clients, viewer is read-only
+- [x] Add Forgot Password link to admin login page
+- [x] Seed super-admin account: a.krausz@levelupresources.org (password: hatzlacha — change after first login)
+- [x] Add createStaff procedure (create staff accounts without OAuth)

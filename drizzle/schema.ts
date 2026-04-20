@@ -2,7 +2,7 @@ import { int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "driz
 
 /**
  * Core user table backing auth flow.
- * role: admin (full access), worker (limited access), user (public)
+ * role: super_admin (full control + user management), admin (full access), worker (limited access), viewer (read-only), user (public)
  */
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
@@ -10,12 +10,16 @@ export const users = mysqlTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin", "worker"]).default("user").notNull(),
-  /** Worker-specific: permissions JSON (e.g. { canView: true, canEdit: false, canExport: false }) */
+  role: mysqlEnum("role", ["user", "admin", "worker", "super_admin", "viewer"]).default("user").notNull(),
+  /** Staff-specific: permissions JSON (e.g. { canView: true, canEdit: false, canExport: false, canDelete: false }) */
   permissions: json("permissions"),
   /** Hashed password for internal bcrypt authentication (null for legacy OAuth users) */
   passwordHash: varchar("passwordHash", { length: 256 }),
-  /** Worker-specific: whether the worker account is active */
+  /** Password reset token (hex string, single-use) */
+  passwordResetToken: varchar("passwordResetToken", { length: 128 }),
+  /** Password reset token expiry (UTC timestamp) */
+  passwordResetExpires: timestamp("passwordResetExpires"),
+  /** Whether the staff account is active */
   isActive: int("isActive").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
