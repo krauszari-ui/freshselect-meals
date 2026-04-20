@@ -680,3 +680,9 @@ export async function getClientEmailBySubmissionAndSubject(submissionId: number,
     .limit(1);
   return rows[0];
 }
+
+export async function deleteClientEmailById(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(clientEmails).where(eq(clientEmails.id, id));
+}

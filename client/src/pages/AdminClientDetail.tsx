@@ -214,6 +214,18 @@ export default function AdminClientDetail() {
     finally { setUploadingReferrerAttachment(false); e.target.value = ""; }
   };
 
+  // SCN Assessment editing state
+  const [scnEditMode, setScnEditMode] = useState(false);
+  const [scnEdits, setScnEdits] = useState<Record<string, string>>({});
+  const updateScreeningMutation = trpc.admin.updateScreeningAnswers.useMutation({
+    onSuccess: () => { utils.admin.getById.invalidate({ id }); setScnEditMode(false); setScnEdits({}); toast.success("SCN answers saved"); },
+    onError: (err) => toast.error(err.message),
+  });
+  const updateAssessmentCompletedMutation = trpc.admin.updateAssessmentCompleted.useMutation({
+    onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Assessment status updated"); },
+    onError: (err) => toast.error(err.message),
+  });
+
   // Client Email Thread state
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
@@ -224,6 +236,10 @@ export default function AdminClientDetail() {
     { submissionId: id },
     { enabled: id > 0, refetchInterval: 30000 }
   );
+  const deleteClientEmailMutation = trpc.admin.deleteClientEmail.useMutation({
+    onSuccess: () => { utils.admin.listClientEmails.invalidate({ submissionId: id }); toast.success("Email deleted"); },
+  });
+
   const sendClientEmailMutation = trpc.admin.sendClientEmail.useMutation({
     onSuccess: () => {
       utils.admin.listClientEmails.invalidate({ submissionId: id });
@@ -822,7 +838,7 @@ export default function AdminClientDetail() {
                         {(clientEmailThread as any[]).map((email: any) => (
                           <div
                             key={email.id}
-                            className={`rounded-lg p-3 border text-sm ${
+                            className={`group rounded-lg p-3 border text-sm ${
                               email.direction === "outbound"
                                 ? "bg-blue-50 border-blue-200 ml-4"
                                 : "bg-white border-slate-200"
@@ -834,9 +850,18 @@ export default function AdminClientDetail() {
                               }`}>
                                 {email.direction === "outbound" ? "You → Client" : "Client → You"}
                               </span>
-                              <span className="text-xs text-slate-400">
-                                {new Date(email.sentAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-400">
+                                  {new Date(email.sentAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                                </span>
+                                <button
+                                  onClick={() => { if (confirm("Delete this email from the log?")) deleteClientEmailMutation.mutate({ id: email.id }); }}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600"
+                                  title="Delete email"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
                             </div>
                             <p className="text-xs text-slate-500 mb-1 font-medium">{email.subject}</p>
                             <p className="text-sm text-slate-700 whitespace-pre-wrap">{email.body}</p>
@@ -977,33 +1002,94 @@ export default function AdminClientDetail() {
 
 
             <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-slate-900">SCN Screening Questionnaire</h2>
+              <div className="flex items-center gap-2">
+                {!scnEditMode ? (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-slate-300" onClick={() => { setScnEditMode(true); setScnEdits({}); }}>
+                    <Pencil className="h-3 w-3" /> Edit Answers
+                  </Button>
+                ) : (
+                  <>
+                    <Button size="sm" variant="outline" className="h-7 text-xs border-slate-300" onClick={() => { setScnEditMode(false); setScnEdits({}); }}>Cancel</Button>
+                    <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1" disabled={updateScreeningMutation.isPending} onClick={() => updateScreeningMutation.mutate({ id, screening: scnEdits })}>
+                      {updateScreeningMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
+
+            {/* Assessment Completion Toggle */}
+            <div className={`flex items-center justify-between p-3 rounded-lg mb-4 border ${
+              (client as any).assessmentCompletedAt ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"
+            }`}>
+              <div>
+                <p className={`text-sm font-semibold ${ (client as any).assessmentCompletedAt ? "text-emerald-700" : "text-amber-700" }`}>
+                  {(client as any).assessmentCompletedAt ? "Assessment Completed" : "Assessment In Progress"}
+                </p>
+                {(client as any).assessmentCompletedAt && (
+                  <p className="text-xs text-emerald-600 mt-0.5">Completed {new Date((client as any).assessmentCompletedAt).toLocaleDateString()}</p>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className={`h-7 text-xs ${ (client as any).assessmentCompletedAt ? "border-emerald-300 text-emerald-700 hover:bg-emerald-100" : "border-amber-300 text-amber-700 hover:bg-amber-100" }`}
+                disabled={updateAssessmentCompletedMutation.isPending}
+                onClick={() => updateAssessmentCompletedMutation.mutate({ id, completed: !(client as any).assessmentCompletedAt })}
+              >
+                {updateAssessmentCompletedMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : (client as any).assessmentCompletedAt ? "Mark Incomplete" : "Mark Completed"}
+              </Button>
+            </div>
+
             <div className="mb-6">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Screening Info</h3>
               <InfoLine label="Screening Date" value={client.createdAt ? new Date(client.createdAt).toLocaleDateString() : null} />
               <InfoLine label="Screener Name" value={intakeRepName || "—"} />
             </div>
-            <div>
-              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Screening Questions</h3>
-              <ScreeningLine num={1} label="Current living situation" value={screening.livingSituation} />
-              <ScreeningLine num={2} label="Utility shutoff threat (past 12 months)" value={screening.utilityShutoff} />
-              <ScreeningLine num={3} label="Receives SNAP (Food Stamps)" value={fd.receivesSnap ?? fd.hasSnap ?? screening.receivesSnap} />
-              <ScreeningLine num={4} label="Receives WIC" value={fd.receivesWic ?? fd.hasWic ?? screening.receivesWic} />
-              <ScreeningLine num={5} label="Receives TANF" value={screening.receivesTanf} />
-              <ScreeningLine num={6} label="Enrolled in Health Home" value={screening.enrolledHealthHome || healthCategories.includes("Enrolled in Health Home Care Management")} />
-              <ScreeningLine num={7} label="Household members" value={fd.householdMemberCount || String(householdMembers.length)} />
-              <ScreeningLine num={8} label="Household members with Medicaid" value={screening.householdMembersWithMedicaid} />
-              <ScreeningLine num={9} label="Needs work assistance" value={screening.needsWorkAssistance} />
-              <ScreeningLine num={10} label="Wants school or training help" value={screening.wantsSchoolTraining ?? screening.wantsSchoolHelp} />
-              <ScreeningLine num={11} label="Transportation barrier (past 12 months)" value={screening.transportationBarrier} />
-              <ScreeningLine num={12} label="Has chronic illness" value={screening.hasChronicIllness} />
-              <ScreeningLine num={13} label="Other known health issues" value={screening.otherHealthIssues} />
-              <ScreeningLine num={14} label="Medications require refrigeration" value={screening.medicationsRequireRefrigeration} />
-              <ScreeningLine num={15} label="Pregnant or postpartum" value={screening.pregnantOrPostpartum || healthCategories.includes("Pregnant") || healthCategories.includes("Postpartum")} />
-              <ScreeningLine num={16} label="Breastmilk refrigeration needed" value={screening.breastmilkRefrigeration} />
-            </div>
+
+            {/* Helper for editable rows */}
+            {(() => {
+              const EditableRow = ({ num, label, field, currentValue }: { num: number; label: string; field: string; currentValue: string | boolean | null | undefined }) => {
+                const displayVal = typeof currentValue === "boolean" ? (currentValue ? "Yes" : "No") : (currentValue as string) || "";
+                const editVal = scnEdits[field] !== undefined ? scnEdits[field] : displayVal;
+                if (!scnEditMode) return <ScreeningLine num={num} label={label} value={currentValue} />;
+                return (
+                  <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                    <span className="text-sm text-slate-600 w-1/2">{num}. {label}</span>
+                    <Input
+                      className="h-7 text-sm w-1/2 border-slate-300"
+                      value={editVal}
+                      onChange={(e) => setScnEdits((prev) => ({ ...prev, [field]: e.target.value }))}
+                      placeholder="Enter value"
+                    />
+                  </div>
+                );
+              };
+              return (
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Screening Questions</h3>
+                  <EditableRow num={1} label="Current living situation" field="livingSituation" currentValue={screening.livingSituation} />
+                  <EditableRow num={2} label="Utility shutoff threat (past 12 months)" field="utilityShutoff" currentValue={screening.utilityShutoff} />
+                  <EditableRow num={3} label="Receives SNAP (Food Stamps)" field="receivesSnap" currentValue={fd.receivesSnap ?? fd.hasSnap ?? screening.receivesSnap} />
+                  <EditableRow num={4} label="Receives WIC" field="receivesWic" currentValue={fd.receivesWic ?? fd.hasWic ?? screening.receivesWic} />
+                  <EditableRow num={5} label="Receives TANF" field="receivesTanf" currentValue={screening.receivesTanf} />
+                  <EditableRow num={6} label="Enrolled in Health Home" field="enrolledHealthHome" currentValue={screening.enrolledHealthHome || healthCategories.includes("Enrolled in Health Home Care Management")} />
+                  <EditableRow num={7} label="Household members" field="householdMemberCount" currentValue={fd.householdMemberCount || String(householdMembers.length)} />
+                  <EditableRow num={8} label="Household members with Medicaid" field="householdMembersWithMedicaid" currentValue={screening.householdMembersWithMedicaid} />
+                  <EditableRow num={9} label="Needs work assistance" field="needsWorkAssistance" currentValue={screening.needsWorkAssistance} />
+                  <EditableRow num={10} label="Wants school or training help" field="wantsSchoolTraining" currentValue={screening.wantsSchoolTraining ?? screening.wantsSchoolHelp} />
+                  <EditableRow num={11} label="Transportation barrier (past 12 months)" field="transportationBarrier" currentValue={screening.transportationBarrier} />
+                  <EditableRow num={12} label="Has chronic illness" field="hasChronicIllness" currentValue={screening.hasChronicIllness} />
+                  <EditableRow num={13} label="Other known health issues" field="otherHealthIssues" currentValue={screening.otherHealthIssues} />
+                  <EditableRow num={14} label="Medications require refrigeration" field="medicationsRequireRefrigeration" currentValue={screening.medicationsRequireRefrigeration} />
+                  <EditableRow num={15} label="Pregnant or postpartum" field="pregnantOrPostpartum" currentValue={screening.pregnantOrPostpartum || healthCategories.includes("Pregnant") || healthCategories.includes("Postpartum")} />
+                  <EditableRow num={16} label="Breastmilk refrigeration needed" field="breastmilkRefrigeration" currentValue={screening.breastmilkRefrigeration} />
+                </div>
+              );
+            })()}
+
             <div className="mt-6 pt-4 border-t border-slate-200">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Food Allergies / Dietary Restrictions</h3>
               <InfoLine label="Food allergies" value={fd.foodAllergies || fd.foodAllergiesDetails || "—"} />

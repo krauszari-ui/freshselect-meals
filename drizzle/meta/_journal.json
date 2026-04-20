@@ -78,6 +78,13 @@
       "when": 1776664117014,
       "tag": "0010_shallow_skin",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1776666439627,
+      "tag": "0011_magical_toro",
+      "breakpoints": true
     }
   ]
 }
