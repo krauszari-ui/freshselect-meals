@@ -1006,13 +1006,40 @@ export default function AdminClientDetail() {
               <h2 className="text-lg font-semibold text-slate-900">SCN Screening Questionnaire</h2>
               <div className="flex items-center gap-2">
                 {!scnEditMode ? (
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-slate-300" onClick={() => { setScnEditMode(true); setScnEdits({}); }}>
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-slate-300" onClick={() => {
+                    const fd2 = (client.formData as any) || {};
+                    const sc = fd2.screening || {};
+                    setScnEdits({
+                      screenerName: fd2.screenerName || intakeRepName || "",
+                      screeningDate: fd2.screeningDate || (client.createdAt ? new Date(client.createdAt).toISOString().split("T")[0] : ""),
+                      livingSituation: String(sc.livingSituation || ""),
+                      utilityShutoff: String(sc.utilityShutoff || ""),
+                      receivesSnap: String(fd2.receivesSnap ?? fd2.hasSnap ?? sc.receivesSnap ?? ""),
+                      receivesWic: String(fd2.receivesWic ?? fd2.hasWic ?? sc.receivesWic ?? ""),
+                      receivesTanf: String(sc.receivesTanf || ""),
+                      enrolledHealthHome: String(sc.enrolledHealthHome || ""),
+                      householdMemberCount: String(fd2.householdMemberCount || ""),
+                      householdMembersWithMedicaid: String(sc.householdMembersWithMedicaid || ""),
+                      needsWorkAssistance: String(sc.needsWorkAssistance || ""),
+                      wantsSchoolTraining: String(sc.wantsSchoolTraining ?? sc.wantsSchoolHelp ?? ""),
+                      transportationBarrier: String(sc.transportationBarrier || ""),
+                      hasChronicIllness: String(sc.hasChronicIllness || ""),
+                      otherHealthIssues: String(sc.otherHealthIssues || ""),
+                      medicationsRequireRefrigeration: String(sc.medicationsRequireRefrigeration || ""),
+                      pregnantOrPostpartum: String(sc.pregnantOrPostpartum || ""),
+                      breastmilkRefrigeration: String(sc.breastmilkRefrigeration || ""),
+                    });
+                    setScnEditMode(true);
+                  }}>
                     <Pencil className="h-3 w-3" /> Edit Answers
                   </Button>
                 ) : (
                   <>
                     <Button size="sm" variant="outline" className="h-7 text-xs border-slate-300" onClick={() => { setScnEditMode(false); setScnEdits({}); }}>Cancel</Button>
-                    <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1" disabled={updateScreeningMutation.isPending} onClick={() => updateScreeningMutation.mutate({ id, screening: scnEdits })}>
+                    <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1" disabled={updateScreeningMutation.isPending} onClick={() => {
+                      const { screenerName, screeningDate, ...screeningFields } = scnEdits;
+                      updateScreeningMutation.mutate({ id, formData: { screenerName, screeningDate, screening: screeningFields } });
+                    }}>
                       {updateScreeningMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
                     </Button>
                   </>
@@ -1045,8 +1072,33 @@ export default function AdminClientDetail() {
 
             <div className="mb-6">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Screening Info</h3>
-              <InfoLine label="Screening Date" value={client.createdAt ? new Date(client.createdAt).toLocaleDateString() : null} />
-              <InfoLine label="Screener Name" value={intakeRepName || "—"} />
+              {scnEditMode ? (
+                <>
+                  <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
+                    <span className="text-sm text-slate-500">Screening Date</span>
+                    <Input
+                      type="date"
+                      className="h-7 text-sm w-44 border-slate-300"
+                      value={scnEdits.screeningDate || ""}
+                      onChange={(e) => setScnEdits((prev) => ({ ...prev, screeningDate: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
+                    <span className="text-sm text-slate-500">Screener Name</span>
+                    <Input
+                      className="h-7 text-sm w-44 border-slate-300"
+                      value={scnEdits.screenerName || ""}
+                      onChange={(e) => setScnEdits((prev) => ({ ...prev, screenerName: e.target.value }))}
+                      placeholder="Screener name"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <InfoLine label="Screening Date" value={((client.formData as any)?.screeningDate) || (client.createdAt ? new Date(client.createdAt).toLocaleDateString() : null)} />
+                  <InfoLine label="Screener Name" value={((client.formData as any)?.screenerName) || intakeRepName || "—"} />
+                </>
+              )}
             </div>
 
             {/* Helper for editable rows */}
