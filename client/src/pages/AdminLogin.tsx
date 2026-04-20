@@ -48,8 +48,8 @@ export default function AdminLogin() {
     );
   }
 
-  const isLoggedInButNotAdmin =
-    user && !["admin", "worker", "super_admin", "viewer"].includes(user.role);
+  // Always show the email/password form — admin auth is fully separate from Manus OAuth
+  // A Manus OAuth session with role 'user' should still see the login form, not Access Denied
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f0f7f0] via-background to-[#fdf6f0] flex items-center justify-center p-4">
@@ -72,30 +72,7 @@ export default function AdminLogin() {
 
         <Card className="border-border/50 shadow-lg">
           <CardContent className="p-8">
-            {isLoggedInButNotAdmin ? (
-              <div className="text-center space-y-4">
-                <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
-                  <Lock className="w-7 h-7 text-destructive" />
-                </div>
-                <div>
-                  <h2 className="font-semibold text-foreground">
-                    Access Denied
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Your account ({user.name || user.email}) does not have admin
-                    privileges. Please contact the system administrator.
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => (window.location.href = "/")}
-                >
-                  Back to Home
-                </Button>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="text-center mb-2">
                   <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
                     <Lock className="w-7 h-7 text-primary" />
@@ -155,7 +132,6 @@ export default function AdminLogin() {
                   Secured with bcrypt authentication
                 </div>
               </form>
-            )}
           </CardContent>
         </Card>
 
