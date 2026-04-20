@@ -112,6 +112,7 @@ export default function AdminClientDetail() {
   const { data: clientServices } = trpc.admin.services.byClient.useQuery({ submissionId: id }, { enabled: id > 0 });
   const { data: clientDocs } = trpc.admin.documents.byClient.useQuery({ submissionId: id }, { enabled: id > 0 });
   const staffQuery = trpc.admin.staffList.useQuery();
+  const { data: stageHistoryData } = trpc.admin.stageHistory.useQuery({ id }, { enabled: id > 0 });
 
   const [activeTab, setActiveTab] = useState<"overview" | "assessment" | "services">("overview");
   const [noteText, setNoteText] = useState("");
@@ -968,6 +969,44 @@ export default function AdminClientDetail() {
                 ) : null}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Stage History Timeline — shown in overview tab, below documents */}
+        {activeTab === "overview" && (
+          <div className="bg-white rounded-lg border border-slate-200 p-5 mt-0">
+            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Stage History</h3>
+            {stageHistoryData && (stageHistoryData as any[]).length > 0 ? (
+              <ol className="relative border-l border-slate-200 ml-2 space-y-4">
+                {(stageHistoryData as any[]).map((entry: any, idx: number) => {
+                  const fromCfg = entry.fromStage ? STAGE_CONFIG[entry.fromStage] : null;
+                  const toCfg = STAGE_CONFIG[entry.toStage] || { label: entry.toStage, bg: "bg-slate-100", text: "text-slate-600" };
+                  return (
+                    <li key={entry.id} className="ml-4">
+                      <span className="absolute -left-1.5 mt-1 h-3 w-3 rounded-full border-2 border-white bg-slate-400" />
+                      <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                        {fromCfg ? (
+                          <>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${fromCfg.bg} ${fromCfg.text}`}>{fromCfg.label}</span>
+                            <span className="text-slate-400 text-xs">&rarr;</span>
+                          </>
+                        ) : (
+                          idx === 0 && <span className="text-xs text-slate-400 italic">Initial stage:</span>
+                        )}
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${toCfg.bg} ${toCfg.text}`}>{toCfg.label}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
+                        <span>{entry.changedByName || "Staff"}</span>
+                        <span>&middot;</span>
+                        <span>{new Date(entry.createdAt).toLocaleString()}</span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="text-sm text-slate-400">No stage changes recorded yet. Changes will appear here automatically when the stage is updated.</p>
+            )}
           </div>
         )}
 

@@ -265,3 +265,27 @@ export const clientEmails = mysqlTable("clientEmails", {
 });
 export type ClientEmail = typeof clientEmails.$inferSelect;
 export type InsertClientEmail = typeof clientEmails.$inferInsert;
+
+// ─── Client Stage History ─────────────────────────────────────────────────────
+/**
+ * Audit log of every stage change for a client.
+ * Created automatically whenever admin.updateStage is called.
+ */
+export const stageHistory = mysqlTable("stageHistory", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The client (submission) this history entry belongs to */
+  submissionId: int("submissionId").notNull(),
+  /** Stage value before the change (null for first entry) */
+  fromStage: varchar("fromStage", { length: 64 }),
+  /** Stage value after the change */
+  toStage: varchar("toStage", { length: 64 }).notNull(),
+  /** Staff user ID who made the change */
+  changedBy: int("changedBy"),
+  /** Staff user name (denormalized for display) */
+  changedByName: varchar("changedByName", { length: 256 }),
+  /** Optional note about the change */
+  note: text("note"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type StageHistory = typeof stageHistory.$inferSelect;
+export type InsertStageHistory = typeof stageHistory.$inferInsert;

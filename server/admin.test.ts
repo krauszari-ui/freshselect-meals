@@ -118,6 +118,26 @@ vi.mock("./db", () => ({
   getClientsByReferralCode: vi.fn().mockResolvedValue([
     { id: 1, firstName: "Sarah", lastName: "Cohen", cellPhone: "718-555-1234", email: "sarah@example.com", supermarket: "Foodoo", stage: "referral", status: "new", createdAt: new Date(), language: "English" },
   ]),
+  createStageHistoryEntry: vi.fn().mockResolvedValue(undefined),
+  getStageHistoryBySubmission: vi.fn().mockResolvedValue([
+    { id: 1, submissionId: 1, fromStage: "referral", toStage: "assessment", changedBy: 1, changedByName: "Admin User", note: null, createdAt: new Date() },
+  ]),
+  bulkDeleteSubmissions: vi.fn().mockResolvedValue({ deleted: 2 }),
+  createStaffUser: vi.fn().mockResolvedValue(1),
+  setPasswordResetToken: vi.fn().mockResolvedValue(undefined),
+  getUserByResetToken: vi.fn().mockResolvedValue(undefined),
+  clearPasswordResetToken: vi.fn().mockResolvedValue(undefined),
+  createReferrerMessage: vi.fn().mockResolvedValue(1),
+  listReferrerMessages: vi.fn().mockResolvedValue([]),
+  listReferrerMessagesBySubmission: vi.fn().mockResolvedValue([]),
+  markReferrerMessageRead: vi.fn().mockResolvedValue(undefined),
+  getUnreadCountByReferrer: vi.fn().mockResolvedValue(0),
+  deleteReferrerMessage: vi.fn().mockResolvedValue(undefined),
+  markAllReferrerMessagesRead: vi.fn().mockResolvedValue(undefined),
+  createClientEmail: vi.fn().mockResolvedValue(1),
+  listClientEmails: vi.fn().mockResolvedValue([]),
+  deleteClientEmailById: vi.fn().mockResolvedValue(undefined),
+  getUserByEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
@@ -363,6 +383,32 @@ describe("admin.updateStage", () => {
       const result = await caller.admin.updateStage({ id: 1, stage });
       expect(result.success).toBe(true);
     }
+  });
+
+  it("logs a stage history entry when stage is updated", async () => {
+    const { createStageHistoryEntry } = await import("./db");
+    const caller = appRouter.createCaller(createAdminContext());
+    await caller.admin.updateStage({ id: 1, stage: "assessment" });
+    expect(createStageHistoryEntry).toHaveBeenCalledWith(expect.objectContaining({
+      submissionId: 1,
+      toStage: "assessment",
+    }));
+  });
+});
+
+// ─── Stage History ─────────────────────────────────────────────────────
+describe("admin.stageHistory", () => {
+  it("returns stage history for a client", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+    const result = await caller.admin.stageHistory({ id: 1 });
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThan(0);
+    expect((result as any[])[0]).toMatchObject({ submissionId: 1, toStage: "assessment" });
+  });
+
+  it("throws FORBIDDEN for non-staff", async () => {
+    const caller = appRouter.createCaller(createUserContext());
+    await expect(caller.admin.stageHistory({ id: 1 })).rejects.toThrow("Staff access required");
   });
 });
 

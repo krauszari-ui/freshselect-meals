@@ -22,6 +22,7 @@ import {
   createReferrerMessage, listReferrerMessages, listReferrerMessagesBySubmission, markReferrerMessageRead, getUnreadCountByReferrer,
   deleteReferrerMessage, markAllReferrerMessagesRead,
   createClientEmail, listClientEmails, deleteClientEmailById,
+  createStageHistoryEntry, getStageHistoryBySubmission,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -378,7 +379,24 @@ export const appRouter = router({
     updateStage: staffProcedure.input(z.object({
       id: z.number(),
       stage: z.enum(["referral", "assessment", "level_one_only", "level_one_household", "level_2_active", "ineligible", "provider_attestation_required", "flagged"]),
-    })).mutation(async ({ input }) => { await updateSubmissionStage(input.id, input.stage); return { success: true }; }),
+    })).mutation(async ({ input, ctx }) => {
+      // Fetch current stage for history
+      const existing = await getSubmissionById(input.id);
+      await updateSubmissionStage(input.id, input.stage);
+      // Log stage change to history
+      await createStageHistoryEntry({
+        submissionId: input.id,
+        fromStage: existing?.stage ?? null,
+        toStage: input.stage,
+        changedBy: ctx.user.id,
+        changedByName: ctx.user.name ?? ctx.user.email ?? "Staff",
+      });
+      return { success: true };
+    }),
+
+    stageHistory: staffProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+      return getStageHistoryBySubmission(input.id);
+    }),
 
     updateAssignment: adminProcedure.input(z.object({
       id: z.number(), assignedTo: z.number().nullable(), intakeRep: z.number().nullable().optional(),
@@ -389,9 +407,17 @@ export const appRouter = router({
       status: z.string().optional(), supermarket: z.string().optional(), stage: z.string().optional(),
       neighborhood: z.string().optional(), language: z.string().optional(), borough: z.string().optional(),
       search: z.string().optional(),
+      assignedTo: z.number().optional(), intakeRep: z.number().optional(),
+      referralSource: z.string().optional(), program: z.string().optional(),
+      assessmentCompleted: z.boolean().optional(),
     }))
       .mutation(async ({ input }) => {
-        const rows = await getAllSubmissions(input);
+        // 'assessment_completed' is a virtual filter — maps to assessmentCompletedAt IS NOT NULL
+        const { assessmentCompleted, program, assignedTo, intakeRep, referralSource, ...baseFilters } = input;
+        let rows = await getAllSubmissions({ ...baseFilters, assignedTo, intakeRep, referralSource });
+        if (assessmentCompleted === true) rows = rows.filter((r: any) => r.assessmentCompletedAt != null);
+        if (assessmentCompleted === false) rows = rows.filter((r: any) => r.assessmentCompletedAt == null);
+        if (program && program !== "all") rows = rows.filter((r: any) => r.program === program);
         const headers = ["Reference #", "First Name", "Last Name", "Email", "Phone", "Medicaid ID", "DOB", "Address", "City", "State", "Zip", "Language", "Neighborhood", "Vendor", "Stage", "Status", "Household Members", "Health Categories", "Referral Source", "Guardian Name", "Submitted"];
         const csvRows = rows.map((r) => {
           const fd = (r.formData as any) || {};
