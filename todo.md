@@ -427,3 +427,13 @@
 
 ## Sidebar & Navigation
 - [x] Add Staff Management link to sidebar (visible to super_admin and admin only)
+
+## Members & Referrer Notifications
+- [x] Add Members column to Clients list (primary member + household count, e.g. "1 + 3")
+- [x] Add Total Members stat card to Referral Links page
+- [x] Create referrer_messages table in DB schema (id, senderId, referrerId, clientId, message, createdAt, readAt)
+- [x] Add DB migration for referrer_messages table
+- [x] Add tRPC procedures: sendMessage, listMessages, markRead
+- [x] Build notification inbox UI on Referral Links page (bell icon + unread count per referrer)
+- [x] Build message compose dialog: @mention referrer, link to a client, free-text message
+- [x] Show unread notification badge on referrer rows in Referral Links table
