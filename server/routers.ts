@@ -546,11 +546,19 @@ export const appRouter = router({
 
     updateScreeningAnswers: staffProcedure.input(z.object({
       id: z.number(),
-      screening: z.record(z.string(), z.unknown()),
+      // Full flat formData patch — top-level fields (screenerName, screeningDate, receivesSnap, etc.)
+      // plus an optional nested 'screening' object that gets deep-merged
+      formData: z.record(z.string(), z.unknown()),
     })).mutation(async ({ input }) => {
       const existing = await getSubmissionById(input.id);
       if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
-      const merged = { ...(existing.formData as Record<string, unknown>), screening: { ...((existing.formData as any)?.screening || {}), ...input.screening } };
+      const existingFd = (existing.formData as Record<string, unknown>) || {};
+      const { screening: newScreening, ...topLevelFields } = input.formData as any;
+      const merged = {
+        ...existingFd,
+        ...topLevelFields,
+        screening: { ...((existingFd as any)?.screening || {}), ...(newScreening || {}) },
+      };
       await updateSubmissionFields(input.id, { formData: merged } as any);
       return { success: true };
     }),

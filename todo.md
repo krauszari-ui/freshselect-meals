@@ -479,3 +479,10 @@
 - [x] Make SCN assessment questions editable on client detail Assessment tab
 - [x] Add "Mark Assessment Completed" toggle/button on Assessment tab
 - [x] Store assessmentCompletedAt timestamp in submissions table
+
+## SCN Assessment Editing Fix (April 20, 2026)
+- [ ] Fix errors when saving SCN screening questionnaire edits
+- [ ] Make screener name editable in Assessment tab
+- [ ] Make screening date editable in Assessment tab
+- [ ] Ensure all 16 SCN questions are editable and save correctly
+- [ ] Verify save/cancel flow works end-to-end without errors
