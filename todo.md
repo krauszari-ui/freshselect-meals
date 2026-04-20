@@ -424,3 +424,6 @@
 - [x] Add Forgot Password link to admin login page
 - [x] Seed super-admin account: a.krausz@levelupresources.org (password: hatzlacha — change after first login)
 - [x] Add createStaff procedure (create staff accounts without OAuth)
+
+## Sidebar & Navigation
+- [x] Add Staff Management link to sidebar (visible to super_admin and admin only)
