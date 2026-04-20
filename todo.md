@@ -437,3 +437,9 @@
 - [x] Build notification inbox UI on Referral Links page (bell icon + unread count per referrer)
 - [x] Build message compose dialog: @mention referrer, link to a client, free-text message
 - [x] Show unread notification badge on referrer rows in Referral Links table
+
+## Referrer Portal & Client Messaging
+- [x] Add Total Members stat to referrer portal (/referrer) myStats endpoint and UI
+- [x] Add Referrer Notes section to client detail page (AdminApplicationDetail), next to Case Notes
+- [x] Referrer Notes: admin can write a message tagged to this client, sends via referrerMessages table
+- [x] Show referrer messages on /referrer portal page so referrers can see action items from admin

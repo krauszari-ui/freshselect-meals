@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   LogIn, LogOut, Users, Eye, Loader2, Mail, Lock, Search,
   UserCheck, Clock, AlertCircle, ChevronLeft, ChevronRight,
+  Bell, MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -65,6 +66,13 @@ export default function ReferrerPortal() {
     { enabled: !!session }
   );
 
+  const { data: messages, isLoading: messagesLoading } = trpc.admin.referrerPortal.myMessages.useQuery(
+    { code: session?.code || "" },
+    { enabled: !!session, refetchInterval: 30000 }
+  );
+
+  const unreadCount = (messages as any[] | undefined)?.filter((m: any) => !m.readAt).length ?? 0;
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginForm.email || !loginForm.password) {
@@ -74,11 +82,14 @@ export default function ReferrerPortal() {
     loginMutation.mutate(loginForm);
   };
 
+  const [activeTab, setActiveTab] = useState<"clients" | "messages">("clients");
+
   const handleLogout = () => {
     setSession(null);
     setLoginForm({ email: "", password: "" });
     setSearch("");
     setPage(1);
+    setActiveTab("clients");
   };
 
   // Filter and paginate clients
@@ -206,7 +217,7 @@ export default function ReferrerPortal() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -216,6 +227,20 @@ export default function ReferrerPortal() {
                 <div>
                   <p className="text-2xl font-bold text-gray-900">{stats?.totalClients ?? 0}</p>
                   <p className="text-xs text-gray-500">Total Referrals</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
+                  <UserCheck className="w-5 h-5 text-violet-700" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">{stats?.totalMembers ?? 0}</p>
+                  <p className="text-xs text-gray-500">Total Members</p>
                 </div>
               </div>
             </CardContent>
@@ -237,39 +262,109 @@ export default function ReferrerPortal() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            className={`cursor-pointer transition-all ${unreadCount > 0 ? "ring-2 ring-amber-400" : ""}`}
+            onClick={() => setActiveTab("messages")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                  <UserCheck className="w-5 h-5 text-emerald-700" />
+                <div className="relative w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                  <Bell className="w-5 h-5 text-amber-700" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center">
+                      {unreadCount}
+                    </span>
+                  )}
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {(stats?.stages?.level_2_active ?? 0) + (stats?.stages?.level_one_only ?? 0) + (stats?.stages?.level_one_household ?? 0)}
-                  </p>
-                  <p className="text-xs text-gray-500">Active Clients</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                  <Eye className="w-5 h-5 text-amber-700" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">View Only</p>
-                  <p className="text-xs text-gray-500">Access Level</p>
+                  <p className="text-2xl font-bold text-gray-900">{unreadCount}</p>
+                  <p className="text-xs text-gray-500">Unread Messages</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setActiveTab("clients")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === "clients"
+                ? "bg-green-600 text-white"
+                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            <Users className="w-4 h-4 inline mr-1.5" />Clients
+          </button>
+          <button
+            onClick={() => setActiveTab("messages")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors relative ${
+              activeTab === "messages"
+                ? "bg-green-600 text-white"
+                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            <MessageSquare className="w-4 h-4 inline mr-1.5" />Messages
+            {unreadCount > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Messages Tab */}
+        {activeTab === "messages" && (
+          <Card className="mb-6">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-emerald-600" />
+                Messages from FreshSelect Meals
+              </CardTitle>
+              <p className="text-sm text-gray-500">Action items and requests from the FreshSelect Meals team about your clients.</p>
+            </CardHeader>
+            <CardContent>
+              {messagesLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-green-600" /></div>
+              ) : !messages || (messages as any[]).length === 0 ? (
+                <div className="text-center py-10 text-gray-400">
+                  <MessageSquare className="w-10 h-10 mx-auto mb-3 text-gray-200" />
+                  <p className="font-medium">No messages yet</p>
+                  <p className="text-sm mt-1">The FreshSelect Meals team will send you action items here.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(messages as any[]).map((msg: any) => (
+                    <div
+                      key={msg.id}
+                      className={`rounded-lg p-4 border ${
+                        msg.readAt
+                          ? "bg-gray-50 border-gray-200"
+                          : "bg-amber-50 border-amber-300"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm text-gray-800 flex-1">{msg.message}</p>
+                        {!msg.readAt && (
+                          <span className="shrink-0 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
+                            NEW
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-2">
+                        {new Date(msg.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Client List */}
-        <Card>
+        {activeTab === "clients" && (<Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <CardTitle className="text-lg">Your Referred Clients</CardTitle>
@@ -381,7 +476,7 @@ export default function ReferrerPortal() {
               </>
             )}
           </CardContent>
-        </Card>
+        </Card>)}
 
         {/* Info Banner */}
         <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
