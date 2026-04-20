@@ -207,3 +207,26 @@ export const referralLinks = mysqlTable("referralLinks", {
 
 export type ReferralLink = typeof referralLinks.$inferSelect;
 export type InsertReferralLink = typeof referralLinks.$inferInsert;
+
+// ─── Referrer Messages ────────────────────────────────────────────────────────
+/**
+ * Messages sent by admin staff to referrers.
+ * Example: "@ah please get me the DOB from client one"
+ * Each message is linked to a referral link (referrer) and optionally a specific client.
+ */
+export const referrerMessages = mysqlTable("referrerMessages", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The referral link (referrer) this message is addressed to */
+  referralLinkId: int("referralLinkId").notNull(),
+  /** Optional: the specific client this message is about */
+  submissionId: int("submissionId"),
+  /** The admin user who sent the message */
+  senderId: int("senderId").notNull(),
+  /** Message text (may include @mention like "@ah please get DOB") */
+  message: text("message").notNull(),
+  /** When the referrer read/acknowledged the message (null = unread) */
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type ReferrerMessage = typeof referrerMessages.$inferSelect;
+export type InsertReferrerMessage = typeof referrerMessages.$inferInsert;

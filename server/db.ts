@@ -541,7 +541,58 @@ export async function getClientsByReferralCode(code: string) {
 export async function getReferralStats() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const links = await db.select().from(referralLinks).orderBy(desc(referralLinks.usageCount));
+  const [links, membersResult] = await Promise.all([
+    db.select().from(referralLinks).orderBy(desc(referralLinks.usageCount)),
+    db.select({
+      totalAdditional: sql<number>`COALESCE(SUM(additionalMembersCount), 0)`,
+      totalPrimary: sql<number>`count(*)`
+    }).from(submissions).where(sql`referralSource IS NOT NULL AND referralSource != ''`),
+  ]);
   const totalReferrals = links.reduce((sum, l) => sum + l.usageCount, 0);
-  return { links, totalReferrals, totalLinks: links.length };
+  const totalAdditional = Number(membersResult[0]?.totalAdditional ?? 0);
+  const totalPrimary = Number(membersResult[0]?.totalPrimary ?? 0);
+  const totalMembers = totalAdditional + totalPrimary;
+  return { links, totalReferrals, totalLinks: links.length, totalMembers };
+}
+
+// ─── Referrer Messages ────────────────────────────────────────────────────────
+import { referrerMessages, InsertReferrerMessage } from "../drizzle/schema";
+
+export async function createReferrerMessage(data: InsertReferrerMessage): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(referrerMessages).values(data);
+  return (result[0] as any).insertId as number;
+}
+
+export async function listReferrerMessages(referralLinkId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(referrerMessages)
+    .where(eq(referrerMessages.referralLinkId, referralLinkId))
+    .orderBy(desc(referrerMessages.createdAt));
+}
+
+export async function markReferrerMessageRead(messageId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(referrerMessages).set({ readAt: new Date() }).where(eq(referrerMessages.id, messageId));
+}
+
+export async function getUnreadCountByReferrer(): Promise<Record<number, number>> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db
+    .select({
+      referralLinkId: referrerMessages.referralLinkId,
+      count: sql<number>`count(*)`,
+    })
+    .from(referrerMessages)
+    .where(isNull(referrerMessages.readAt))
+    .groupBy(referrerMessages.referralLinkId);
+  const result: Record<number, number> = {};
+  for (const row of rows) {
+    result[row.referralLinkId] = Number(row.count);
+  }
+  return result;
 }

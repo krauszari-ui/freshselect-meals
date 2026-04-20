@@ -19,6 +19,7 @@ import {
   getReferralLinkByEmail, getClientsByReferralCode, getUserByEmail,
   getSubmissionByRef,
   createStaffUser, setPasswordResetToken, getUserByResetToken, clearPasswordResetToken,
+  createReferrerMessage, listReferrerMessages, markReferrerMessageRead, getUnreadCountByReferrer,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -485,6 +486,34 @@ export const appRouter = router({
       delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
         await deleteReferralLink(input.id);
         return { success: true };
+      }),
+      // ─── Referrer Messages ───────────────────────────────────────────
+      sendMessage: staffProcedure.input(z.object({
+        referralLinkId: z.number(),
+        submissionId: z.number().optional(),
+        message: z.string().min(1).max(2000),
+      })).mutation(async ({ ctx, input }) => {
+        const id = await createReferrerMessage({
+          referralLinkId: input.referralLinkId,
+          submissionId: input.submissionId ?? null,
+          senderId: ctx.user.id,
+          message: input.message,
+        });
+        return { success: true, id };
+      }),
+      listMessages: staffProcedure.input(z.object({
+        referralLinkId: z.number(),
+      })).query(async ({ input }) => {
+        return listReferrerMessages(input.referralLinkId);
+      }),
+      markRead: staffProcedure.input(z.object({
+        messageId: z.number(),
+      })).mutation(async ({ input }) => {
+        await markReferrerMessageRead(input.messageId);
+        return { success: true };
+      }),
+      unreadCounts: staffProcedure.query(async () => {
+        return getUnreadCountByReferrer();
       }),
     }),
 

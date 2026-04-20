@@ -692,7 +692,7 @@ export default function AdminClients() {
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">CIN</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">DOB</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Language</th>
-                    <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Household</th>
+                    <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Members</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3 cursor-pointer select-none"
                       onClick={() => setSortDir(sortDir === "desc" ? "asc" : "desc")}>
                       <span className="flex items-center gap-1">
@@ -711,8 +711,8 @@ export default function AdminClients() {
                     const workerName = getWorkerName(client.assignedTo);
                     const stageInfo = STAGE_CONFIG[client.stage] || { label: client.stage, bg: "bg-slate-100", text: "text-slate-700" };
                     const dob = fd.dateOfBirth ? new Date(fd.dateOfBirth).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "\u2014";
-                    const householdMembers = fd.householdMembers || [];
-                    const householdDisplay = householdMembers.length > 0 ? householdMembers[0]?.name || "\u2014" : "\u2014";
+                    const additionalCount = typeof client.additionalMembersCount === "number" ? client.additionalMembersCount : (fd.householdMembers?.length ?? 0);
+                    const membersDisplay = additionalCount > 0 ? `1 + ${additionalCount}` : "1";
 
                     const isSelected = selectedIds.has(client.id);
                     return (
@@ -744,7 +744,11 @@ export default function AdminClients() {
                         <td className="px-4 py-3 text-sm text-slate-600">{client.medicaidId}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{dob}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{client.language || "English"}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{householdDisplay}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1 text-sm font-medium text-slate-700">
+                            <span>{membersDisplay}</span>
+                          </span>
+                        </td>
                         <td className="px-4 py-3 text-sm text-slate-600">
                           {new Date(client.createdAt).toLocaleDateString("en-US")}
                         </td>
