@@ -50,6 +50,13 @@
       "when": 1776359469633,
       "tag": "0006_black_brood",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1776645384404,
+      "tag": "0007_jittery_next_avengers",
+      "breakpoints": true
     }
   ]
 }

@@ -253,6 +253,17 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
 
 // ─── Public send functions ────────────────────────────────────────────────────
 
+/**
+ * Generic email sender — use for transactional emails outside the submission flow.
+ */
+export async function sendEmail(params: { to: string; subject: string; html: string }): Promise<boolean> {
+  const idempotencyKey = `generic-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return sendWithRetry(
+    (key) => getResend().emails.send({ from: FROM_EMAIL, to: params.to, subject: params.subject, html: params.html, headers: { "Idempotency-Key": key } }),
+    idempotencyKey
+  );
+}
+
 export async function sendApplicantConfirmation(data: SubmissionEmailData): Promise<boolean> {
   const resend = getResend();
   const subject = `FreshSelect Meals - Application Received (Ref: ${data.referenceNumber})`;

@@ -17,6 +17,8 @@ import AdminClientDetail from "./pages/AdminClientDetail";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AdminReferrals from "./pages/AdminReferrals";
 import ReferrerPortal from "./pages/ReferrerPortal";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 function Router() {
   return (
@@ -27,6 +29,9 @@ function Router() {
 
       {/* Admin */}
       <Route path={"/admin"} component={AdminLogin} />
+      <Route path={"/admin/login"} component={AdminLogin} />
+      <Route path={"/admin/forgot-password"} component={ForgotPassword} />
+      <Route path={"/admin/reset-password"} component={ResetPassword} />
       <Route path={"/admin/dashboard"} component={AdminDashboard} />
       <Route path={"/admin/application/:id"} component={AdminApplicationDetail} />
       <Route path={"/admin/workers"} component={AdminWorkers} />
