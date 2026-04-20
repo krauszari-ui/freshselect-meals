@@ -19,7 +19,7 @@ import {
   getReferralLinkByEmail, getClientsByReferralCode, getUserByEmail,
   getSubmissionByRef,
   createStaffUser, setPasswordResetToken, getUserByResetToken, clearPasswordResetToken,
-  createReferrerMessage, listReferrerMessages, markReferrerMessageRead, getUnreadCountByReferrer,
+  createReferrerMessage, listReferrerMessages, listReferrerMessagesBySubmission, markReferrerMessageRead, getUnreadCountByReferrer,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -281,6 +281,34 @@ export const appRouter = router({
       const submission = await getSubmissionById(input.id);
       if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
       return submission;
+    }),
+    // ─── Referrer Notes (per client) ──────────────────────────────────────
+    sendReferrerNote: staffProcedure.input(z.object({
+      submissionId: z.number(),
+      message: z.string().min(1).max(2000),
+    })).mutation(async ({ ctx, input }) => {
+      // Look up the referral link for this submission
+      const submission = await getSubmissionById(input.submissionId);
+      if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      if (!submission.referralSource) throw new TRPCError({ code: "BAD_REQUEST", message: "This client has no referrer" });
+      const link = await getReferralLinkByCode(submission.referralSource);
+      if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+      const id = await createReferrerMessage({
+        referralLinkId: link.id,
+        submissionId: input.submissionId,
+        senderId: ctx.user.id,
+        message: input.message,
+      });
+      return { success: true, id };
+    }),
+    listReferrerNotes: staffProcedure.input(z.object({
+      submissionId: z.number(),
+    })).query(async ({ input }) => {
+      const submission = await getSubmissionById(input.submissionId);
+      if (!submission || !submission.referralSource) return [];
+      const link = await getReferralLinkByCode(submission.referralSource);
+      if (!link) return [];
+      return listReferrerMessagesBySubmission(input.submissionId);
     }),
 
     updateStatus: staffProcedure.input(z.object({
@@ -557,7 +585,15 @@ export const appRouter = router({
         const clients = await getClientsByReferralCode(link.code);
         const stages: Record<string, number> = {};
         clients.forEach((c) => { stages[c.stage] = (stages[c.stage] || 0) + 1; });
-        return { totalClients: clients.length, stages, referrerName: link.referrerName, code: link.code };
+        const totalMembers = clients.reduce((sum, c) => sum + (c.additionalMembersCount ?? 0) + 1, 0);
+        return { totalClients: clients.length, stages, referrerName: link.referrerName, code: link.code, totalMembers };
+      }),
+      myMessages: publicProcedure.input(z.object({
+        code: z.string(),
+      })).query(async ({ input }) => {
+        const link = await getReferralLinkByCode(input.code);
+        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        return listReferrerMessages(link.id);
       }),
     }),
 

@@ -21,9 +21,11 @@ import {
   Home,
   Loader2,
   Mail,
+  MessageSquare,
   PauseCircle,
   Phone,
   Save,
+  Send,
   ShieldCheck,
   Store,
   User,
@@ -78,6 +80,7 @@ export default function AdminApplicationDetail() {
   const [status, setStatus] = useState<StatusKey>("new");
   const [adminNotes, setAdminNotes] = useState("");
   const [isDirty, setIsDirty] = useState(false);
+  const [referrerNote, setReferrerNote] = useState("");
 
   useEffect(() => {
     if (!loading && !user) navigate("/admin");
@@ -87,6 +90,15 @@ export default function AdminApplicationDetail() {
 
   const query = trpc.admin.getById.useQuery({ id }, { enabled: id > 0 });
   const utils = trpc.useUtils();
+  const referrerNotesQuery = trpc.admin.listReferrerNotes.useQuery({ submissionId: id }, { enabled: id > 0 });
+  const sendReferrerNoteMutation = trpc.admin.sendReferrerNote.useMutation({
+    onSuccess: () => {
+      setReferrerNote("");
+      utils.admin.listReferrerNotes.invalidate({ submissionId: id });
+      toast.success("Note sent to referrer");
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const updateMutation = trpc.admin.updateStatus.useMutation({
     onSuccess: () => {
@@ -327,7 +339,7 @@ export default function AdminApplicationDetail() {
           {/* Right: Status Management */}
           <div className="space-y-4">
             {/* Status Card */}
-            <Card className="border-border/50 sticky top-20">
+            <Card className="border-border/50">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-semibold">Application Status</CardTitle>
               </CardHeader>
@@ -399,6 +411,57 @@ export default function AdminApplicationDetail() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Referrer Notes */}
+            {sub.referralSource && (
+              <Card className="border-border/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-emerald-600" />
+                    Referrer Notes
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Messages to referrer <strong>{sub.referralSource}</strong> about this client. Visible on their portal.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Existing notes */}
+                  <div className="space-y-2 max-h-52 overflow-y-auto">
+                    {referrerNotesQuery.isLoading ? (
+                      <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+                    ) : (referrerNotesQuery.data ?? []).length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-3">No notes sent yet</p>
+                    ) : (
+                      (referrerNotesQuery.data as any[]).map((msg: any) => (
+                        <div key={msg.id} className="bg-slate-50 rounded-md p-2.5 border border-slate-200">
+                          <p className="text-sm text-slate-800">{msg.message}</p>
+                          <p className="text-[10px] text-slate-400 mt-1">
+                            {new Date(msg.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                            {!msg.readAt && <span className="ml-2 text-amber-500 font-medium">Unread</span>}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {/* Compose */}
+                  <Textarea
+                    placeholder={`e.g., Please provide the DOB for ${sub.firstName} ${sub.lastName}`}
+                    value={referrerNote}
+                    onChange={(e) => setReferrerNote(e.target.value)}
+                    className="text-sm resize-none h-20"
+                  />
+                  <Button
+                    size="sm"
+                    className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
+                    onClick={() => sendReferrerNoteMutation.mutate({ submissionId: id, message: referrerNote })}
+                    disabled={!referrerNote.trim() || sendReferrerNoteMutation.isPending}
+                  >
+                    {sendReferrerNoteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    Send to Referrer
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </main>

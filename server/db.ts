@@ -596,3 +596,11 @@ export async function getUnreadCountByReferrer(): Promise<Record<number, number>
   }
   return result;
 }
+
+export async function listReferrerMessagesBySubmission(submissionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(referrerMessages)
+    .where(eq(referrerMessages.submissionId, submissionId))
+    .orderBy(desc(referrerMessages.createdAt));
+}
