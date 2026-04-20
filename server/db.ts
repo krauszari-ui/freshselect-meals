@@ -568,7 +568,20 @@ export async function createReferrerMessage(data: InsertReferrerMessage): Promis
 export async function listReferrerMessages(referralLinkId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.select().from(referrerMessages)
+  return db
+    .select({
+      id: referrerMessages.id,
+      referralLinkId: referrerMessages.referralLinkId,
+      submissionId: referrerMessages.submissionId,
+      senderId: referrerMessages.senderId,
+      message: referrerMessages.message,
+      createdAt: referrerMessages.createdAt,
+      readAt: referrerMessages.readAt,
+      clientFirstName: submissions.firstName,
+      clientLastName: submissions.lastName,
+    })
+    .from(referrerMessages)
+    .leftJoin(submissions, eq(referrerMessages.submissionId, submissions.id))
     .where(eq(referrerMessages.referralLinkId, referralLinkId))
     .orderBy(desc(referrerMessages.createdAt));
 }
