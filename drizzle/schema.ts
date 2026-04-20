@@ -78,6 +78,8 @@ export const submissions = mysqlTable("submissions", {
   /** Program */
   program: varchar("program", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  /** When the SCN assessment was marked completed by staff */
+  assessmentCompletedAt: timestamp("assessmentCompletedAt"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 

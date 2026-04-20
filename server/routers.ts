@@ -21,7 +21,7 @@ import {
   createStaffUser, setPasswordResetToken, getUserByResetToken, clearPasswordResetToken,
   createReferrerMessage, listReferrerMessages, listReferrerMessagesBySubmission, markReferrerMessageRead, getUnreadCountByReferrer,
   deleteReferrerMessage, markAllReferrerMessagesRead,
-  createClientEmail, listClientEmails,
+  createClientEmail, listClientEmails, deleteClientEmailById,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -330,17 +330,18 @@ export const appRouter = router({
       const submission = await getSubmissionById(input.submissionId);
       if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
       if (!submission.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Client has no email address" });
-      // Build a reply-to address that encodes the submissionId so inbound replies can be matched
-      const replyTo = `client-${submission.id}@inbound.freshselectmeals.com`;
+      // Reply-to is info@freshselectmeals.com — a real inbox so clients can reply directly
+      const replyTo = `info@freshselectmeals.com`;
       const fromEmail = `FreshSelect Meals <info@freshselectmeals.com>`;
       const success = await sendEmail({
         to: submission.email,
         subject: input.subject,
+        replyTo,
         html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
           <p style="color:#2d5a27;font-weight:bold;">FreshSelect Meals</p>
           ${input.body.replace(/\n/g, "<br/>")}
           ${input.attachmentUrls && input.attachmentUrls.length > 0 ? `<hr/><p style="font-size:13px;color:#666;">Attachments: ${input.attachmentUrls.map((u, i) => `<a href="${u}">Attachment ${i + 1}</a>`).join(", ")}</p>` : ""}
-          <hr/><p style="font-size:12px;color:#999;">FreshSelect Meals &mdash; (718) 307-4664 | info@freshselectmeals.com</p>
+          <hr/><p style="font-size:12px;color:#999;">FreshSelect Meals &mdash; (718) 307-4664 | info@freshselectmeals.com<br/>To reply, simply reply to this email.</p>
         </div>`,
       });
       if (!success) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to send email" });
@@ -360,6 +361,12 @@ export const appRouter = router({
       submissionId: z.number(),
     })).query(async ({ input }) => {
       return listClientEmails(input.submissionId);
+    }),
+    deleteClientEmail: staffProcedure.input(z.object({
+      id: z.number(),
+    })).mutation(async ({ input }) => {
+      await deleteClientEmailById(input.id);
+      return { success: true };
     }),
 
     updateStatus: staffProcedure.input(z.object({
@@ -523,6 +530,28 @@ export const appRouter = router({
       adminNotes: z.string(),
     })).mutation(async ({ input }) => {
       await updateSubmissionFields(input.id, { adminNotes: input.adminNotes });
+      return { success: true };
+    }),
+
+    // ─── Assessment Completion & SCN Edits ─────────────────────────────────
+    updateAssessmentCompleted: staffProcedure.input(z.object({
+      id: z.number(),
+      completed: z.boolean(),
+    })).mutation(async ({ input }) => {
+      await updateSubmissionFields(input.id, {
+        assessmentCompletedAt: input.completed ? new Date() : null,
+      } as any);
+      return { success: true };
+    }),
+
+    updateScreeningAnswers: staffProcedure.input(z.object({
+      id: z.number(),
+      screening: z.record(z.string(), z.unknown()),
+    })).mutation(async ({ input }) => {
+      const existing = await getSubmissionById(input.id);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
+      const merged = { ...(existing.formData as Record<string, unknown>), screening: { ...((existing.formData as any)?.screening || {}), ...input.screening } };
+      await updateSubmissionFields(input.id, { formData: merged } as any);
       return { success: true };
     }),
 

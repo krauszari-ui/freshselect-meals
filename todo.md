@@ -472,3 +472,10 @@
 - [x] Add showReferralLinks toggle to Staff Management page PERM_LIST (checkbox in create/edit modals)
 - [x] Show 'No Referral Links' amber badge on worker rows in Staff Management when showReferralLinks is false
 - [x] Hide Referral Links sidebar item for workers where showReferralLinks is false (AdminLayout filter)
+
+## Email Reply Fix & Assessment Edits (April 20, 2026)
+- [x] Fix client email reply-to: change from noreply@ to info@freshselectmeals.com so replies don't bounce
+- [x] Add delete email procedure (admin.deleteClientEmail) and delete button in Email Thread UI
+- [x] Make SCN assessment questions editable on client detail Assessment tab
+- [x] Add "Mark Assessment Completed" toggle/button on Assessment tab
+- [x] Store assessmentCompletedAt timestamp in submissions table
