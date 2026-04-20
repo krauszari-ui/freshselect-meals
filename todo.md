@@ -447,3 +447,12 @@
 ## Referrer Messages UX
 - [x] Include client firstName + lastName in referrer message list (join submissions table in listReferrerMessages)
 - [x] Display "Re: Client Name" label on each message in the referrer portal Messages tab
+
+## Referrer Reply & Client Email Thread
+- [x] Add referrer reply to portal: referrer can type a reply in the Messages tab, stored in referrerMessages with direction=referrer
+- [x] Show reply thread in admin Referral Links page (admin sees referrer's reply inline)
+- [x] Create clientEmails table (id, submissionId, direction, subject, body, fromEmail, toEmail, attachmentUrls, sentAt, messageId, threadId)
+- [x] Add DB migration for clientEmails table
+- [x] Add sendClientEmail tRPC procedure (sends via Resend from info@freshselectmeals.com, stores in DB)
+- [x] Add inbound email webhook endpoint to receive client replies via Resend
+- [x] Build email thread UI on client detail page (compose with file attach, view thread with sent/received bubbles)

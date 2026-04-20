@@ -220,13 +220,44 @@ export const referrerMessages = mysqlTable("referrerMessages", {
   referralLinkId: int("referralLinkId").notNull(),
   /** Optional: the specific client this message is about */
   submissionId: int("submissionId"),
-  /** The admin user who sent the message */
-  senderId: int("senderId").notNull(),
-  /** Message text (may include @mention like "@ah please get DOB") */
+  /** The admin user who sent the message (null if sent by referrer) */
+  senderId: int("senderId"),
+  /** Message text */
   message: text("message").notNull(),
+  /** Direction: 'admin' = sent by staff to referrer, 'referrer' = reply from referrer */
+  direction: varchar("direction", { length: 16 }).notNull().default("admin"),
   /** When the referrer read/acknowledged the message (null = unread) */
   readAt: timestamp("readAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type ReferrerMessage = typeof referrerMessages.$inferSelect;
 export type InsertReferrerMessage = typeof referrerMessages.$inferInsert;
+
+// ─── Client Email Thread ──────────────────────────────────────────────────────
+/**
+ * Emails sent to/from clients directly from the admin panel.
+ * Sent via Resend from info@freshselectmeals.com.
+ * Inbound replies are captured via Resend webhook.
+ */
+export const clientEmails = mysqlTable("clientEmails", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The client (submission) this email belongs to */
+  submissionId: int("submissionId").notNull(),
+  /** 'outbound' = sent by admin, 'inbound' = reply from client */
+  direction: varchar("direction", { length: 16 }).notNull(),
+  subject: varchar("subject", { length: 512 }).notNull(),
+  body: text("body").notNull(),
+  fromEmail: varchar("fromEmail", { length: 256 }).notNull(),
+  toEmail: varchar("toEmail", { length: 256 }).notNull(),
+  /** JSON array of S3 URLs for attachments */
+  attachmentUrls: text("attachmentUrls"),
+  /** Resend message ID for threading */
+  resendMessageId: varchar("resendMessageId", { length: 256 }),
+  /** In-reply-to header for threading */
+  inReplyTo: varchar("inReplyTo", { length: 256 }),
+  /** Staff member who sent (null for inbound) */
+  sentBy: int("sentBy"),
+  sentAt: timestamp("sentAt").defaultNow().notNull(),
+});
+export type ClientEmail = typeof clientEmails.$inferSelect;
+export type InsertClientEmail = typeof clientEmails.$inferInsert;
