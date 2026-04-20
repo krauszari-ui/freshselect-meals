@@ -54,32 +54,72 @@ async function startServer() {
 
   // ─── Inbound email webhook (Resend forwards client replies here) ──────────
   // Resend sends a POST to /api/inbound-email when a client replies.
-  // The To address is client-{submissionId}@inbound.freshselectmeals.com
-  // which lets us match the reply to the correct client record.
+  // Supported To address patterns:
+  //   reply-{submissionId}@freshselectmeals.com   ← new preferred format
+  //   client-{submissionId}@inbound.freshselectmeals.com  ← legacy format
   app.post("/api/inbound-email", async (req, res) => {
     try {
       const payload = req.body;
       // Resend inbound payload fields: from, to, subject, text, html, message_id, in_reply_to
-      const toAddress: string = Array.isArray(payload.to) ? payload.to[0] : (payload.to ?? "");
-      const match = toAddress.match(/client-(\d+)@/);
-      if (!match) { res.status(200).json({ ok: true, skipped: true }); return; }
-      const submissionId = parseInt(match[1], 10);
+      // "to" can be a string, an array of strings, or an array of {email, name} objects
+      const rawTo: unknown = payload.to;
+      const toList: string[] = [];
+      if (typeof rawTo === "string") toList.push(rawTo);
+      else if (Array.isArray(rawTo)) {
+        for (const t of rawTo) {
+          if (typeof t === "string") toList.push(t);
+          else if (t && typeof t === "object" && "email" in t) toList.push((t as { email: string }).email);
+        }
+      }
+
+      // Try to extract submissionId from any of the To addresses
+      let submissionId: number | null = null;
+      let matchedTo = "";
+      for (const addr of toList) {
+        // Match reply-{id}@... or client-{id}@...
+        const m = addr.match(/(?:reply|client)-(\d+)@/);
+        if (m) { submissionId = parseInt(m[1], 10); matchedTo = addr; break; }
+      }
+      if (!submissionId) { res.status(200).json({ ok: true, skipped: true, reason: "no_match" }); return; }
+
       const submission = await getSubmissionById(submissionId);
-      if (!submission) { res.status(200).json({ ok: true, skipped: true }); return; }
-      const fromEmail: string = Array.isArray(payload.from) ? payload.from[0] : (payload.from ?? "");
+      if (!submission) { res.status(200).json({ ok: true, skipped: true, reason: "no_submission" }); return; }
+
+      const fromEmail: string = (() => {
+        const f = payload.from;
+        if (typeof f === "string") return f;
+        if (Array.isArray(f) && f.length > 0) return typeof f[0] === "string" ? f[0] : (f[0] as { email?: string }).email ?? "";
+        return "";
+      })();
+
       const subject: string = payload.subject ?? "(no subject)";
-      const body: string = payload.text ?? payload.html ?? "";
+
+      // Prefer plain text; strip quoted reply history (lines starting with >) and email signatures
+      let body: string = payload.text ?? "";
+      if (!body && payload.html) {
+        // Very basic HTML-to-text: strip tags
+        body = payload.html.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim();
+      }
+      // Remove quoted reply blocks (lines starting with > or On ... wrote:)
+      body = body
+        .split("\n")
+        .filter((line: string) => !line.trimStart().startsWith(">"))
+        .join("\n")
+        .replace(/\n*On .+ wrote:[\s\S]*/i, "") // strip "On [date], [name] wrote:" and everything after
+        .replace(/_{5,}[\s\S]*/g, "")            // strip signature separator lines
+        .trim();
+
       await createClientEmail({
         submissionId,
         direction: "inbound",
         subject,
         body,
         fromEmail,
-        toEmail: toAddress,
+        toEmail: matchedTo,
         resendMessageId: payload.message_id ?? null,
         inReplyTo: payload.in_reply_to ?? null,
       });
-      console.log(`[Inbound Email] Stored reply from ${fromEmail} for client #${submissionId}`);
+      console.log(`[Inbound Email] Stored reply from ${fromEmail} for client #${submissionId} (subject: "${subject}")`);
       res.status(200).json({ ok: true });
     } catch (err) {
       console.error("[Inbound Email] Error processing webhook:", err);
