@@ -331,8 +331,11 @@ export const appRouter = router({
       const submission = await getSubmissionById(input.submissionId);
       if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
       if (!submission.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Client has no email address" });
-      // Reply-to is info@freshselectmeals.com — a real inbox so clients can reply directly
-      const replyTo = `info@freshselectmeals.com`;
+      // Use a client-specific reply-to so inbound replies are automatically matched to this client.
+      // Format: reply-{submissionId}@freshselectmeals.com
+      // Resend inbound webhook at /api/inbound-email parses this to find the right client record.
+      const INBOUND_DOMAIN = process.env.RESEND_INBOUND_DOMAIN ?? "freshselectmeals.com";
+      const replyTo = `reply-${input.submissionId}@${INBOUND_DOMAIN}`;
       const fromEmail = `FreshSelect Meals <info@freshselectmeals.com>`;
       const success = await sendEmail({
         to: submission.email,
