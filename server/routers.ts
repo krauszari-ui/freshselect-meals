@@ -20,11 +20,12 @@ import {
   getSubmissionByRef,
   createStaffUser, setPasswordResetToken, getUserByResetToken, clearPasswordResetToken,
   createReferrerMessage, listReferrerMessages, listReferrerMessagesBySubmission, markReferrerMessageRead, getUnreadCountByReferrer,
+  createClientEmail, listClientEmails,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
 import { sdk } from "./_core/sdk";
-import { sendAdminNotification, sendApplicantConfirmation } from "./email";
+import { sendAdminNotification, sendApplicantConfirmation, sendEmail } from "./email";
 import { generateAttestationPdf } from "./generateAttestationPdf";
 import { storagePut } from "./storage";
 import { z } from "zod";
@@ -311,6 +312,48 @@ export const appRouter = router({
       return listReferrerMessagesBySubmission(input.submissionId);
     }),
 
+    // ─── Client Email Thread ──────────────────────────────────────────────
+    sendClientEmail: staffProcedure.input(z.object({
+      submissionId: z.number(),
+      subject: z.string().min(1).max(512),
+      body: z.string().min(1),
+      attachmentUrls: z.array(z.string()).optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const submission = await getSubmissionById(input.submissionId);
+      if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      if (!submission.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Client has no email address" });
+      // Build a reply-to address that encodes the submissionId so inbound replies can be matched
+      const replyTo = `client-${submission.id}@inbound.freshselectmeals.com`;
+      const fromEmail = `FreshSelect Meals <info@freshselectmeals.com>`;
+      const success = await sendEmail({
+        to: submission.email,
+        subject: input.subject,
+        html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+          <p style="color:#2d5a27;font-weight:bold;">FreshSelect Meals</p>
+          ${input.body.replace(/\n/g, "<br/>")}
+          ${input.attachmentUrls && input.attachmentUrls.length > 0 ? `<hr/><p style="font-size:13px;color:#666;">Attachments: ${input.attachmentUrls.map((u, i) => `<a href="${u}">Attachment ${i + 1}</a>`).join(", ")}</p>` : ""}
+          <hr/><p style="font-size:12px;color:#999;">FreshSelect Meals &mdash; (718) 307-4664 | info@freshselectmeals.com</p>
+        </div>`,
+      });
+      if (!success) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to send email" });
+      const id = await createClientEmail({
+        submissionId: input.submissionId,
+        direction: "outbound",
+        subject: input.subject,
+        body: input.body,
+        fromEmail: fromEmail,
+        toEmail: submission.email,
+        attachmentUrls: input.attachmentUrls ? JSON.stringify(input.attachmentUrls) : null,
+        sentBy: ctx.user.id,
+      });
+      return { success: true, id };
+    }),
+    listClientEmails: staffProcedure.input(z.object({
+      submissionId: z.number(),
+    })).query(async ({ input }) => {
+      return listClientEmails(input.submissionId);
+    }),
+
     updateStatus: staffProcedure.input(z.object({
       id: z.number(),
       status: z.enum(["new", "in_review", "approved", "rejected", "on_hold"]),
@@ -594,6 +637,22 @@ export const appRouter = router({
         const link = await getReferralLinkByCode(input.code);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
         return listReferrerMessages(link.id);
+      }),
+      reply: publicProcedure.input(z.object({
+        code: z.string(),
+        message: z.string().min(1).max(2000),
+        submissionId: z.number().optional(),
+      })).mutation(async ({ input }) => {
+        const link = await getReferralLinkByCode(input.code);
+        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        const id = await createReferrerMessage({
+          referralLinkId: link.id,
+          submissionId: input.submissionId ?? null,
+          senderId: null,
+          message: input.message,
+          direction: "referrer",
+        });
+        return { success: true, id };
       }),
     }),
 

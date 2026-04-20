@@ -617,3 +617,42 @@ export async function listReferrerMessagesBySubmission(submissionId: number) {
     .where(eq(referrerMessages.submissionId, submissionId))
     .orderBy(desc(referrerMessages.createdAt));
 }
+
+
+// ─── Client Email Thread ──────────────────────────────────────────────────────
+import { clientEmails, InsertClientEmail } from "../drizzle/schema";
+
+export async function createClientEmail(data: InsertClientEmail): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(clientEmails).values(data);
+  return (result[0] as any).insertId as number;
+}
+
+export async function listClientEmails(submissionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(clientEmails)
+    .where(eq(clientEmails.submissionId, submissionId))
+    .orderBy(asc(clientEmails.sentAt));
+}
+
+export async function getClientEmailByResendId(resendMessageId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(clientEmails)
+    .where(eq(clientEmails.resendMessageId, resendMessageId))
+    .limit(1);
+  return rows[0];
+}
+
+export async function getClientEmailBySubmissionAndSubject(submissionId: number, subject: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  // Find the most recent outbound email with this subject for threading
+  const rows = await db.select().from(clientEmails)
+    .where(and(eq(clientEmails.submissionId, submissionId), eq(clientEmails.direction, "outbound")))
+    .orderBy(desc(clientEmails.sentAt))
+    .limit(1);
+  return rows[0];
+}

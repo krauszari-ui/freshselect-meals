@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, Loader2, FileText, Plus, ChevronDown, ChevronUp,
-  Pencil, Trash2, Upload, ExternalLink, Link2, Save, MessageSquare, Send,
+  Pencil, Trash2, Upload, ExternalLink, Link2, Save, MessageSquare, Send, Mail, Paperclip,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useParams, useLocation } from "wouter";
@@ -183,6 +183,56 @@ export default function AdminClientDetail() {
     },
     onError: (err) => toast.error(err.message),
   });
+
+  // Client Email Thread state
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailAttachments, setEmailAttachments] = useState<string[]>([]);
+  const [uploadingEmailAttachment, setUploadingEmailAttachment] = useState(false);
+  const emailAttachRef = useRef<HTMLInputElement>(null);
+  const { data: clientEmailThread, isLoading: emailThreadLoading } = trpc.admin.listClientEmails.useQuery(
+    { submissionId: id },
+    { enabled: id > 0, refetchInterval: 30000 }
+  );
+  const sendClientEmailMutation = trpc.admin.sendClientEmail.useMutation({
+    onSuccess: () => {
+      utils.admin.listClientEmails.invalidate({ submissionId: id });
+      setEmailSubject("");
+      setEmailBody("");
+      setEmailAttachments([]);
+      toast.success("Email sent to client");
+    },
+    onError: (err) => toast.error(err.message || "Failed to send email"),
+  });
+
+  const uploadDocumentMutation = trpc.upload.document.useMutation();
+
+  const handleEmailAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingEmailAttachment(true);
+    try {
+      const reader = new FileReader();
+      const fileData = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadDocumentMutation.mutateAsync({
+        fileName: file.name,
+        fileData,
+        contentType: file.type || "application/octet-stream",
+        category: "email-attachment",
+      });
+      setEmailAttachments((prev) => [...prev, result.url]);
+      toast.success(`Attached: ${file.name}`);
+    } catch (err) {
+      toast.error("Failed to upload attachment");
+    } finally {
+      setUploadingEmailAttachment(false);
+      if (emailAttachRef.current) emailAttachRef.current.value = "";
+    }
+  };
 
   // Admin Notes (Assessment) — pre-populate from loaded client data
   const [adminNotesText, setAdminNotesText] = useState("");
@@ -612,6 +662,122 @@ export default function AdminClientDetail() {
                   ) : <p className="text-sm text-slate-400">No notes sent yet. Use this to request missing info from the referrer.</p>}
                 </div>
               )}
+
+              {/* Client Email Thread */}
+              <div className="bg-white rounded-lg border border-blue-200 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-blue-600" />
+                    <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Email Client</h3>
+                    {client?.email && <span className="text-xs text-slate-400">{client.email}</span>}
+                  </div>
+                </div>
+                {!client?.email ? (
+                  <p className="text-sm text-slate-400">No email address on file for this client.</p>
+                ) : (
+                  <>
+                    {/* Compose */}
+                    <div className="space-y-2 mb-4">
+                      <Input
+                        placeholder="Subject"
+                        value={emailSubject}
+                        onChange={(e) => setEmailSubject(e.target.value)}
+                        className="text-sm h-8 border-blue-100 focus:border-blue-400"
+                      />
+                      <Textarea
+                        placeholder={`Write a message to ${client.firstName}...`}
+                        value={emailBody}
+                        onChange={(e) => setEmailBody(e.target.value)}
+                        className="text-sm min-h-[70px] border-blue-100 focus:border-blue-400"
+                      />
+                      {emailAttachments.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {emailAttachments.map((url, i) => (
+                            <span key={i} className="inline-flex items-center gap-1 text-xs bg-blue-50 border border-blue-200 rounded px-2 py-0.5">
+                              <Paperclip className="w-3 h-3 text-blue-500" />
+                              Attachment {i + 1}
+                              <button onClick={() => setEmailAttachments((prev) => prev.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 ml-1">&times;</button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <input ref={emailAttachRef} type="file" className="hidden" onChange={handleEmailAttachmentUpload} />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1 border-blue-200 text-blue-600"
+                          onClick={() => emailAttachRef.current?.click()}
+                          disabled={uploadingEmailAttachment}
+                        >
+                          {uploadingEmailAttachment ? <Loader2 className="h-3 w-3 animate-spin" /> : <Paperclip className="h-3 w-3" />}
+                          Attach File
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-blue-600 hover:bg-blue-700 text-white gap-1 h-7 text-xs px-2.5 ml-auto"
+                          disabled={!emailSubject.trim() || !emailBody.trim() || sendClientEmailMutation.isPending}
+                          onClick={() => {
+                            if (!emailSubject.trim() || !emailBody.trim()) return;
+                            sendClientEmailMutation.mutate({
+                              submissionId: id,
+                              subject: emailSubject.trim(),
+                              body: emailBody.trim(),
+                              attachmentUrls: emailAttachments,
+                            });
+                          }}
+                        >
+                          {sendClientEmailMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                          Send Email
+                        </Button>
+                      </div>
+                    </div>
+                    {/* Thread */}
+                    {emailThreadLoading ? (
+                      <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>
+                    ) : clientEmailThread && (clientEmailThread as any[]).length > 0 ? (
+                      <div className="space-y-2 border-t border-blue-100 pt-3">
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Email Thread</p>
+                        {(clientEmailThread as any[]).map((email: any) => (
+                          <div
+                            key={email.id}
+                            className={`rounded-lg p-3 border text-sm ${
+                              email.direction === "outbound"
+                                ? "bg-blue-50 border-blue-200 ml-4"
+                                : "bg-white border-slate-200"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`text-xs font-semibold ${
+                                email.direction === "outbound" ? "text-blue-700" : "text-slate-600"
+                              }`}>
+                                {email.direction === "outbound" ? "You → Client" : "Client → You"}
+                              </span>
+                              <span className="text-xs text-slate-400">
+                                {new Date(email.sentAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mb-1 font-medium">{email.subject}</p>
+                            <p className="text-sm text-slate-700 whitespace-pre-wrap">{email.body}</p>
+                            {email.attachmentUrls && JSON.parse(email.attachmentUrls).length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {JSON.parse(email.attachmentUrls).map((url: string, i: number) => (
+                                  <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                                    <Paperclip className="w-3 h-3" /> Attachment {i + 1}
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 border-t border-blue-100 pt-3">No emails sent yet. Use the form above to contact this client directly.</p>
+                    )}
+                  </>
+                )}
+              </div>
 
               {/* Signed Attestation & HIPAA PDF */}
               {clientDocs && (clientDocs as any[]).some((d: any) => d.category === "consent" && d.mimeType === "application/pdf") && (

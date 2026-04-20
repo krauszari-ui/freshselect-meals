@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   LogIn, LogOut, Users, Eye, Loader2, Mail, Lock, Search,
   UserCheck, Clock, AlertCircle, ChevronLeft, ChevronRight,
-  Bell, MessageSquare,
+  Bell, MessageSquare, Send, Reply,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -83,6 +83,19 @@ export default function ReferrerPortal() {
   };
 
   const [activeTab, setActiveTab] = useState<"clients" | "messages">("clients");
+  const [replyText, setReplyText] = useState("");
+  const [replyingToId, setReplyingToId] = useState<number | null>(null);
+
+  const utils = trpc.useUtils();
+  const replyMutation = trpc.admin.referrerPortal.reply.useMutation({
+    onSuccess: () => {
+      setReplyText("");
+      setReplyingToId(null);
+      utils.admin.referrerPortal.myMessages.invalidate();
+      toast.success("Reply sent!");
+    },
+    onError: (err) => toast.error(err.message || "Failed to send reply"),
+  });
 
   const handleLogout = () => {
     setSession(null);
@@ -339,29 +352,69 @@ export default function ReferrerPortal() {
                     <div
                       key={msg.id}
                       className={`rounded-lg p-4 border ${
-                        msg.readAt
+                        msg.direction === "referrer"
+                          ? "bg-blue-50 border-blue-200 ml-6"
+                          : msg.readAt
                           ? "bg-gray-50 border-gray-200"
                           : "bg-amber-50 border-amber-300"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
-                          {(msg.clientFirstName || msg.clientLastName) && (
+                          {msg.direction === "referrer" ? (
+                            <p className="text-xs font-semibold text-blue-600 mb-1">Your reply</p>
+                          ) : (msg.clientFirstName || msg.clientLastName) && (
                             <p className="text-xs font-semibold text-amber-700 mb-1">
                               Re: {[msg.clientFirstName, msg.clientLastName].filter(Boolean).join(" ")}
                             </p>
                           )}
                           <p className="text-sm text-gray-800">{msg.message}</p>
                         </div>
-                        {!msg.readAt && (
+                        {!msg.readAt && msg.direction !== "referrer" && (
                           <span className="shrink-0 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
                             NEW
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400 mt-2">
-                        {new Date(msg.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
-                      </p>
+                      <div className="flex items-center justify-between mt-2">
+                        <p className="text-xs text-gray-400">
+                          {new Date(msg.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                        </p>
+                        {msg.direction !== "referrer" && (
+                          <button
+                            onClick={() => setReplyingToId(replyingToId === msg.id ? null : msg.id)}
+                            className="text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1 font-medium"
+                          >
+                            <Reply className="w-3.5 h-3.5" /> Reply
+                          </button>
+                        )}
+                      </div>
+                      {replyingToId === msg.id && (
+                        <div className="mt-3 flex gap-2">
+                          <textarea
+                            value={replyText}
+                            onChange={(e) => setReplyText(e.target.value)}
+                            placeholder="Type your reply..."
+                            rows={2}
+                            className="flex-1 text-sm border border-gray-200 rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white self-end"
+                            disabled={!replyText.trim() || replyMutation.isPending}
+                            onClick={() => {
+                              if (!session || !replyText.trim()) return;
+                              replyMutation.mutate({
+                                code: session.code,
+                                message: replyText.trim(),
+                                submissionId: msg.submissionId ?? undefined,
+                              });
+                            }}
+                          >
+                            {replyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

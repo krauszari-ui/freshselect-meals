@@ -64,6 +64,13 @@
       "when": 1776659039355,
       "tag": "0008_little_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1776662434371,
+      "tag": "0009_unknown_talisman",
+      "breakpoints": true
     }
   ]
 }
