@@ -3,7 +3,7 @@ import { getLoginUrl } from "@/const";
 import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Users, ClipboardList, FileText, Building2,
-  LogOut, Loader2, ShieldCheck, ChevronRight, Leaf, Link2,
+  LogOut, Loader2, ShieldCheck, ChevronRight, Leaf, Link2, UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { type ReactNode } from "react";
@@ -15,6 +15,10 @@ const NAV_ITEMS = [
   { path: "/admin/tasks", label: "Tasks", icon: ClipboardList },
   { path: "/admin/documents", label: "Document Library", icon: FileText },
   { path: "/admin/referrals", label: "Referral Links", icon: Link2 },
+];
+
+const ADMIN_ONLY_NAV_ITEMS = [
+  { path: "/admin/workers", label: "Staff Management", icon: UserCog },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -71,7 +75,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 py-2 px-2 space-y-0.5">
-          {NAV_ITEMS.map((item) => {
+          {[...NAV_ITEMS, ...((["super_admin", "admin"].includes(user.role)) ? ADMIN_ONLY_NAV_ITEMS : [])].map((item) => {
             const active = location === item.path || (item.path !== "/admin/dashboard" && location.startsWith(item.path));
             const Icon = item.icon;
             return (
