@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, Loader2, FileText, Plus, ChevronDown, ChevronUp,
-  Pencil, Trash2, Upload, ExternalLink, Link2, Save,
+  Pencil, Trash2, Upload, ExternalLink, Link2, Save, MessageSquare, Send,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useParams, useLocation } from "wouter";
@@ -167,6 +167,21 @@ export default function AdminClientDetail() {
   });
   const updateTaskStatusMutation = trpc.admin.tasks.updateStatus.useMutation({
     onSuccess: () => { utils.admin.tasks.byClient.invalidate({ submissionId: id }); toast.success("Task status updated"); },
+  });
+
+  // Referrer Notes state
+  const [referrerNoteText, setReferrerNoteText] = useState("");
+  const { data: referrerNotes } = trpc.admin.listReferrerNotes.useQuery(
+    { submissionId: id },
+    { enabled: id > 0 }
+  );
+  const sendReferrerNoteMutation = trpc.admin.sendReferrerNote.useMutation({
+    onSuccess: () => {
+      utils.admin.listReferrerNotes.invalidate({ submissionId: id });
+      setReferrerNoteText("");
+      toast.success("Note sent to referrer");
+    },
+    onError: (err) => toast.error(err.message),
   });
 
   // Admin Notes (Assessment) — pre-populate from loaded client data
@@ -556,6 +571,47 @@ export default function AdminClientDetail() {
                   </div>
                 ) : <p className="text-sm text-slate-400">No notes yet.</p>}
               </div>
+
+              {/* Referrer Notes */}
+              {(client as any).referralSource && (
+                <div className="bg-white rounded-lg border border-amber-200 p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-amber-600" />
+                      <h3 className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Referrer Notes</h3>
+                      <span className="text-xs text-slate-400">Visible to referrer</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="bg-amber-500 hover:bg-amber-600 text-white gap-1 h-7 text-xs px-2.5"
+                      onClick={() => { if (referrerNoteText.trim()) sendReferrerNoteMutation.mutate({ submissionId: id, message: referrerNoteText.trim() }); }}
+                      disabled={!referrerNoteText.trim() || sendReferrerNoteMutation.isPending}
+                    >
+                      {sendReferrerNoteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                      Send to Referrer
+                    </Button>
+                  </div>
+                  <Textarea
+                    placeholder={`Send a note to ${(client as any).referralSource} about this client...`}
+                    value={referrerNoteText}
+                    onChange={(e) => setReferrerNoteText(e.target.value)}
+                    className="text-sm min-h-[60px] mb-3 border-amber-200 focus:border-amber-400"
+                  />
+                  {referrerNotes && (referrerNotes as any[]).length > 0 ? (
+                    <div className="space-y-2">
+                      {(referrerNotes as any[]).map((note: any) => (
+                        <div key={note.id} className="p-3 rounded-lg bg-amber-50 border border-amber-100">
+                          <p className="text-sm text-slate-700">{note.message}</p>
+                          <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
+                            <span>{new Date(note.createdAt).toLocaleString()}</span>
+                            {note.readAt && <span className="text-emerald-600">· Seen by referrer</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="text-sm text-slate-400">No notes sent yet. Use this to request missing info from the referrer.</p>}
+                </div>
+              )}
 
               {/* Signed Attestation & HIPAA PDF */}
               {clientDocs && (clientDocs as any[]).some((d: any) => d.category === "consent" && d.mimeType === "application/pdf") && (
