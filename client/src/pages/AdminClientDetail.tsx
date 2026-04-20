@@ -1048,6 +1048,7 @@ export default function AdminClientDetail() {
                   <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-slate-300" onClick={() => {
                     const fd2 = (client.formData as any) || {};
                     const sc = fd2.screening || {};
+                    const hc2 = fd2.healthCategories || [];
                     setScnEdits({
                       screenerName: fd2.screenerName || intakeRepName || "",
                       screeningDate: fd2.screeningDate || (client.createdAt ? new Date(client.createdAt).toISOString().split("T")[0] : ""),
@@ -1056,16 +1057,18 @@ export default function AdminClientDetail() {
                       receivesSnap: String(fd2.receivesSnap ?? fd2.hasSnap ?? sc.receivesSnap ?? ""),
                       receivesWic: String(fd2.receivesWic ?? fd2.hasWic ?? sc.receivesWic ?? ""),
                       receivesTanf: String(sc.receivesTanf || ""),
-                      enrolledHealthHome: String(sc.enrolledHealthHome || ""),
+                      enrolledHealthHome: String(sc.enrolledHealthHome || (hc2.includes("Enrolled in Health Home Care Management") ? "Yes" : "") || ""),
                       householdMemberCount: String(fd2.householdMemberCount || ""),
                       householdMembersWithMedicaid: String(sc.householdMembersWithMedicaid || ""),
                       needsWorkAssistance: String(sc.needsWorkAssistance || ""),
                       wantsSchoolTraining: String(sc.wantsSchoolTraining ?? sc.wantsSchoolHelp ?? ""),
                       transportationBarrier: String(sc.transportationBarrier || ""),
                       hasChronicIllness: String(sc.hasChronicIllness || ""),
+                      chronicIllnessDetails: String(sc.chronicIllnessDetails || fd2.chronicIllnessDetails || ""),
                       otherHealthIssues: String(sc.otherHealthIssues || ""),
                       medicationsRequireRefrigeration: String(sc.medicationsRequireRefrigeration || ""),
-                      pregnantOrPostpartum: String(sc.pregnantOrPostpartum || ""),
+                      pregnantOrPostpartum: String(sc.pregnantOrPostpartum || (hc2.includes("Pregnant") || hc2.includes("Postpartum") ? "Yes" : "") || ""),
+                      dueDate: String(fd2.dueDate || sc.dueDate || ""),
                       breastmilkRefrigeration: String(sc.breastmilkRefrigeration || ""),
                     });
                     setScnEditMode(true);
@@ -1076,8 +1079,8 @@ export default function AdminClientDetail() {
                   <>
                     <Button size="sm" variant="outline" className="h-7 text-xs border-slate-300" onClick={() => { setScnEditMode(false); setScnEdits({}); }}>Cancel</Button>
                     <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1" disabled={updateScreeningMutation.isPending} onClick={() => {
-                      const { screenerName, screeningDate, ...screeningFields } = scnEdits;
-                      updateScreeningMutation.mutate({ id, formData: { screenerName, screeningDate, screening: screeningFields } });
+                      const { screenerName, screeningDate, dueDate, ...screeningFields } = scnEdits;
+                      updateScreeningMutation.mutate({ id, formData: { screenerName, screeningDate, dueDate, screening: screeningFields } });
                     }}>
                       {updateScreeningMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
                     </Button>
@@ -1140,43 +1143,164 @@ export default function AdminClientDetail() {
               )}
             </div>
 
-            {/* Helper for editable rows */}
+            {/* SCN Screening Questions — dropdowns matching the intake form */}
             {(() => {
-              const EditableRow = ({ num, label, field, currentValue }: { num: number; label: string; field: string; currentValue: string | boolean | null | undefined }) => {
+              // Helper: Yes/No dropdown row
+              const YesNoRow = ({ num, label, field, currentValue }: { num: number; label: string; field: string; currentValue: string | boolean | null | undefined }) => {
                 const displayVal = typeof currentValue === "boolean" ? (currentValue ? "Yes" : "No") : (currentValue as string) || "";
                 const editVal = scnEdits[field] !== undefined ? scnEdits[field] : displayVal;
                 if (!scnEditMode) return <ScreeningLine num={num} label={label} value={currentValue} />;
                 return (
                   <div className="flex items-center justify-between py-2 border-b border-slate-100">
-                    <span className="text-sm text-slate-600 w-1/2">{num}. {label}</span>
+                    <span className="text-sm text-slate-600">{num}. {label}</span>
+                    <Select value={editVal} onValueChange={(v) => setScnEdits((prev) => ({ ...prev, [field]: v }))}>
+                      <SelectTrigger className="h-7 text-sm w-28 border-slate-300">
+                        <SelectValue placeholder="Select..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Yes">Yes</SelectItem>
+                        <SelectItem value="No">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              };
+              // Helper: number input row
+              const NumberRow = ({ num, label, field, currentValue }: { num: number; label: string; field: string; currentValue: string | null | undefined }) => {
+                const displayVal = (currentValue as string) || "";
+                const editVal = scnEdits[field] !== undefined ? scnEdits[field] : displayVal;
+                if (!scnEditMode) return <ScreeningLine num={num} label={label} value={currentValue} />;
+                return (
+                  <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                    <span className="text-sm text-slate-600">{num}. {label}</span>
                     <Input
-                      className="h-7 text-sm w-1/2 border-slate-300"
+                      type="number" min="0" max="20"
+                      className="h-7 text-sm w-20 border-slate-300"
                       value={editVal}
                       onChange={(e) => setScnEdits((prev) => ({ ...prev, [field]: e.target.value }))}
-                      placeholder="Enter value"
+                      placeholder="0"
                     />
                   </div>
                 );
               };
+
+              const livingSituationOptions = ["Renting", "Own Home", "Shelter", "Homeless", "Living with Family/Friends", "Other"];
+              const livingSitCurrent = String(screening.livingSituation || "");
+              const livingSitEdit = scnEdits.livingSituation !== undefined ? scnEdits.livingSituation : livingSitCurrent;
+
+              const pregnantVal = scnEdits.pregnantOrPostpartum !== undefined
+                ? scnEdits.pregnantOrPostpartum
+                : String(screening.pregnantOrPostpartum || (healthCategories.includes("Pregnant") || healthCategories.includes("Postpartum") ? "Yes" : ""));
+              const chronicVal = scnEdits.hasChronicIllness !== undefined
+                ? scnEdits.hasChronicIllness
+                : String(screening.hasChronicIllness || "");
+
               return (
                 <div>
                   <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Screening Questions</h3>
-                  <EditableRow num={1} label="Current living situation" field="livingSituation" currentValue={screening.livingSituation} />
-                  <EditableRow num={2} label="Utility shutoff threat (past 12 months)" field="utilityShutoff" currentValue={screening.utilityShutoff} />
-                  <EditableRow num={3} label="Receives SNAP (Food Stamps)" field="receivesSnap" currentValue={fd.receivesSnap ?? fd.hasSnap ?? screening.receivesSnap} />
-                  <EditableRow num={4} label="Receives WIC" field="receivesWic" currentValue={fd.receivesWic ?? fd.hasWic ?? screening.receivesWic} />
-                  <EditableRow num={5} label="Receives TANF" field="receivesTanf" currentValue={screening.receivesTanf} />
-                  <EditableRow num={6} label="Enrolled in Health Home" field="enrolledHealthHome" currentValue={screening.enrolledHealthHome || healthCategories.includes("Enrolled in Health Home Care Management")} />
-                  <EditableRow num={7} label="Household members" field="householdMemberCount" currentValue={fd.householdMemberCount || String(householdMembers.length)} />
-                  <EditableRow num={8} label="Household members with Medicaid" field="householdMembersWithMedicaid" currentValue={screening.householdMembersWithMedicaid} />
-                  <EditableRow num={9} label="Needs work assistance" field="needsWorkAssistance" currentValue={screening.needsWorkAssistance} />
-                  <EditableRow num={10} label="Wants school or training help" field="wantsSchoolTraining" currentValue={screening.wantsSchoolTraining ?? screening.wantsSchoolHelp} />
-                  <EditableRow num={11} label="Transportation barrier (past 12 months)" field="transportationBarrier" currentValue={screening.transportationBarrier} />
-                  <EditableRow num={12} label="Has chronic illness" field="hasChronicIllness" currentValue={screening.hasChronicIllness} />
-                  <EditableRow num={13} label="Other known health issues" field="otherHealthIssues" currentValue={screening.otherHealthIssues} />
-                  <EditableRow num={14} label="Medications require refrigeration" field="medicationsRequireRefrigeration" currentValue={screening.medicationsRequireRefrigeration} />
-                  <EditableRow num={15} label="Pregnant or postpartum" field="pregnantOrPostpartum" currentValue={screening.pregnantOrPostpartum || healthCategories.includes("Pregnant") || healthCategories.includes("Postpartum")} />
-                  <EditableRow num={16} label="Breastmilk refrigeration needed" field="breastmilkRefrigeration" currentValue={screening.breastmilkRefrigeration} />
+
+                  {/* Q1: Living Situation — dropdown with specific options */}
+                  {!scnEditMode ? (
+                    <ScreeningLine num={1} label="Current living situation" value={screening.livingSituation} />
+                  ) : (
+                    <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                      <span className="text-sm text-slate-600">1. Current living situation</span>
+                      <Select value={livingSitEdit} onValueChange={(v) => setScnEdits((prev) => ({ ...prev, livingSituation: v }))}>
+                        <SelectTrigger className="h-7 text-sm w-52 border-slate-300">
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {livingSituationOptions.map((opt) => (
+                            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Q2–4: Yes/No */}
+                  <YesNoRow num={2} label="Utility shutoff threat (past 12 months)" field="utilityShutoff" currentValue={screening.utilityShutoff} />
+                  <YesNoRow num={3} label="Receives SNAP (Food Stamps)" field="receivesSnap" currentValue={fd.receivesSnap ?? fd.hasSnap ?? screening.receivesSnap} />
+                  <YesNoRow num={4} label="Receives WIC" field="receivesWic" currentValue={fd.receivesWic ?? fd.hasWic ?? screening.receivesWic} />
+                  <YesNoRow num={5} label="Receives TANF" field="receivesTanf" currentValue={screening.receivesTanf} />
+                  <YesNoRow num={6} label="Enrolled in Health Home" field="enrolledHealthHome" currentValue={screening.enrolledHealthHome || healthCategories.includes("Enrolled in Health Home Care Management")} />
+
+                  {/* Q7–8: Household counts */}
+                  <NumberRow num={7} label="Household members" field="householdMemberCount" currentValue={fd.householdMemberCount || String(householdMembers.length)} />
+                  <NumberRow num={8} label="Household members with Medicaid" field="householdMembersWithMedicaid" currentValue={screening.householdMembersWithMedicaid} />
+
+                  {/* Q9–11: Yes/No */}
+                  <YesNoRow num={9} label="Needs work assistance" field="needsWorkAssistance" currentValue={screening.needsWorkAssistance} />
+                  <YesNoRow num={10} label="Wants school or training help" field="wantsSchoolTraining" currentValue={screening.wantsSchoolTraining ?? screening.wantsSchoolHelp} />
+                  <YesNoRow num={11} label="Transportation barrier (past 12 months)" field="transportationBarrier" currentValue={screening.transportationBarrier} />
+
+                  {/* Q12: Chronic illness — Yes/No + conditional specify */}
+                  <YesNoRow num={12} label="Has chronic illness" field="hasChronicIllness" currentValue={screening.hasChronicIllness} />
+                  {(scnEditMode ? chronicVal === "Yes" : (screening.hasChronicIllness === "Yes" || screening.hasChronicIllness === true)) && (
+                    <div className={`py-2 border-b border-slate-100 ${scnEditMode ? "bg-amber-50/50 px-3 rounded" : ""}`}>
+                      {scnEditMode ? (
+                        <div className="space-y-1">
+                          <Label className="text-xs text-amber-700 font-medium">Please specify chronic condition(s)</Label>
+                          <Input
+                            className="h-7 text-sm border-amber-200 focus:border-amber-400"
+                            value={scnEdits.chronicIllnessDetails !== undefined ? scnEdits.chronicIllnessDetails : String(screening.chronicIllnessDetails || fd.chronicIllnessDetails || "")}
+                            onChange={(e) => setScnEdits((prev) => ({ ...prev, chronicIllnessDetails: e.target.value }))}
+                            placeholder="e.g. Diabetes, Hypertension, Asthma..."
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-500 italic pl-4">Condition(s)</span>
+                          <span className="text-sm text-slate-900">{screening.chronicIllnessDetails || fd.chronicIllnessDetails || "—"}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Q13–14: Yes/No */}
+                  <YesNoRow num={13} label="Other known health issues" field="otherHealthIssues" currentValue={screening.otherHealthIssues} />
+                  <YesNoRow num={14} label="Medications require refrigeration" field="medicationsRequireRefrigeration" currentValue={screening.medicationsRequireRefrigeration} />
+
+                  {/* Q15: Pregnant or postpartum — Yes/No + conditional due date */}
+                  {!scnEditMode ? (
+                    <ScreeningLine num={15} label="Pregnant or postpartum" value={screening.pregnantOrPostpartum || (healthCategories.includes("Pregnant") || healthCategories.includes("Postpartum") ? "Yes" : undefined)} />
+                  ) : (
+                    <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                      <span className="text-sm text-slate-600">15. Pregnant or postpartum</span>
+                      <Select value={pregnantVal} onValueChange={(v) => setScnEdits((prev) => ({ ...prev, pregnantOrPostpartum: v }))}>
+                        <SelectTrigger className="h-7 text-sm w-28 border-slate-300">
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Yes">Yes</SelectItem>
+                          <SelectItem value="No">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {(scnEditMode ? pregnantVal === "Yes" : (screening.pregnantOrPostpartum === "Yes" || screening.pregnantOrPostpartum === true || healthCategories.includes("Pregnant"))) && (
+                    <div className={`py-2 border-b border-slate-100 ${scnEditMode ? "bg-blue-50/50 px-3 rounded" : ""}`}>
+                      {scnEditMode ? (
+                        <div className="space-y-1">
+                          <Label className="text-xs text-blue-700 font-medium">Due date (if pregnant)</Label>
+                          <Input
+                            type="date"
+                            className="h-7 text-sm w-44 border-blue-200 focus:border-blue-400"
+                            value={scnEdits.dueDate !== undefined ? scnEdits.dueDate : String(fd.dueDate || screening.dueDate || "")}
+                            onChange={(e) => setScnEdits((prev) => ({ ...prev, dueDate: e.target.value }))}
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-500 italic pl-4">Due date</span>
+                          <span className="text-sm text-slate-900">{fd.dueDate || screening.dueDate ? new Date(fd.dueDate || screening.dueDate).toLocaleDateString() : "—"}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Q16: Breastmilk refrigeration */}
+                  <YesNoRow num={16} label="Breastmilk refrigeration needed" field="breastmilkRefrigeration" currentValue={screening.breastmilkRefrigeration} />
                 </div>
               );
             })()}
