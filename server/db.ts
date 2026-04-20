@@ -575,6 +575,8 @@ export async function listReferrerMessages(referralLinkId: number) {
       submissionId: referrerMessages.submissionId,
       senderId: referrerMessages.senderId,
       message: referrerMessages.message,
+      direction: referrerMessages.direction,
+      attachmentUrl: referrerMessages.attachmentUrl,
       createdAt: referrerMessages.createdAt,
       readAt: referrerMessages.readAt,
       clientFirstName: submissions.firstName,
@@ -583,7 +585,19 @@ export async function listReferrerMessages(referralLinkId: number) {
     .from(referrerMessages)
     .leftJoin(submissions, eq(referrerMessages.submissionId, submissions.id))
     .where(eq(referrerMessages.referralLinkId, referralLinkId))
-    .orderBy(desc(referrerMessages.createdAt));
+    .orderBy(asc(referrerMessages.createdAt));
+}
+export async function deleteReferrerMessage(messageId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(referrerMessages).where(eq(referrerMessages.id, messageId));
+}
+export async function markAllReferrerMessagesRead(referralLinkId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(referrerMessages)
+    .set({ readAt: new Date() })
+    .where(and(eq(referrerMessages.referralLinkId, referralLinkId), isNull(referrerMessages.readAt)));
 }
 
 export async function markReferrerMessageRead(messageId: number): Promise<void> {
@@ -613,9 +627,19 @@ export async function getUnreadCountByReferrer(): Promise<Record<number, number>
 export async function listReferrerMessagesBySubmission(submissionId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.select().from(referrerMessages)
+  return db.select({
+    id: referrerMessages.id,
+    referralLinkId: referrerMessages.referralLinkId,
+    submissionId: referrerMessages.submissionId,
+    senderId: referrerMessages.senderId,
+    message: referrerMessages.message,
+    direction: referrerMessages.direction,
+    attachmentUrl: referrerMessages.attachmentUrl,
+    createdAt: referrerMessages.createdAt,
+    readAt: referrerMessages.readAt,
+  }).from(referrerMessages)
     .where(eq(referrerMessages.submissionId, submissionId))
-    .orderBy(desc(referrerMessages.createdAt));
+    .orderBy(asc(referrerMessages.createdAt));
 }
 
 
