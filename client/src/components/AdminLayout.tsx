@@ -75,7 +75,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 py-2 px-2 space-y-0.5">
-          {[...NAV_ITEMS, ...((["super_admin", "admin"].includes(user.role)) ? ADMIN_ONLY_NAV_ITEMS : [])].map((item) => {
+          {[...NAV_ITEMS.filter((item) => {
+            if (item.path === "/admin/referrals" && user.role === "worker") {
+              const perms = (user.permissions as any) || {};
+              return perms.showReferralLinks !== false;
+            }
+            return true;
+          }), ...(([ "super_admin", "admin"].includes(user.role)) ? ADMIN_ONLY_NAV_ITEMS : [])].map((item) => {
             const active = location === item.path || (item.path !== "/admin/dashboard" && location.startsWith(item.path));
             const Icon = item.icon;
             return (

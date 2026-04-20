@@ -20,6 +20,7 @@ import {
   Settings2,
   KeyRound,
   Crown,
+  Link2,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useState } from "react";
@@ -33,13 +34,14 @@ const ROLE_LABELS: Record<string, { label: string; color: string; icon: React.El
   viewer: { label: "Viewer", color: "bg-stone-100 text-stone-700", icon: Eye },
 };
 
-const DEFAULT_PERMISSIONS = { canView: true, canEdit: false, canExport: false, canDelete: false };
+const DEFAULT_PERMISSIONS = { canView: true, canEdit: false, canExport: false, canDelete: false, showReferralLinks: true };
 
 const PERM_LIST = [
   { key: "canView" as const, label: "View Applications", icon: Eye },
   { key: "canEdit" as const, label: "Edit Status & Notes", icon: Pencil },
   { key: "canExport" as const, label: "Export CSV Reports", icon: Download },
   { key: "canDelete" as const, label: "Delete Records", icon: Trash2 },
+  { key: "showReferralLinks" as const, label: "Show Referral Links in Sidebar", icon: Link2 },
 ];
 
 export default function AdminWorkers() {
@@ -102,6 +104,7 @@ export default function AdminWorkers() {
         canEdit: perms.canEdit ?? false,
         canExport: perms.canExport ?? false,
         canDelete: perms.canDelete ?? false,
+        showReferralLinks: perms.showReferralLinks ?? true,
       },
     });
     setShowEditModal(true);
@@ -198,6 +201,7 @@ export default function AdminWorkers() {
                           {perms.canEdit && <span className="text-xs text-stone-400 flex items-center gap-1"><Pencil className="w-3 h-3" /> Edit</span>}
                           {perms.canExport && <span className="text-xs text-stone-400 flex items-center gap-1"><Download className="w-3 h-3" /> Export</span>}
                           {perms.canDelete && <span className="text-xs text-stone-400 flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</span>}
+                          {perms.showReferralLinks === false && <span className="text-xs text-amber-600 flex items-center gap-1"><Link2 className="w-3 h-3" /> No Referral Links</span>}
                         </div>
                       )}
                     </div>

@@ -689,10 +689,10 @@ export const appRouter = router({
       list: adminProcedure.query(async () => listWorkers()),
       allUsers: adminProcedure.query(async () => listAllUsers()),
       promote: adminProcedure.input(z.object({
-        userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean().default(false) }),
+        userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean().default(false), showReferralLinks: z.boolean().default(true) }),
       })).mutation(async ({ input }) => { await setUserRole(input.userId, "worker"); await updateWorkerPermissions(input.userId, input.permissions); return { success: true }; }),
       updatePermissions: adminProcedure.input(z.object({
-        userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean().default(false) }),
+        userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean().default(false), showReferralLinks: z.boolean().default(true) }),
       })).mutation(async ({ input }) => { await updateWorkerPermissions(input.userId, input.permissions); return { success: true }; }),
       toggleActive: adminProcedure.input(z.object({ userId: z.number(), isActive: z.boolean() }))
         .mutation(async ({ input }) => { await toggleWorkerActive(input.userId, input.isActive); return { success: true }; }),
@@ -704,7 +704,7 @@ export const appRouter = router({
         name: z.string().min(1),
         password: z.string().min(8, "Password must be at least 8 characters"),
         role: z.enum(["admin", "worker", "viewer"]),
-        permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean() }).optional(),
+        permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean(), showReferralLinks: z.boolean().default(true) }).optional(),
       })).mutation(async ({ input }) => {
         const existing = await getUserByEmail(input.email);
         if (existing) throw new TRPCError({ code: "CONFLICT", message: "A user with this email already exists" });
@@ -717,7 +717,7 @@ export const appRouter = router({
         userId: z.number(),
         name: z.string().min(1).optional(),
         role: z.enum(["admin", "worker", "viewer"]).optional(),
-        permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean() }).optional(),
+        permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean(), showReferralLinks: z.boolean().default(true) }).optional(),
         newPassword: z.string().min(8).optional(),
       })).mutation(async ({ input }) => {
         const { userId, name, role, permissions, newPassword } = input;

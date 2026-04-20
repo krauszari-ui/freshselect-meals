@@ -465,3 +465,10 @@
 - [x] Add attachment support to referrer notes (admin can attach file when sending note)
 - [x] Client email replies (inbound) appear in the Email Thread log on client detail page
 - [x] Confirm /api/inbound-email webhook correctly stores inbound emails in clientEmails table
+
+## Staff Permissions — Sidebar Control
+- [x] Add showReferralLinks to permissions JSON field (no migration needed — uses existing permissions column)
+- [x] Update all permissions schemas in routers.ts (promote, updatePermissions, createStaff, updateStaff) to include showReferralLinks
+- [x] Add showReferralLinks toggle to Staff Management page PERM_LIST (checkbox in create/edit modals)
+- [x] Show 'No Referral Links' amber badge on worker rows in Staff Management when showReferralLinks is false
+- [x] Hide Referral Links sidebar item for workers where showReferralLinks is false (AdminLayout filter)
