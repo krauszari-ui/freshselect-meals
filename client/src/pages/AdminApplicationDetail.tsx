@@ -81,7 +81,8 @@ export default function AdminApplicationDetail() {
 
   useEffect(() => {
     if (!loading && !user) navigate("/admin");
-    if (!loading && user && user.role !== "admin") navigate("/admin");
+    const staffRoles = ["super_admin", "admin", "worker", "viewer"];
+    if (!loading && user && !staffRoles.includes(user.role)) navigate("/admin");
   }, [user, loading, navigate]);
 
   const query = trpc.admin.getById.useQuery({ id }, { enabled: id > 0 });

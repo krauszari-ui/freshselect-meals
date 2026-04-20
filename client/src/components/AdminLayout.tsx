@@ -34,7 +34,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return null;
   }
 
-  if (user.role !== "admin" && user.role !== "worker") {
+  const staffRoles = ["super_admin", "admin", "worker", "viewer"];
+  if (!staffRoles.includes(user.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-green-900 text-white">
         <div className="text-center space-y-4">
