@@ -38,7 +38,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return null;
   }
 
-  const staffRoles = ["super_admin", "admin", "worker", "viewer"];
+  const staffRoles = ["super_admin", "admin", "worker", "viewer", "assessor"];
   if (!staffRoles.includes(user.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-green-900 text-white">
@@ -80,8 +80,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               const perms = (user.permissions as any) || {};
               return perms.showReferralLinks !== false;
             }
+            // Assessors only see Clients and Assessor Portal
+            if (user.role === "assessor" && item.path !== "/admin/clients") return false;
             return true;
-          }), ...(([ "super_admin", "admin"].includes(user.role)) ? ADMIN_ONLY_NAV_ITEMS : [])].map((item) => {
+          }), ...((["super_admin", "admin"].includes(user.role)) ? ADMIN_ONLY_NAV_ITEMS : []),
+          ...(user.role === "assessor" ? [{ path: "/assessor", label: "Assessor Portal", icon: ClipboardList }] : [])].map((item) => {
             const active = location === item.path || (item.path !== "/admin/dashboard" && location.startsWith(item.path));
             const Icon = item.icon;
             return (

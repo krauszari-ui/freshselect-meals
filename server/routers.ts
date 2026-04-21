@@ -276,12 +276,16 @@ export const appRouter = router({
     assessorList: assessorProcedure.input(z.object({
       search: z.string().optional(),
       page: z.number().min(1).optional(),
-      pageSize: z.number().min(1).max(100).optional(),
+      pageSize: z.number().min(1).max(200).optional(),
     })).query(async ({ input }) => {
-      const all = await listSubmissions({ search: input.search, page: input.page, pageSize: input.pageSize });
-      const rows = Array.isArray(all) ? all : (all as any).rows ?? [];
-      const filtered = rows.filter((r: any) => r.assessmentCompletedAt != null);
-      return filtered;
+      // Filter at DB level so pagination doesn't hide assessment-completed clients
+      const result = await listSubmissions({
+        search: input.search,
+        page: input.page,
+        pageSize: input.pageSize ?? 200,
+        assessmentCompleted: true,
+      });
+      return Array.isArray(result) ? result : (result as any).rows ?? [];
     }),
 
     // Client list
