@@ -1,4 +1,5 @@
 import AdminLayout from "@/components/AdminLayout";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -387,6 +388,8 @@ function ExportDropdown({ filters }: { filters?: Record<string, string | number 
 /* ─── Main Component ──────────────────────────────────────────────────── */
 
 export default function AdminClients() {
+  const { user } = useAuth();
+  const isAssessor = user?.role === "assessor";
   const searchParams = useSearch();
   const urlParams = new URLSearchParams(searchParams);
   const initialStage = urlParams.get("stage") || "all";
@@ -427,6 +430,8 @@ export default function AdminClients() {
     assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
     intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
     referralSource: referralFilter !== "all" ? referralFilter : undefined,
+    // Assessors always see only assessment-completed clients (locked at DB level)
+    assessmentCompleted: isAssessor ? true : undefined,
     page,
     pageSize: 25,
   });
@@ -484,6 +489,14 @@ export default function AdminClients() {
   return (
     <AdminLayout>
       <div className="p-6 space-y-5">
+        {/* Assessor locked-view banner */}
+        {isAssessor && (
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+            <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Assessment Completed</span>
+            <span className="text-xs text-amber-600">— You are viewing clients whose assessment has been completed and are ready for review.</span>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -502,15 +515,17 @@ export default function AdminClients() {
               intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
               referralSource: referralFilter !== "all" ? referralFilter : undefined,
               program: programFilter !== "all" ? programFilter : undefined,
-              assessmentCompleted: stageFilter === "assessment_completed" ? true : assessmentCompletedFilter === "completed" ? true : assessmentCompletedFilter === "not_completed" ? false : undefined,
+              assessmentCompleted: isAssessor ? true : stageFilter === "assessment_completed" ? true : assessmentCompletedFilter === "completed" ? true : assessmentCompletedFilter === "not_completed" ? false : undefined,
             }} />
-            <Button
-              onClick={() => setShowAddDialog(true)}
-              className="bg-green-700 hover:bg-green-800 text-white gap-1.5 h-9 px-4 text-sm"
-            >
-              <Plus className="h-4 w-4" />
-              Add Client
-            </Button>
+            {!isAssessor && (
+              <Button
+                onClick={() => setShowAddDialog(true)}
+                className="bg-green-700 hover:bg-green-800 text-white gap-1.5 h-9 px-4 text-sm"
+              >
+                <Plus className="h-4 w-4" />
+                Add Client
+              </Button>
+            )}
           </div>
         </div>
 
@@ -525,8 +540,8 @@ export default function AdminClients() {
           />
         </div>
 
-        {/* Filter Row */}
-        <div className="flex flex-wrap gap-2">
+        {/* Filter Row — hidden for assessors (their view is locked to assessment-completed) */}
+        {!isAssessor && (<div className="flex flex-wrap gap-2">
           <Select value={stageFilter} onValueChange={(v) => { setStageFilter(v); setPage(1); }}>
             <SelectTrigger className="w-[180px] h-9 text-sm bg-white border-slate-200">
               <SelectValue placeholder="Stage" />
@@ -652,7 +667,7 @@ export default function AdminClients() {
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </div>)}
 
         {/* Bulk Delete Toolbar */}
         {selectedIds.size > 0 && (
