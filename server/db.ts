@@ -384,7 +384,7 @@ export async function listStaffUsers() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.select().from(users).where(
-    or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"))
+    or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"), eq(users.role, "assessor"))
   ).orderBy(desc(users.createdAt));
 }
 
