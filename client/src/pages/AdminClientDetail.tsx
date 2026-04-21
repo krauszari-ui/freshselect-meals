@@ -132,7 +132,11 @@ export default function AdminClientDetail() {
   const [taskArea, setTaskArea] = useState<"intake_rep" | "assigned_worker">("intake_rep");
 
   // Form states for dialogs
-  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", cellPhone: "", medicaidId: "", language: "", program: "" });
+  const [editForm, setEditForm] = useState({
+    firstName: "", lastName: "", email: "", cellPhone: "", medicaidId: "",
+    language: "", program: "", borough: "", neighborhood: "", supermarket: "", referralSource: "",
+    dateOfBirth: "", streetAddress: "", aptUnit: "", city: "", state: "", zipcode: "",
+  });
   const [householdForm, setHouseholdForm] = useState({ name: "", dateOfBirth: "", medicaidId: "" });
   const [addressForm, setAddressForm] = useState({ street: "", apt: "", city: "", state: "NY", zip: "" });
   const [phoneForm, setPhoneForm] = useState("");
@@ -373,12 +377,27 @@ export default function AdminClientDetail() {
       medicaidId: client.medicaidId || "",
       language: (client as any).language || "English",
       program: (client as any).program || "PHS",
+      borough: (client as any).borough || "",
+      neighborhood: (client as any).neighborhood || "",
+      supermarket: (client as any).supermarket || "",
+      referralSource: (client as any).referralSource || "",
+      dateOfBirth: fd.dateOfBirth ? String(fd.dateOfBirth).split("T")[0] : "",
+      streetAddress: fd.streetAddress || "",
+      aptUnit: fd.aptUnit || "",
+      city: fd.city || "Brooklyn",
+      state: fd.state || "NY",
+      zipcode: fd.zipcode || "",
     });
     setShowEdit(true);
   };
 
   const handleEditSave = () => {
-    updateClientMutation.mutate({ id, ...editForm });
+    const { dateOfBirth, streetAddress, aptUnit, city, state, zipcode, ...topLevelFields } = editForm;
+    updateClientMutation.mutate({
+      id,
+      ...topLevelFields,
+      formData: { dateOfBirth, streetAddress, aptUnit, city, state, zipcode },
+    });
   };
 
   const handleAddHousehold = () => {
@@ -1396,21 +1415,70 @@ export default function AdminClientDetail() {
 
         {/* Edit Client Dialog */}
         <Dialog open={showEdit} onOpenChange={setShowEdit}>
-          <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Edit Client</DialogTitle><DialogDescription>Update client information</DialogDescription></DialogHeader>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label className="text-xs">First Name</Label><Input value={editForm.firstName} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} /></div>
-              <div><Label className="text-xs">Last Name</Label><Input value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} /></div>
-              <div><Label className="text-xs">Email</Label><Input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} /></div>
-              <div><Label className="text-xs">Phone</Label><Input value={editForm.cellPhone} onChange={(e) => setEditForm({ ...editForm, cellPhone: e.target.value })} /></div>
-              <div><Label className="text-xs">Medicaid ID (CIN)</Label><Input value={editForm.medicaidId} onChange={(e) => setEditForm({ ...editForm, medicaidId: e.target.value })} /></div>
-              <div><Label className="text-xs">Language</Label><Input value={editForm.language} onChange={(e) => setEditForm({ ...editForm, language: e.target.value })} /></div>
-              <div className="col-span-2"><Label className="text-xs">Program</Label><Input value={editForm.program} onChange={(e) => setEditForm({ ...editForm, program: e.target.value })} /></div>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Edit Client</DialogTitle><DialogDescription>Update all client information</DialogDescription></DialogHeader>
+            <div className="space-y-4">
+              {/* Personal Info */}
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Personal Information</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label className="text-xs">First Name</Label><Input value={editForm.firstName} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} /></div>
+                  <div><Label className="text-xs">Last Name</Label><Input value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} /></div>
+                  <div><Label className="text-xs">Date of Birth</Label><Input type="date" value={editForm.dateOfBirth} onChange={(e) => setEditForm({ ...editForm, dateOfBirth: e.target.value })} /></div>
+                  <div><Label className="text-xs">Medicaid ID (CIN)</Label><Input value={editForm.medicaidId} onChange={(e) => setEditForm({ ...editForm, medicaidId: e.target.value })} /></div>
+                  <div><Label className="text-xs">Phone</Label><Input value={editForm.cellPhone} onChange={(e) => setEditForm({ ...editForm, cellPhone: e.target.value })} /></div>
+                  <div><Label className="text-xs">Email</Label><Input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} /></div>
+                  <div><Label className="text-xs">Language</Label>
+                    <Select value={editForm.language} onValueChange={(v) => setEditForm({ ...editForm, language: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {["English","Spanish","Chinese","Russian","Arabic","French","Haitian Creole","Bengali","Korean","Other"].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label className="text-xs">Program</Label>
+                    <Select value={editForm.program} onValueChange={(v) => setEditForm({ ...editForm, program: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {["PHS","SNAP-Ed","WIC","Other"].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              {/* Address */}
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Address</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2"><Label className="text-xs">Street Address</Label><Input value={editForm.streetAddress} onChange={(e) => setEditForm({ ...editForm, streetAddress: e.target.value })} /></div>
+                  <div><Label className="text-xs">Apt / Unit</Label><Input value={editForm.aptUnit} onChange={(e) => setEditForm({ ...editForm, aptUnit: e.target.value })} /></div>
+                  <div><Label className="text-xs">City</Label><Input value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} /></div>
+                  <div><Label className="text-xs">State</Label><Input value={editForm.state} onChange={(e) => setEditForm({ ...editForm, state: e.target.value })} /></div>
+                  <div><Label className="text-xs">Zip Code</Label><Input value={editForm.zipcode} onChange={(e) => setEditForm({ ...editForm, zipcode: e.target.value })} /></div>
+                  <div><Label className="text-xs">Borough</Label>
+                    <Select value={editForm.borough} onValueChange={(v) => setEditForm({ ...editForm, borough: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select borough" /></SelectTrigger>
+                      <SelectContent>
+                        {["Bronx","Brooklyn","Manhattan","Queens","Staten Island"].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label className="text-xs">Neighborhood</Label><Input value={editForm.neighborhood} onChange={(e) => setEditForm({ ...editForm, neighborhood: e.target.value })} /></div>
+                </div>
+              </div>
+              {/* Program Details */}
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Program Details</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label className="text-xs">Vendor / Supermarket</Label><Input value={editForm.supermarket} onChange={(e) => setEditForm({ ...editForm, supermarket: e.target.value })} /></div>
+                  <div><Label className="text-xs">Referral Source</Label><Input value={editForm.referralSource} onChange={(e) => setEditForm({ ...editForm, referralSource: e.target.value })} /></div>
+                </div>
+              </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="mt-4">
               <Button variant="outline" onClick={() => setShowEdit(false)}>Cancel</Button>
               <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleEditSave} disabled={updateClientMutation.isPending}>
-                {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
               </Button>
             </DialogFooter>
           </DialogContent>

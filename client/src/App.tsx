@@ -17,6 +17,7 @@ import AdminClientDetail from "./pages/AdminClientDetail";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AdminReferrals from "./pages/AdminReferrals";
 import ReferrerPortal from "./pages/ReferrerPortal";
+import AssessorPortal from "./pages/AssessorPortal";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 
@@ -44,6 +45,9 @@ function Router() {
 
       {/* Referrer Portal */}
       <Route path={"/referrer"} component={ReferrerPortal} />
+
+      {/* Assessor Portal */}
+      <Route path={"/assessor"} component={AssessorPortal} />
 
 
       {/* Fallback */}

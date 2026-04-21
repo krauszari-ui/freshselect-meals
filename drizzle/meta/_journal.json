@@ -92,6 +92,13 @@
       "when": 1776670389395,
       "tag": "0012_safe_christian_walker",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1776741532954,
+      "tag": "0013_normal_supernaut",
+      "breakpoints": true
     }
   ]
 }
