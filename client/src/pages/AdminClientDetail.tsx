@@ -18,7 +18,7 @@ import {
 import {
   ArrowLeft, Loader2, FileText, Plus, ChevronDown, ChevronUp,
   Pencil, Trash2, Upload, ExternalLink, Link2, Save, MessageSquare, Send, Mail, Paperclip,
-  MailOpen, Reply, Clock, RefreshCw, CheckCircle2, XCircle,
+  MailOpen, Reply, Clock, RefreshCw, CheckCircle2, XCircle, X,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useParams, useLocation } from "wouter";
@@ -132,10 +132,16 @@ export default function AdminClientDetail() {
   const [taskArea, setTaskArea] = useState<"intake_rep" | "assigned_worker">("intake_rep");
 
   // Form states for dialogs
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<{
+    firstName: string; lastName: string; email: string; cellPhone: string; medicaidId: string;
+    language: string; program: string; borough: string; neighborhood: string; supermarket: string; referralSource: string;
+    dateOfBirth: string; streetAddress: string; aptUnit: string; city: string; state: string; zipcode: string;
+    householdMembers: Array<{ name: string; dateOfBirth: string; medicaidId: string; relationship: string }>;
+  }>({
     firstName: "", lastName: "", email: "", cellPhone: "", medicaidId: "",
     language: "", program: "", borough: "", neighborhood: "", supermarket: "", referralSource: "",
     dateOfBirth: "", streetAddress: "", aptUnit: "", city: "", state: "", zipcode: "",
+    householdMembers: [],
   });
   const [householdForm, setHouseholdForm] = useState({ name: "", dateOfBirth: "", medicaidId: "" });
   const [addressForm, setAddressForm] = useState({ street: "", apt: "", city: "", state: "NY", zip: "" });
@@ -387,16 +393,22 @@ export default function AdminClientDetail() {
       city: fd.city || "Brooklyn",
       state: fd.state || "NY",
       zipcode: fd.zipcode || "",
+      householdMembers: (fd.householdMembers || []).map((m: any) => ({
+        name: m.name || "",
+        dateOfBirth: m.dateOfBirth || m.dob || "",
+        medicaidId: m.medicaidId || "",
+        relationship: m.relationship || "",
+      })),
     });
     setShowEdit(true);
   };
 
   const handleEditSave = () => {
-    const { dateOfBirth, streetAddress, aptUnit, city, state, zipcode, ...topLevelFields } = editForm;
+    const { dateOfBirth, streetAddress, aptUnit, city, state, zipcode, householdMembers, ...topLevelFields } = editForm;
     updateClientMutation.mutate({
       id,
       ...topLevelFields,
-      formData: { dateOfBirth, streetAddress, aptUnit, city, state, zipcode },
+      formData: { dateOfBirth, streetAddress, aptUnit, city, state, zipcode, householdMembers },
     });
   };
 
@@ -1485,6 +1497,99 @@ export default function AdminClientDetail() {
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label className="text-xs">Vendor / Supermarket</Label><Input value={editForm.supermarket} onChange={(e) => setEditForm({ ...editForm, supermarket: e.target.value })} /></div>
                   <div><Label className="text-xs">Referral Source</Label><Input value={editForm.referralSource} onChange={(e) => setEditForm({ ...editForm, referralSource: e.target.value })} /></div>
+                </div>
+              </div>
+              {/* Household Members */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Household Members</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setEditForm({ ...editForm, householdMembers: [...editForm.householdMembers, { name: "", dateOfBirth: "", medicaidId: "", relationship: "" }] })}
+                  >
+                    <Plus className="h-3 w-3" /> Add Member
+                  </Button>
+                </div>
+                {editForm.householdMembers.length === 0 && (
+                  <p className="text-xs text-slate-400 py-2">No household members. Click "Add Member" to add one.</p>
+                )}
+                <div className="space-y-3">
+                  {editForm.householdMembers.map((m, idx) => (
+                    <div key={idx} className="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-600">Member {idx + 1}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => {
+                            const updated = editForm.householdMembers.filter((_, i) => i !== idx);
+                            setEditForm({ ...editForm, householdMembers: updated });
+                          }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="col-span-2">
+                          <Label className="text-xs">Full Name</Label>
+                          <Input
+                            value={m.name}
+                            onChange={(e) => {
+                              const updated = [...editForm.householdMembers];
+                              updated[idx] = { ...updated[idx], name: e.target.value };
+                              setEditForm({ ...editForm, householdMembers: updated });
+                            }}
+                            placeholder="Full name"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Date of Birth</Label>
+                          <Input
+                            type="date"
+                            value={m.dateOfBirth}
+                            onChange={(e) => {
+                              const updated = [...editForm.householdMembers];
+                              updated[idx] = { ...updated[idx], dateOfBirth: e.target.value };
+                              setEditForm({ ...editForm, householdMembers: updated });
+                            }}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Medicaid ID (CIN)</Label>
+                          <Input
+                            value={m.medicaidId}
+                            onChange={(e) => {
+                              const updated = [...editForm.householdMembers];
+                              updated[idx] = { ...updated[idx], medicaidId: e.target.value };
+                              setEditForm({ ...editForm, householdMembers: updated });
+                            }}
+                            placeholder="e.g. AB12345C"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Label className="text-xs">Relationship</Label>
+                          <Input
+                            value={m.relationship}
+                            onChange={(e) => {
+                              const updated = [...editForm.householdMembers];
+                              updated[idx] = { ...updated[idx], relationship: e.target.value };
+                              setEditForm({ ...editForm, householdMembers: updated });
+                            }}
+                            placeholder="e.g. Spouse, Child, Parent"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

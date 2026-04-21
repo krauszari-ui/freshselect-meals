@@ -419,8 +419,15 @@ export default function AdminClients() {
 
   const utils = trpc.useUtils();
 
-  // "assessment_completed" is a virtual stage filter — handled client-side
+  // "assessment_completed" is a stage filter — now handled at DB level for correct pagination
   const effectiveStageFilter = stageFilter === "assessment_completed" ? undefined : stageFilter;
+  // Derive DB-level assessmentCompleted flag
+  const dbAssessmentCompleted: boolean | undefined =
+    isAssessor ? true
+    : stageFilter === "assessment_completed" ? true
+    : assessmentCompletedFilter === "completed" ? true
+    : assessmentCompletedFilter === "not_completed" ? false
+    : undefined;
 
   const listQuery = trpc.admin.list.useQuery({
     search: debouncedSearch || undefined,
@@ -430,8 +437,7 @@ export default function AdminClients() {
     assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
     intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
     referralSource: referralFilter !== "all" ? referralFilter : undefined,
-    // Assessors always see only assessment-completed clients (locked at DB level)
-    assessmentCompleted: isAssessor ? true : undefined,
+    assessmentCompleted: dbAssessmentCompleted,
     page,
     pageSize: 25,
   });
@@ -471,10 +477,6 @@ export default function AdminClients() {
       return fd.neighborhood === neighborhoodFilter;
     });
     if (vendorFilter !== "all") result = result.filter((r: any) => r.supermarket === vendorFilter);
-    // Virtual filter: Assessment Completed
-    if (stageFilter === "assessment_completed") result = result.filter((r: any) => r.assessmentCompletedAt != null);
-    if (assessmentCompletedFilter === "completed") result = result.filter((r: any) => r.assessmentCompletedAt != null);
-    if (assessmentCompletedFilter === "not_completed") result = result.filter((r: any) => r.assessmentCompletedAt == null);
     return result;
   }, [sortedRows, programFilter, neighborhoodFilter, vendorFilter, stageFilter, assessmentCompletedFilter]);
 

@@ -499,3 +499,7 @@
 - [x] Add approveClient procedure: sets status to approved (assessor + admin)
 - [x] Build AssessorPortal page at /assessor: shows assessment-completed clients, Approve button with confirmation dialog
 - [x] Add /assessor route to App.tsx
+
+## Pagination & Edit Client Fixes (Apr 21)
+- [x] Fix pagination for "Assessment Completed" filter — currently treated as client-side virtual stage so DB returns all pages unfiltered; move to DB-level assessmentCompleted param
+- [x] Add household member editing to Edit Client dialog (add/edit/remove members with name, DOB, Medicaid ID, relationship)
