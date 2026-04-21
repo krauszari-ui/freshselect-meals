@@ -265,7 +265,19 @@ export default function AdminApplicationDetail() {
                 <Field label="Spouse Employed" value={form.spouseEmployed as string} />
                 <Field label="WIC" value={form.hasWic as string} />
                 <Field label="SNAP" value={form.hasSnap as string} />
-                <Field label="New Applicant" value={form.newApplicant as string} />
+                <Field
+                  label="Applicant Type"
+                  value={
+                    form.newApplicant === "Yes" || form.newApplicant === "New"
+                      ? "New Client"
+                      : form.newApplicant === "No" || form.newApplicant === "Transfer"
+                      ? `Transfer${form.transferAgencyName ? ` — ${form.transferAgencyName}` : ""}`
+                      : (form.newApplicant as string) || "—"
+                  }
+                />
+                {(form.newApplicant === "No" || form.newApplicant === "Transfer") && (form.transferAgencyName as string) && (
+                  <Field label="Transfer Agency" value={form.transferAgencyName as string} />
+                )}
                 <Field label="Food Allergies" value={form.foodAllergies as string} />
               </dl>
             </Section>
