@@ -487,7 +487,11 @@
 - [ ] Ensure all 16 SCN questions are editable and save correctly
 - [ ] Verify save/cancel flow works end-to-end without errors
 
-## Full Client Editing & Assessor Role
+## Assessor Role (continued)
+- [x] AdminClients: auto-lock to assessment-completed clients when viewed by assessor (hide filters that don't apply, lock assessmentCompleted=true in query)
+- [x] Expose assessmentCompleted param in admin.list tRPC procedure so the DB-level filter works for assessors
+
+## Assessor Role
 - [x] Expand Edit Client dialog to include DOB, address (street, apt, city, state, zip), borough, neighborhood, vendor/supermarket, referral source
 - [x] Add assessor role to user enum (DB migration applied)
 - [x] Add assessorProcedure guard in routers.ts (assessor + admin + super_admin)

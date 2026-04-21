@@ -299,6 +299,7 @@ export const appRouter = router({
       assignedTo: z.number().optional(),
       intakeRep: z.number().optional(),
       referralSource: z.string().optional(),
+      assessmentCompleted: z.boolean().optional(),
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional(),
     })).query(async ({ input }) => listSubmissions(input)),
