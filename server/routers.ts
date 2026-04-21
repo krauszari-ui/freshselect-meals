@@ -555,6 +555,7 @@ export const appRouter = router({
       neighborhood: z.string().optional(),
       supermarket: z.string().optional(),
       referralSource: z.string().optional(),
+      additionalMembersCount: z.number().optional(),
       // formData fields (merged into existing JSON)
       formData: z.record(z.string(), z.unknown()).optional(),
     })).mutation(async ({ input }) => {
@@ -566,6 +567,10 @@ export const appRouter = router({
         if (existing) {
           const merged = { ...(existing.formData as Record<string, unknown>), ...formData };
           updateData.formData = merged;
+          // Auto-sync additionalMembersCount from householdMembers array if provided
+          if (Array.isArray(merged.householdMembers) && fields.additionalMembersCount === undefined) {
+            updateData.additionalMembersCount = (merged.householdMembers as unknown[]).length;
+          }
         }
       }
       await updateSubmissionFields(id, updateData as any);

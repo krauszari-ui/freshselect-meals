@@ -503,3 +503,6 @@
 ## Pagination & Edit Client Fixes (Apr 21)
 - [x] Fix pagination for "Assessment Completed" filter — currently treated as client-side virtual stage so DB returns all pages unfiltered; move to DB-level assessmentCompleted param
 - [x] Add household member editing to Edit Client dialog (add/edit/remove members with name, DOB, Medicaid ID, relationship)
+
+## Household Member Count Sync (Apr 21)
+- [x] Sync additionalMembersCount when household members are edited via Edit Client dialog or Add Household Member action

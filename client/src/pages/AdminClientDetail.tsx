@@ -415,7 +415,7 @@ export default function AdminClientDetail() {
   const handleAddHousehold = () => {
     if (!householdForm.name.trim()) { toast.error("Name is required"); return; }
     const updated = [...householdMembers, { ...householdForm }];
-    updateClientMutation.mutate({ id, formData: { householdMembers: updated } }, {
+    updateClientMutation.mutate({ id, additionalMembersCount: updated.length, formData: { householdMembers: updated } }, {
       onSuccess: () => { setShowAddHousehold(false); setHouseholdForm({ name: "", dateOfBirth: "", medicaidId: "" }); toast.success("Household member added"); utils.admin.getById.invalidate({ id }); },
     });
   };
