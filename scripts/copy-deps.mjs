@@ -30,6 +30,7 @@ const REQUIRED = [
   "@aws-sdk/client-s3",
   "@aws-sdk/s3-request-presigner",
   "pdf-lib",
+  "svix",
 ];
 
 const copied = new Set();

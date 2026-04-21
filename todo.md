@@ -521,3 +521,11 @@
 - [x] Fix inbound webhook to use correct Resend email.received payload format (data.to array, fetch body via API)
 - [x] 99/99 tests passing with real outbound email send confirmed
 - [ ] Test full round-trip: send email → client replies → reply appears in thread (requires live test)
+
+## Fix Vercel 404 for /api/inbound-email (Apr 21)
+- [x] Add inbound email webhook handler to src/index.ts (Vercel serverless entry point)
+- [x] Add svix to copy-deps.mjs REQUIRED list so it's bundled into the Vercel function
+- [x] Add --external:svix to vercel-build.sh esbuild command
+- [x] 99/99 tests passing
+- [ ] Push to GitHub to trigger Vercel redeploy
+- [ ] Verify Resend webhook deliveries return 200 after redeploy
