@@ -16,10 +16,15 @@ import { ENV } from "./_core/env";
 // ─── Client singleton ────────────────────────────────────────────────────────
 
 let _resend: Resend | null = null;
+let _resendKey: string | null = null;
 
 function getResend(): Resend {
-  if (!_resend) {
-    _resend = new Resend(ENV.resendApiKey);
+  // Always read from process.env directly so updated secrets are picked up
+  // without requiring a full process restart
+  const currentKey = process.env.RESEND_API_KEY ?? ENV.resendApiKey;
+  if (!_resend || currentKey !== _resendKey) {
+    _resend = new Resend(currentKey);
+    _resendKey = currentKey;
   }
   return _resend;
 }
@@ -34,8 +39,10 @@ function getResend(): Resend {
  * Until then, the fallback uses Resend's shared testing address which only
  * delivers to the account owner's email (scn@levelupresources.org).
  */
-const FROM_EMAIL =
-  process.env.RESEND_FROM_EMAIL ?? "FreshSelect Meals <onboarding@resend.dev>";
+// Read FROM_EMAIL dynamically so env var updates are picked up without restart
+function getFromEmail(): string {
+  return process.env.RESEND_FROM_EMAIL ?? "FreshSelect Meals <admin@freshselectmeals.com>";
+}
 
 const ADMIN_EMAIL = "info@freshselectmeals.com";
 
@@ -260,7 +267,7 @@ export async function sendEmail(params: { to: string; subject: string; html: str
   const idempotencyKey = `generic-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return sendWithRetry(
     (key) => getResend().emails.send({
-      from: params.from ?? FROM_EMAIL,
+      from: params.from ?? getFromEmail(),
       to: params.to,
       subject: params.subject,
       html: params.html,
@@ -281,7 +288,7 @@ export async function sendApplicantConfirmation(data: SubmissionEmailData): Prom
   const success = await sendWithRetry(
     (key) =>
       resend.emails.send({
-        from: FROM_EMAIL,
+        from: getFromEmail(),
         to: [data.email],
         subject,
         html,
@@ -307,7 +314,7 @@ export async function sendAdminNotification(data: SubmissionEmailData): Promise<
   const success = await sendWithRetry(
     (key) =>
       resend.emails.send({
-        from: FROM_EMAIL,
+        from: getFromEmail(),
         to: [ADMIN_EMAIL],
         subject,
         html,
