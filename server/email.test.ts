@@ -193,10 +193,10 @@ describe("Inbound webhook endpoint", () => {
     const payloadObj = {
       type: "email.received",
       data: {
+        email_id: "test-email-id-99999999",
         from: "client@example.com",
-        to: "reply-99999999@inbound.freshselectmeals.com",
+        to: ["reply-99999999@inbound.freshselectmeals.com"],
         subject: "Re: Your application",
-        text: "Thank you for the update.",
         message_id: "test-msg-id-002",
         in_reply_to: "original-msg-id",
       },
