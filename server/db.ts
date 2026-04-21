@@ -113,6 +113,8 @@ export interface ListSubmissionsOptions {
   status?: Submission["status"] | "all";
   stage?: string;
   supermarket?: string;
+  neighborhood?: string;
+  program?: string;
   language?: string;
   borough?: string;
   assignedTo?: number;
@@ -126,7 +128,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, supermarket, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, page = 1, pageSize = 20 } = opts;
+  const { search, status, stage, supermarket, neighborhood, program, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -141,6 +143,8 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   if (status && status !== "all") conditions.push(eq(submissions.status, status));
   if (stage && stage !== "all") conditions.push(eq(submissions.stage, stage as Submission["stage"]));
   if (supermarket && supermarket !== "all") conditions.push(eq(submissions.supermarket, supermarket));
+  if (neighborhood && neighborhood !== "all") conditions.push(eq(submissions.neighborhood, neighborhood));
+  if (program && program !== "all") conditions.push(eq(submissions.program, program));
   if (language && language !== "all") conditions.push(eq(submissions.language, language));
   if (borough && borough !== "all") conditions.push(eq(submissions.borough, borough));
   if (assignedTo) conditions.push(eq(submissions.assignedTo, assignedTo));
@@ -177,6 +181,30 @@ export async function getAllSubmissions(opts: { status?: string; supermarket?: s
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const rows = await db.select().from(submissions).where(where).orderBy(desc(submissions.createdAt));
   return rows;
+}
+
+// Returns per-value counts for all filterable dimensions in a single DB round-trip
+export async function getFilterCounts() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [stageRows, neighborhoodRows, vendorRows, programRows, languageRows, boroughRows] = await Promise.all([
+    db.select({ value: submissions.stage, count: sql<number>`count(*)` }).from(submissions).groupBy(submissions.stage),
+    db.select({ value: submissions.neighborhood, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.neighborhood} IS NOT NULL AND ${submissions.neighborhood} != ''`).groupBy(submissions.neighborhood),
+    db.select({ value: submissions.supermarket, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.supermarket} IS NOT NULL AND ${submissions.supermarket} != ''`).groupBy(submissions.supermarket),
+    db.select({ value: submissions.program, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.program} IS NOT NULL AND ${submissions.program} != ''`).groupBy(submissions.program),
+    db.select({ value: submissions.language, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.language} IS NOT NULL AND ${submissions.language} != ''`).groupBy(submissions.language),
+    db.select({ value: submissions.borough, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.borough} IS NOT NULL AND ${submissions.borough} != ''`).groupBy(submissions.borough),
+  ]);
+  const toMap = (rows: { value: string | null; count: number }[]) =>
+    Object.fromEntries(rows.filter(r => r.value).map(r => [r.value as string, Number(r.count)]));
+  return {
+    stage: toMap(stageRows as any),
+    neighborhood: toMap(neighborhoodRows as any),
+    vendor: toMap(vendorRows as any),
+    program: toMap(programRows as any),
+    language: toMap(languageRows as any),
+    borough: toMap(boroughRows as any),
+  };
 }
 
 export async function updateSubmissionStatus(id: number, status: Submission["status"], adminNotes?: string): Promise<void> {
