@@ -18,7 +18,7 @@ export default function AdminLogin() {
   useEffect(() => {
     if (!loading && user) {
       if (user.role === "assessor") {
-        navigate("/assessor");
+        navigate("/admin/clients");
       } else {
         const staffRoles = ["admin", "worker", "super_admin", "viewer"];
         if (staffRoles.includes(user.role)) {
@@ -32,7 +32,7 @@ export default function AdminLogin() {
     onSuccess: (data) => {
       // Reload so the session cookie is picked up by trpc.auth.me
       if (data.role === "assessor") {
-        window.location.href = "/assessor";
+        window.location.href = "/admin/clients";
       } else {
         window.location.href = "/admin/dashboard";
       }

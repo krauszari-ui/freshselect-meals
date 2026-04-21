@@ -118,6 +118,7 @@ export interface ListSubmissionsOptions {
   assignedTo?: number;
   intakeRep?: number;
   referralSource?: string;
+  assessmentCompleted?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -125,7 +126,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, supermarket, language, borough, assignedTo, intakeRep, referralSource, page = 1, pageSize = 20 } = opts;
+  const { search, status, stage, supermarket, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -145,6 +146,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   if (assignedTo) conditions.push(eq(submissions.assignedTo, assignedTo));
   if (intakeRep) conditions.push(eq(submissions.intakeRep, intakeRep));
   if (referralSource && referralSource !== "all") conditions.push(eq(submissions.referralSource, referralSource));
+  if (assessmentCompleted) conditions.push(sql`${submissions.assessmentCompletedAt} IS NOT NULL`);
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const [rows, countResult] = await Promise.all([
