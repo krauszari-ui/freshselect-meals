@@ -18,7 +18,7 @@ import {
 import {
   ArrowLeft, Loader2, FileText, Plus, ChevronDown, ChevronUp,
   Pencil, Trash2, Upload, ExternalLink, Link2, Save, MessageSquare, Send, Mail, Paperclip,
-  MailOpen, Reply, Clock, RefreshCw,
+  MailOpen, Reply, Clock, RefreshCw, CheckCircle2, XCircle,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useParams, useLocation } from "wouter";
@@ -473,6 +473,19 @@ export default function AdminClientDetail() {
                 <div className="flex items-center gap-1 mt-0.5 text-xs text-blue-600">
                   <Link2 className="h-3 w-3" />
                   <span>Referred via: <strong>{client.referralSource}</strong></span>
+                </div>
+              )}
+              {/* Assessor decision */}
+              {client.status === "approved" && (client as any).approvedBy && (
+                <div className="flex items-center gap-1 mt-0.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5 w-fit">
+                  <CheckCircle2 className="h-3 w-3" />
+                  <span>Approved by <strong>{(client as any).approvedBy}</strong>{(client as any).approvedAt ? ` on ${new Date((client as any).approvedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}</span>
+                </div>
+              )}
+              {client.status === "rejected" && (client as any).rejectedBy && (
+                <div className="flex items-center gap-1 mt-0.5 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-0.5 w-fit">
+                  <XCircle className="h-3 w-3" />
+                  <span>Rejected by <strong>{(client as any).rejectedBy}</strong>{(client as any).rejectionReason ? ` — ${(client as any).rejectionReason}` : ""}</span>
                 </div>
               )}
               <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">

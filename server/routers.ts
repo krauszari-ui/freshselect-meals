@@ -143,7 +143,7 @@ export const appRouter = router({
         if (!valid) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
         }
-        if (user.role !== "admin" && user.role !== "worker" && user.role !== "super_admin" && user.role !== "viewer") {
+        if (user.role !== "admin" && user.role !== "worker" && user.role !== "super_admin" && user.role !== "viewer" && user.role !== "assessor") {
           throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: staff role required" });
         }
         const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || "" });
@@ -586,11 +586,33 @@ export const appRouter = router({
       return { success: true };
     }),
 
-    // ─── Assessor: approve client ──────────────────────────────────────────
+    // ─── Assessor: approve / reject client ────────────────────────────────────
     approveClient: assessorProcedure.input(z.object({
       id: z.number(),
-    })).mutation(async ({ input }) => {
-      await updateSubmissionFields(input.id, { status: "approved" } as any);
+    })).mutation(async ({ input, ctx }) => {
+      await updateSubmissionFields(input.id, {
+        status: "approved",
+        approvedBy: ctx.user.name || ctx.user.email || "Assessor",
+        approvedAt: new Date(),
+        rejectedBy: null,
+        rejectedAt: null,
+        rejectionReason: null,
+      } as any);
+      return { success: true };
+    }),
+
+    rejectClient: assessorProcedure.input(z.object({
+      id: z.number(),
+      reason: z.string().optional(),
+    })).mutation(async ({ input, ctx }) => {
+      await updateSubmissionFields(input.id, {
+        status: "rejected",
+        rejectedBy: ctx.user.name || ctx.user.email || "Assessor",
+        rejectedAt: new Date(),
+        rejectionReason: input.reason || null,
+        approvedBy: null,
+        approvedAt: null,
+      } as any);
       return { success: true };
     }),
 
@@ -848,7 +870,7 @@ export const appRouter = router({
       // Always return success to prevent email enumeration
       const user = await getUserByEmail(input.email);
       if (!user || !user.passwordHash) return { success: true };
-      if (user.role !== "admin" && user.role !== "worker" && user.role !== "super_admin" && user.role !== "viewer") return { success: true };
+      if (user.role !== "admin" && user.role !== "worker" && user.role !== "super_admin" && user.role !== "viewer" && user.role !== "assessor") return { success: true };
       const token = require("crypto").randomBytes(32).toString("hex");
       const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
       await setPasswordResetToken(user.id, token, expires);

@@ -80,6 +80,16 @@ export const submissions = mysqlTable("submissions", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   /** When the SCN assessment was marked completed by staff */
   assessmentCompletedAt: timestamp("assessmentCompletedAt"),
+  /** Name of assessor who approved this client */
+  approvedBy: varchar("approvedBy", { length: 128 }),
+  /** When the client was approved by assessor */
+  approvedAt: timestamp("approvedAt"),
+  /** Name of assessor who rejected this client */
+  rejectedBy: varchar("rejectedBy", { length: 128 }),
+  /** When the client was rejected by assessor */
+  rejectedAt: timestamp("rejectedAt"),
+  /** Reason for rejection provided by assessor */
+  rejectionReason: text("rejectionReason"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 

@@ -3,7 +3,9 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle2, Search, LogOut, ClipboardList } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Loader2, CheckCircle2, XCircle, Search, LogOut, ClipboardList } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
@@ -11,13 +13,23 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 
 export default function AssessorPortal() {
   const { user, loading, logout } = useAuth();
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
-  const [confirmId, setConfirmId] = useState<number | null>(null);
-  const [confirmName, setConfirmName] = useState("");
+
+  // Approve state
+  const [confirmApproveId, setConfirmApproveId] = useState<number | null>(null);
+  const [confirmApproveName, setConfirmApproveName] = useState("");
+
+  // Reject state
+  const [rejectId, setRejectId] = useState<number | null>(null);
+  const [rejectName, setRejectName] = useState("");
+  const [rejectReason, setRejectReason] = useState("");
 
   const { data: clients, isLoading, refetch } = trpc.admin.assessorList.useQuery(
     { search: search || undefined },
@@ -28,7 +40,17 @@ export default function AssessorPortal() {
     onSuccess: () => {
       toast.success("Client approved successfully");
       refetch();
-      setConfirmId(null);
+      setConfirmApproveId(null);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const rejectClientMutation = trpc.admin.rejectClient.useMutation({
+    onSuccess: () => {
+      toast.success("Client rejected");
+      refetch();
+      setRejectId(null);
+      setRejectReason("");
     },
     onError: (err) => toast.error(err.message),
   });
@@ -80,7 +102,7 @@ export default function AssessorPortal() {
         <div className="mb-6">
           <h2 className="text-xl font-semibold text-slate-900 mb-1">Clients Pending Approval</h2>
           <p className="text-sm text-slate-500">
-            These clients have completed their SCN assessment and are awaiting your approval.
+            These clients have completed their SCN assessment and are awaiting your review.
           </p>
         </div>
 
@@ -113,9 +135,9 @@ export default function AssessorPortal() {
                 <tr className="border-b border-slate-100 bg-slate-50">
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Client</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">CIN / Medicaid ID</th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Assessment Completed</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Assessment Date</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Action</th>
+                  <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -143,7 +165,19 @@ export default function AssessorPortal() {
                     </td>
                     <td className="px-5 py-3.5">
                       {client.status === "approved" ? (
-                        <Badge className="bg-emerald-100 text-emerald-700 text-xs">Approved</Badge>
+                        <div>
+                          <Badge className="bg-emerald-100 text-emerald-700 text-xs">Approved</Badge>
+                          {client.approvedBy && (
+                            <p className="text-xs text-slate-400 mt-0.5">by {client.approvedBy}</p>
+                          )}
+                        </div>
+                      ) : client.status === "rejected" ? (
+                        <div>
+                          <Badge className="bg-red-100 text-red-700 text-xs">Rejected</Badge>
+                          {client.rejectedBy && (
+                            <p className="text-xs text-slate-400 mt-0.5">by {client.rejectedBy}</p>
+                          )}
+                        </div>
                       ) : (
                         <Badge className="bg-amber-100 text-amber-700 text-xs">Pending Review</Badge>
                       )}
@@ -153,17 +187,35 @@ export default function AssessorPortal() {
                         <span className="text-xs text-emerald-600 flex items-center justify-end gap-1">
                           <CheckCircle2 className="h-3.5 w-3.5" /> Approved
                         </span>
+                      ) : client.status === "rejected" ? (
+                        <span className="text-xs text-red-500 flex items-center justify-end gap-1">
+                          <XCircle className="h-3.5 w-3.5" /> Rejected
+                        </span>
                       ) : (
-                        <Button
-                          size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 px-3"
-                          onClick={() => {
-                            setConfirmId(client.id);
-                            setConfirmName(`${client.firstName} ${client.lastName}`);
-                          }}
-                        >
-                          Approve
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-red-200 text-red-600 hover:bg-red-50 text-xs h-7 px-3"
+                            onClick={() => {
+                              setRejectId(client.id);
+                              setRejectName(`${client.firstName} ${client.lastName}`);
+                              setRejectReason("");
+                            }}
+                          >
+                            <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 px-3"
+                            onClick={() => {
+                              setConfirmApproveId(client.id);
+                              setConfirmApproveName(`${client.firstName} ${client.lastName}`);
+                            }}
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                          </Button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -179,19 +231,19 @@ export default function AssessorPortal() {
       </main>
 
       {/* Confirm Approve Dialog */}
-      <AlertDialog open={confirmId !== null} onOpenChange={(open) => { if (!open) setConfirmId(null); }}>
+      <AlertDialog open={confirmApproveId !== null} onOpenChange={(open) => { if (!open) setConfirmApproveId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Approve Client</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to approve <strong>{confirmName}</strong>? This will mark their status as Approved in the system.
+              Are you sure you want to approve <strong>{confirmApproveName}</strong>? This will mark their status as Approved in the system.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-emerald-600 hover:bg-emerald-700"
-              onClick={() => confirmId !== null && approveClientMutation.mutate({ id: confirmId })}
+              onClick={() => confirmApproveId !== null && approveClientMutation.mutate({ id: confirmApproveId })}
               disabled={approveClientMutation.isPending}
             >
               {approveClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Approve"}
@@ -199,6 +251,43 @@ export default function AssessorPortal() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={rejectId !== null} onOpenChange={(open) => { if (!open) { setRejectId(null); setRejectReason(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Client</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-slate-600">
+              You are about to reject <strong>{rejectName}</strong>. Please provide a reason (optional).
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="reject-reason">Reason for Rejection</Label>
+              <Textarea
+                id="reject-reason"
+                placeholder="e.g. Incomplete documentation, ineligible based on criteria..."
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRejectId(null); setRejectReason(""); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => rejectId !== null && rejectClientMutation.mutate({ id: rejectId, reason: rejectReason || undefined })}
+              disabled={rejectClientMutation.isPending}
+            >
+              {rejectClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+              Confirm Rejection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
