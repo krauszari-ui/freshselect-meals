@@ -76,6 +76,8 @@ const NEIGHBORHOODS_LIST = [
   { name: "Monroe", vendors: ["Refresh", "Landau's"] },
 ];
 
+const ALL_VENDORS = NEIGHBORHOODS_LIST.flatMap(n => n.vendors);
+
 const INITIAL_ADD_FORM: AddClientForm = {
   firstName: "", lastName: "", dateOfBirth: "", medicaidId: "",
   cellPhone: "", email: "", streetAddress: "", city: "Brooklyn",
@@ -147,6 +149,10 @@ function AddClientDialog({
       screeningQuestions: {},
     });
   };
+
+  const availableVendors = form.neighborhood !== "all"
+    ? NEIGHBORHOODS_LIST.find(n => n.name === form.neighborhood)?.vendors || ALL_VENDORS
+    : ALL_VENDORS;
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
@@ -239,7 +245,11 @@ function AddClientDialog({
             </div>
             <div>
               <Label className="text-xs text-slate-600">Neighborhood</Label>
-              <Select value={form.neighborhood} onValueChange={(v) => { update("neighborhood", v); const hood = NEIGHBORHOODS_LIST.find(n => n.name === v); if (hood) update("supermarket", hood.vendors[0]); }}>
+              <Select value={form.neighborhood} onValueChange={(v) => {
+                update("neighborhood", v);
+                const vendors = NEIGHBORHOODS_LIST.find(n => n.name === v)?.vendors || [];
+                if (vendors.length > 0) update("supermarket", vendors[0]);
+              }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {NEIGHBORHOODS_LIST.map((n) => (
@@ -248,17 +258,18 @@ function AddClientDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label className="text-xs text-slate-600">Vendor</Label>
-              <Select value={form.supermarket} onValueChange={(v) => update("supermarket", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {(NEIGHBORHOODS_LIST.find(n => n.name === form.neighborhood)?.vendors || []).map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs text-slate-600">Vendor</Label>
+            <Select value={form.supermarket} onValueChange={(v) => update("supermarket", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {availableVendors.map((v) => (
+                  <SelectItem key={v} value={v}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -269,8 +280,7 @@ function AddClientDialog({
             disabled={submitMutation.isPending}
             className="bg-green-700 hover:bg-green-800 text-white"
           >
-            {submitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-            Add Client
+            {submitMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Adding...</> : "Add Client"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -278,20 +288,20 @@ function AddClientDialog({
   );
 }
 
-/* ─── Export Dropdown ─────────────────────────────────────────────────── */
+/* ─── Export Dropdown ────────────────────────────────────────────────── */
 
-function ExportDropdown({ filters }: { filters?: Record<string, string | number | boolean | undefined> }) {
+function ExportDropdown({ filters }: { filters: Record<string, any> }) {
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const exportMutation = trpc.admin.exportCsv.useMutation();
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   const triggerDownload = (blob: Blob, filename: string) => {
@@ -328,7 +338,6 @@ function ExportDropdown({ filters }: { filters?: Record<string, string | number 
       const result = await exportMutation.mutateAsync(filters as any || {});
       const wsData = [result.headers, ...result.data];
       const ws = XLSX.utils.aoa_to_sheet(wsData);
-      // Auto-size columns
       const colWidths = result.headers.map((h: string, i: number) => {
         let maxLen = h.length;
         result.data.forEach((row: string[]) => {
@@ -385,6 +394,16 @@ function ExportDropdown({ filters }: { filters?: Record<string, string | number 
   );
 }
 
+/* ─── Count Badge ────────────────────────────────────────────────────── */
+function CountBadge({ count }: { count: number | undefined }) {
+  if (count === undefined || count === 0) return null;
+  return (
+    <span className="ml-auto text-[10px] font-semibold bg-slate-100 text-slate-500 rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+      {count}
+    </span>
+  );
+}
+
 /* ─── Main Component ──────────────────────────────────────────────────── */
 
 export default function AdminClients() {
@@ -405,7 +424,7 @@ export default function AdminClients() {
   const [workerFilter, setWorkerFilter] = useState("all");
   const [repFilter, setRepFilter] = useState("all");
   const [referralFilter, setReferralFilter] = useState("all");
-  const [assessmentCompletedFilter, setAssessmentCompletedFilter] = useState("all"); // "all" | "completed" | "not_completed"
+  const [assessmentCompletedFilter, setAssessmentCompletedFilter] = useState("all");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -419,9 +438,8 @@ export default function AdminClients() {
 
   const utils = trpc.useUtils();
 
-  // "assessment_completed" is a stage filter — now handled at DB level for correct pagination
+  // "assessment_completed" is a virtual stage — maps to DB-level assessmentCompleted flag
   const effectiveStageFilter = stageFilter === "assessment_completed" ? undefined : stageFilter;
-  // Derive DB-level assessmentCompleted flag
   const dbAssessmentCompleted: boolean | undefined =
     isAssessor ? true
     : stageFilter === "assessment_completed" ? true
@@ -429,11 +447,15 @@ export default function AdminClients() {
     : assessmentCompletedFilter === "not_completed" ? false
     : undefined;
 
+  // All filters are now passed to the DB — no client-side filtering
   const listQuery = trpc.admin.list.useQuery({
     search: debouncedSearch || undefined,
     stage: effectiveStageFilter !== "all" ? effectiveStageFilter : undefined,
     language: languageFilter !== "all" ? languageFilter : undefined,
     borough: boroughFilter !== "all" ? boroughFilter : undefined,
+    neighborhood: neighborhoodFilter !== "all" ? neighborhoodFilter : undefined,
+    supermarket: vendorFilter !== "all" ? vendorFilter : undefined,
+    program: programFilter !== "all" ? programFilter : undefined,
     assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
     intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
     referralSource: referralFilter !== "all" ? referralFilter : undefined,
@@ -441,6 +463,12 @@ export default function AdminClients() {
     page,
     pageSize: 25,
   });
+
+  // Filter counts — loaded once, used to show per-option counts in dropdowns
+  const filterCountsQuery = trpc.admin.filterCounts.useQuery(undefined, {
+    staleTime: 60_000, // refresh every 60s
+  });
+  const fc = filterCountsQuery.data as any;
 
   const staffQuery = trpc.admin.staffList.useQuery();
   const referralLinksQuery = trpc.admin.referrals.list.useQuery();
@@ -451,6 +479,7 @@ export default function AdminClients() {
       toast.success(`${data.deleted} client${data.deleted === 1 ? '' : 's'} deleted`);
       setSelectedIds(new Set());
       utils.admin.list.invalidate();
+      utils.admin.filterCounts.invalidate();
     },
     onError: () => toast.error("Failed to delete selected clients"),
   });
@@ -460,6 +489,7 @@ export default function AdminClients() {
   const totalPages = listData?.totalPages ?? 1;
   const totalCount = listData?.total ?? 0;
 
+  // Sort is still done client-side on the current page (DB returns desc by default)
   const sortedRows = useMemo(() => {
     if (!rows.length) return rows;
     return [...rows].sort((a: any, b: any) => {
@@ -469,17 +499,6 @@ export default function AdminClients() {
     });
   }, [rows, sortDir]);
 
-  const filteredRows = useMemo(() => {
-    let result = sortedRows;
-    if (programFilter !== "all") result = result.filter((r: any) => r.program === programFilter);
-    if (neighborhoodFilter !== "all") result = result.filter((r: any) => {
-      const fd = (r.formData as any) || {};
-      return fd.neighborhood === neighborhoodFilter;
-    });
-    if (vendorFilter !== "all") result = result.filter((r: any) => r.supermarket === vendorFilter);
-    return result;
-  }, [sortedRows, programFilter, neighborhoodFilter, vendorFilter, stageFilter, assessmentCompletedFilter]);
-
   const staffList = (staffQuery.data ?? []) as any[];
 
   const getWorkerName = (id: number | null) => {
@@ -487,6 +506,11 @@ export default function AdminClients() {
     const w = staffList.find((s: any) => s.id === id);
     return w?.name || "Unknown";
   };
+
+  // Vendors available for the selected neighborhood
+  const availableVendors = neighborhoodFilter !== "all"
+    ? NEIGHBORHOODS_LIST.find(n => n.name === neighborhoodFilter)?.vendors || ALL_VENDORS
+    : ALL_VENDORS;
 
   return (
     <AdminLayout>
@@ -510,13 +534,13 @@ export default function AdminClients() {
               stage: (stageFilter !== "all" && stageFilter !== "assessment_completed") ? stageFilter : undefined,
               supermarket: vendorFilter !== "all" ? vendorFilter : undefined,
               neighborhood: neighborhoodFilter !== "all" ? neighborhoodFilter : undefined,
+              program: programFilter !== "all" ? programFilter : undefined,
               language: languageFilter !== "all" ? languageFilter : undefined,
               borough: boroughFilter !== "all" ? boroughFilter : undefined,
               search: debouncedSearch || undefined,
               assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
               intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
               referralSource: referralFilter !== "all" ? referralFilter : undefined,
-              program: programFilter !== "all" ? programFilter : undefined,
               assessmentCompleted: isAssessor ? true : stageFilter === "assessment_completed" ? true : assessmentCompletedFilter === "completed" ? true : assessmentCompletedFilter === "not_completed" ? false : undefined,
             }} />
             {!isAssessor && (
@@ -542,134 +566,170 @@ export default function AdminClients() {
           />
         </div>
 
-        {/* Filter Row — hidden for assessors (their view is locked to assessment-completed) */}
-        {!isAssessor && (<div className="flex flex-wrap gap-2">
-          <Select value={stageFilter} onValueChange={(v) => { setStageFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[180px] h-9 text-sm bg-white border-slate-200">
-              <SelectValue placeholder="Stage" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Stages</SelectItem>
-              {Object.entries(STAGE_CONFIG).map(([key, { label }]) => (
-                <SelectItem key={key} value={key}>{label}</SelectItem>
-              ))}
-              <SelectItem value="assessment_completed">Assessment Completed</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Filter Row — hidden for assessors */}
+        {!isAssessor && (
+          <div className="flex flex-wrap gap-2">
+            {/* Stage */}
+            <Select value={stageFilter} onValueChange={(v) => { setStageFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[180px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Stage" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Stages</SelectItem>
+                {Object.entries(STAGE_CONFIG).map(([key, { label }]) => (
+                  <SelectItem key={key} value={key}>
+                    <span className="flex items-center justify-between w-full gap-2">
+                      {label}
+                      <CountBadge count={fc?.stage?.[key]} />
+                    </span>
+                  </SelectItem>
+                ))}
+                <SelectItem value="assessment_completed">Assessment Completed</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <Select value={languageFilter} onValueChange={(v) => { setLanguageFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[130px] h-9 text-sm bg-white border-slate-200">
-              <SelectValue placeholder="Language" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Language</SelectItem>
-              <SelectItem value="English">English</SelectItem>
-              <SelectItem value="Spanish">Spanish</SelectItem>
-              <SelectItem value="Yiddish">Yiddish</SelectItem>
-              <SelectItem value="Hebrew">Hebrew</SelectItem>
-              <SelectItem value="Russian">Russian</SelectItem>
-            </SelectContent>
-          </Select>
+            {/* Language */}
+            <Select value={languageFilter} onValueChange={(v) => { setLanguageFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[130px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Language" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Language</SelectItem>
+                {["English", "Spanish", "Yiddish", "Hebrew", "Russian"].map((lang) => (
+                  <SelectItem key={lang} value={lang}>
+                    <span className="flex items-center justify-between w-full gap-2">
+                      {lang}
+                      <CountBadge count={fc?.language?.[lang]} />
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select value={boroughFilter} onValueChange={(v) => { setBoroughFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[130px] h-9 text-sm bg-white border-slate-200">
-              <SelectValue placeholder="Borough" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Borough</SelectItem>
-              <SelectItem value="Brooklyn">Brooklyn</SelectItem>
-              <SelectItem value="Manhattan">Manhattan</SelectItem>
-              <SelectItem value="Queens">Queens</SelectItem>
-              <SelectItem value="Bronx">Bronx</SelectItem>
-              <SelectItem value="Staten Island">Staten Island</SelectItem>
-            </SelectContent>
-          </Select>
+            {/* Borough */}
+            <Select value={boroughFilter} onValueChange={(v) => { setBoroughFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[130px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Borough" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Borough</SelectItem>
+                {["Brooklyn", "Manhattan", "Queens", "Bronx", "Staten Island"].map((b) => (
+                  <SelectItem key={b} value={b}>
+                    <span className="flex items-center justify-between w-full gap-2">
+                      {b}
+                      <CountBadge count={fc?.borough?.[b]} />
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select value={neighborhoodFilter} onValueChange={(v) => { setNeighborhoodFilter(v); setVendorFilter("all"); setPage(1); }}>
-            <SelectTrigger className="w-[150px] h-9 text-sm bg-white border-slate-200">
-              <SelectValue placeholder="Neighborhood" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Neighborhood</SelectItem>
-              {NEIGHBORHOODS_LIST.map((n) => (
-                <SelectItem key={n.name} value={n.name}>{n.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {/* Neighborhood */}
+            <Select value={neighborhoodFilter} onValueChange={(v) => { setNeighborhoodFilter(v); setVendorFilter("all"); setPage(1); }}>
+              <SelectTrigger className="w-[150px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Neighborhood" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Neighborhood</SelectItem>
+                {NEIGHBORHOODS_LIST.map((n) => (
+                  <SelectItem key={n.name} value={n.name}>
+                    <span className="flex items-center justify-between w-full gap-2">
+                      {n.name}
+                      <CountBadge count={fc?.neighborhood?.[n.name]} />
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select value={vendorFilter} onValueChange={(v) => { setVendorFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
-              <SelectValue placeholder="Vendor" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Vendors</SelectItem>
-              {(neighborhoodFilter !== "all"
-                ? NEIGHBORHOODS_LIST.find(n => n.name === neighborhoodFilter)?.vendors || []
-                : NEIGHBORHOODS_LIST.flatMap(n => n.vendors)
-              ).map((v) => (
-                <SelectItem key={v} value={v}>{v}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {/* Vendor */}
+            <Select value={vendorFilter} onValueChange={(v) => { setVendorFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Vendor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Vendors</SelectItem>
+                {availableVendors.map((v) => (
+                  <SelectItem key={v} value={v}>
+                    <span className="flex items-center justify-between w-full gap-2">
+                      {v}
+                      <CountBadge count={fc?.vendor?.[v]} />
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select value={programFilter} onValueChange={(v) => { setProgramFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[130px] h-9 text-sm bg-white border-slate-200">
-              <SelectValue placeholder="Program" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Program</SelectItem>
-              <SelectItem value="PHS">PHS</SelectItem>
-              <SelectItem value="SCN">SCN</SelectItem>
-            </SelectContent>
-          </Select>
+            {/* Program */}
+            <Select value={programFilter} onValueChange={(v) => { setProgramFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[130px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Program" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Program</SelectItem>
+                {["PHS", "SCN"].map((p) => (
+                  <SelectItem key={p} value={p}>
+                    <span className="flex items-center justify-between w-full gap-2">
+                      {p}
+                      <CountBadge count={fc?.program?.[p]} />
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select value="all">
-            <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
-              <SelectValue placeholder="Zipcode Eligibility" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Zipcode Eligibility</SelectItem>
-              <SelectItem value="eligible">Eligible</SelectItem>
-              <SelectItem value="ineligible">Ineligible</SelectItem>
-            </SelectContent>
-          </Select>
+            {/* Zipcode Eligibility (placeholder) */}
+            <Select value="all">
+              <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Zipcode Eligibility" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Zipcode Eligibility</SelectItem>
+                <SelectItem value="eligible">Eligible</SelectItem>
+                <SelectItem value="ineligible">Ineligible</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <Select value={workerFilter} onValueChange={(v) => { setWorkerFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
-              <SelectValue placeholder="Assigned Worker" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Assigned Worker</SelectItem>
-              {staffList.map((s: any) => (
-                <SelectItem key={s.id} value={String(s.id)}>{s.name || `User #${s.id}`}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {/* Assigned Worker */}
+            <Select value={workerFilter} onValueChange={(v) => { setWorkerFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Assigned Worker" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Assigned Worker</SelectItem>
+                {staffList.map((s: any) => (
+                  <SelectItem key={s.id} value={String(s.id)}>{s.name || `User #${s.id}`}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select value={repFilter} onValueChange={(v) => { setRepFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[170px] h-9 text-sm bg-white border-slate-200">
-              <SelectValue placeholder="Intake Representative" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Intake Representative</SelectItem>
-              {staffList.map((s: any) => (
-                <SelectItem key={s.id} value={String(s.id)}>{s.name || `User #${s.id}`}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {/* Intake Rep */}
+            <Select value={repFilter} onValueChange={(v) => { setRepFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[170px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Intake Representative" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Intake Representative</SelectItem>
+                {staffList.map((s: any) => (
+                  <SelectItem key={s.id} value={String(s.id)}>{s.name || `User #${s.id}`}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select value={referralFilter} onValueChange={(v) => { setReferralFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
-              <SelectValue placeholder="Referral Source" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Referral Source</SelectItem>
-              {referralLinks.map((r: any) => (
-                <SelectItem key={r.code} value={r.code}>{r.referrerName || r.code}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>)}
+            {/* Referral Source */}
+            <Select value={referralFilter} onValueChange={(v) => { setReferralFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Referral Source" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Referral Source</SelectItem>
+                {referralLinks.map((r: any) => (
+                  <SelectItem key={r.code} value={r.code}>{r.referrerName || r.code}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {/* Bulk Delete Toolbar */}
         {selectedIds.size > 0 && (
@@ -697,7 +757,7 @@ export default function AdminClients() {
             <div className="flex justify-center py-20">
               <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
             </div>
-          ) : filteredRows.length === 0 ? (
+          ) : sortedRows.length === 0 ? (
             <div className="text-center py-20 text-slate-500">
               <p className="text-sm">No clients found</p>
             </div>
@@ -708,10 +768,10 @@ export default function AdminClients() {
                   <tr className="border-b border-slate-200">
                     <th className="px-4 py-3 w-10">
                       <Checkbox
-                        checked={filteredRows.length > 0 && filteredRows.every((c: any) => selectedIds.has(c.id))}
+                        checked={sortedRows.length > 0 && sortedRows.every((c: any) => selectedIds.has(c.id))}
                         onCheckedChange={(checked) => {
                           if (checked) {
-                            setSelectedIds(new Set(filteredRows.map((c: any) => c.id)));
+                            setSelectedIds(new Set(sortedRows.map((c: any) => c.id)));
                           } else {
                             setSelectedIds(new Set());
                           }
@@ -735,7 +795,7 @@ export default function AdminClients() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRows.map((client: any) => {
+                  {sortedRows.map((client: any) => {
                     const fd = client.formData as any || {};
                     const initials = getInitials(client.firstName, client.lastName);
                     const avatarColor = getAvatarColor(`${client.firstName}${client.lastName}`);
@@ -819,7 +879,7 @@ export default function AdminClients() {
       <AddClientDialog
         open={showAddDialog}
         onClose={() => setShowAddDialog(false)}
-        onSuccess={() => utils.admin.list.invalidate()}
+        onSuccess={() => { utils.admin.list.invalidate(); utils.admin.filterCounts.invalidate(); }}
       />
 
       {/* Bulk Delete Confirmation */}

@@ -23,6 +23,7 @@ import {
   deleteReferrerMessage, markAllReferrerMessagesRead,
   createClientEmail, listClientEmails, deleteClientEmailById,
   createStageHistoryEntry, getStageHistoryBySubmission,
+  getFilterCounts,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -294,6 +295,8 @@ export const appRouter = router({
       status: z.enum(["all", "new", "in_review", "approved", "rejected", "on_hold"]).optional(),
       stage: z.string().optional(),
       supermarket: z.string().optional(),
+      neighborhood: z.string().optional(),
+      program: z.string().optional(),
       language: z.string().optional(),
       borough: z.string().optional(),
       assignedTo: z.number().optional(),
@@ -303,6 +306,8 @@ export const appRouter = router({
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional(),
     })).query(async ({ input }) => listSubmissions(input)),
+
+    filterCounts: staffProcedure.query(async () => getFilterCounts()),
 
     getById: staffProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
       const submission = await getSubmissionById(input.id);
