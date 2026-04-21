@@ -11,6 +11,7 @@ import { applySecurityMiddleware } from "./security";
 import { requestLogger } from "./logger";
 import { createClientEmail, getSubmissionById } from "../db";
 import { Webhook } from "svix";
+import { Resend } from "resend";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -44,10 +45,12 @@ async function startServer() {
   // ─── Inbound email webhook (Resend forwards client replies here) ──────────
   // IMPORTANT: Registered BEFORE the global express.json() middleware so that
   // express.raw() captures the raw bytes Svix needs for signature verification.
-  // Resend sends a POST to /api/inbound-email when a client replies.
-  // Supported To address patterns:
-  //   reply-{submissionId}@freshselectmeals.com   ← preferred format
-  //   client-{submissionId}@inbound.freshselectmeals.com  ← legacy format
+  //
+  // Resend sends a POST to this endpoint when a client replies to an email.
+  // Payload format (email.received event):
+  //   { type: "email.received", data: { email_id, from, to, subject, message_id, ... } }
+  // NOTE: The webhook payload does NOT include the email body/text/html.
+  //   We must call resend.emails.receiving.get(email_id) to fetch the full content.
   app.post("/api/inbound-email", express.raw({ type: "*/*" }), async (req, res) => {
     try {
       // ── Signature verification ──────────────────────────────────────────────
@@ -63,7 +66,6 @@ async function startServer() {
         }
         try {
           const wh = new Webhook(webhookSecret);
-          // req.body is a Buffer when express.raw() is used
           wh.verify(req.body, { "svix-id": svixId, "svix-timestamp": svixTimestamp, "svix-signature": svixSignature });
         } catch (verifyErr) {
           console.warn("[Inbound Email] Invalid webhook signature — rejecting request");
@@ -72,13 +74,22 @@ async function startServer() {
         }
       }
 
-      // Parse the raw body into a JSON object
+      // Parse the raw body
       const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body);
-      const payload = JSON.parse(rawBody);
+      const event = JSON.parse(rawBody);
 
-      // Resend inbound payload fields: from, to, subject, text, html, message_id, in_reply_to
-      // "to" can be a string, an array of strings, or an array of {email, name} objects
-      const rawTo: unknown = payload.to;
+      // Only handle email.received events
+      if (event.type !== "email.received") {
+        res.status(200).json({ ok: true, skipped: true, reason: "not_email_received" });
+        return;
+      }
+
+      const data = event.data ?? {};
+      const emailId: string = data.email_id ?? "";
+
+      // ── Extract To addresses from the webhook metadata ──────────────────────
+      // data.to is an array of strings like ["reply-1950042@inbound.freshselectmeals.com"]
+      const rawTo: unknown = data.to;
       const toList: string[] = [];
       if (typeof rawTo === "string") toList.push(rawTo);
       else if (Array.isArray(rawTo)) {
@@ -89,40 +100,62 @@ async function startServer() {
       }
 
       // Try to extract submissionId from any of the To addresses
+      // Matches: reply-{id}@... or client-{id}@...
       let submissionId: number | null = null;
       let matchedTo = "";
       for (const addr of toList) {
-        // Match reply-{id}@... or client-{id}@...
         const m = addr.match(/(?:reply|client)-(\d+)@/);
         if (m) { submissionId = parseInt(m[1], 10); matchedTo = addr; break; }
       }
-      if (!submissionId) { res.status(200).json({ ok: true, skipped: true, reason: "no_match" }); return; }
+
+      if (!submissionId) {
+        console.log("[Inbound Email] No submission ID found in To addresses:", toList);
+        res.status(200).json({ ok: true, skipped: true, reason: "no_match" });
+        return;
+      }
 
       const submission = await getSubmissionById(submissionId);
-      if (!submission) { res.status(200).json({ ok: true, skipped: true, reason: "no_submission" }); return; }
-
-      const fromEmail: string = (() => {
-        const f = payload.from;
-        if (typeof f === "string") return f;
-        if (Array.isArray(f) && f.length > 0) return typeof f[0] === "string" ? f[0] : (f[0] as { email?: string }).email ?? "";
-        return "";
-      })();
-
-      const subject: string = payload.subject ?? "(no subject)";
-
-      // Prefer plain text; strip quoted reply history (lines starting with >) and email signatures
-      let body: string = payload.text ?? "";
-      if (!body && payload.html) {
-        // Very basic HTML-to-text: strip tags
-        body = payload.html.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim();
+      if (!submission) {
+        res.status(200).json({ ok: true, skipped: true, reason: "no_submission" });
+        return;
       }
-      // Remove quoted reply blocks (lines starting with > or On ... wrote:)
+
+      // ── Fetch full email content via Resend API ─────────────────────────────
+      // The webhook payload does NOT include body text/html — must fetch separately
+      const fromEmail: string = typeof data.from === "string" ? data.from : "";
+      const subject: string = data.subject ?? "(no subject)";
+      let body = "";
+      let resendMessageId = data.message_id ?? null;
+
+      if (emailId) {
+        try {
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          const { data: emailContent, error } = await resend.emails.receiving.get(emailId);
+          if (error) {
+            console.warn("[Inbound Email] Failed to fetch email content:", error);
+          } else if (emailContent) {
+            // Prefer plain text; fall back to HTML stripped of tags
+            body = (emailContent as { text?: string; html?: string }).text ?? "";
+            if (!body && (emailContent as { html?: string }).html) {
+              body = ((emailContent as { html: string }).html)
+                .replace(/<[^>]+>/g, " ")
+                .replace(/\s{2,}/g, " ")
+                .trim();
+            }
+            resendMessageId = (emailContent as { message_id?: string }).message_id ?? resendMessageId;
+          }
+        } catch (fetchErr) {
+          console.warn("[Inbound Email] Error fetching email content:", fetchErr);
+        }
+      }
+
+      // Strip quoted reply history and signatures
       body = body
         .split("\n")
         .filter((line: string) => !line.trimStart().startsWith(">"))
         .join("\n")
-        .replace(/\n*On .+ wrote:[\s\S]*/i, "") // strip "On [date], [name] wrote:" and everything after
-        .replace(/_{5,}[\s\S]*/g, "")            // strip signature separator lines
+        .replace(/\n*On .+ wrote:[\s\S]*/i, "")
+        .replace(/_{5,}[\s\S]*/g, "")
         .trim();
 
       await createClientEmail({
@@ -132,11 +165,13 @@ async function startServer() {
         body,
         fromEmail,
         toEmail: matchedTo,
-        resendMessageId: payload.message_id ?? null,
-        inReplyTo: payload.in_reply_to ?? null,
+        resendMessageId,
+        inReplyTo: data.in_reply_to ?? null,
       });
+
       console.log(`[Inbound Email] Stored reply from ${fromEmail} for client #${submissionId} (subject: "${subject}")`);
       res.status(200).json({ ok: true });
+
     } catch (err) {
       console.error("[Inbound Email] Error processing webhook:", err);
       res.status(200).json({ ok: true }); // Always 200 to prevent Resend retries

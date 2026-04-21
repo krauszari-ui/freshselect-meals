@@ -516,3 +516,8 @@
 - [x] Write vitest for inbound webhook parsing (signed payload + missing headers rejection)
 - [x] Update RESEND_API_KEY to krauszari account where both domains are verified
 - [x] 99/99 tests passing
+
+## Email Reply-To & Inbound Fix (Apr 21)
+- [x] Fix inbound webhook to use correct Resend email.received payload format (data.to array, fetch body via API)
+- [x] 99/99 tests passing with real outbound email send confirmed
+- [ ] Test full round-trip: send email → client replies → reply appears in thread (requires live test)
