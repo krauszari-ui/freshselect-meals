@@ -17,17 +17,25 @@ export default function AdminLogin() {
 
   useEffect(() => {
     if (!loading && user) {
-      const staffRoles = ["admin", "worker", "super_admin", "viewer"];
-      if (staffRoles.includes(user.role)) {
-        navigate("/admin/dashboard");
+      if (user.role === "assessor") {
+        navigate("/assessor");
+      } else {
+        const staffRoles = ["admin", "worker", "super_admin", "viewer"];
+        if (staffRoles.includes(user.role)) {
+          navigate("/admin/dashboard");
+        }
       }
     }
   }, [user, loading, navigate]);
 
   const loginMutation = trpc.auth.adminLogin.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Reload so the session cookie is picked up by trpc.auth.me
-      window.location.href = "/admin/dashboard";
+      if (data.role === "assessor") {
+        window.location.href = "/assessor";
+      } else {
+        window.location.href = "/admin/dashboard";
+      }
     },
     onError: (err) => {
       toast.error(err.message || "Login failed");
