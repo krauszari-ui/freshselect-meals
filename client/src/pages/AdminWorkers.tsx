@@ -21,17 +21,19 @@ import {
   KeyRound,
   Crown,
   Link2,
+  ClipboardList,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useState } from "react";
 
-type Role = "admin" | "worker" | "viewer";
+type Role = "admin" | "worker" | "viewer" | "assessor";
 
 const ROLE_LABELS: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   super_admin: { label: "Super Admin", color: "bg-purple-100 text-purple-800", icon: Crown },
   admin: { label: "Admin", color: "bg-blue-100 text-blue-800", icon: ShieldCheck },
   worker: { label: "Worker", color: "bg-green-100 text-green-800", icon: Shield },
   viewer: { label: "Viewer", color: "bg-stone-100 text-stone-700", icon: Eye },
+  assessor: { label: "Assessor", color: "bg-amber-100 text-amber-800", icon: ClipboardList },
 };
 
 const DEFAULT_PERMISSIONS = { canView: true, canEdit: false, canExport: false, canDelete: false, showReferralLinks: true };
@@ -290,8 +292,18 @@ export default function AdminWorkers() {
                   <option value="admin">Admin — full access to all applications</option>
                   <option value="worker">Worker — custom permissions below</option>
                   <option value="viewer">Viewer — read-only access</option>
+                  <option value="assessor">Assessor — review &amp; approve completed assessments</option>
                 </select>
               </div>
+              {createForm.role === "assessor" && (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <ClipboardList className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800">Assessor Portal Access</p>
+                    <p className="text-xs text-amber-700 mt-0.5">This account will only have access to the Assessor Portal at <span className="font-mono">/assessor</span>. They can view clients with completed SCN assessments and mark them as approved.</p>
+                  </div>
+                </div>
+              )}
               {createForm.role === "worker" && (
                 <div className="space-y-2">
                   <Label>Permissions</Label>
@@ -347,8 +359,18 @@ export default function AdminWorkers() {
                   <option value="admin">Admin</option>
                   <option value="worker">Worker</option>
                   <option value="viewer">Viewer</option>
+                  <option value="assessor">Assessor — review &amp; approve completed assessments</option>
                 </select>
               </div>
+              {editForm.role === "assessor" && (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <ClipboardList className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800">Assessor Portal Access</p>
+                    <p className="text-xs text-amber-700 mt-0.5">This account will only have access to the Assessor Portal at <span className="font-mono">/assessor</span>. They can view clients with completed SCN assessments and mark them as approved.</p>
+                  </div>
+                </div>
+              )}
               {editForm.role === "worker" && (
                 <div className="space-y-2">
                   <Label>Permissions</Label>
