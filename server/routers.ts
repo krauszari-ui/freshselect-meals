@@ -48,8 +48,15 @@ const superAdminProcedure = protectedProcedure.use(({ ctx, next }) => {
 
 // Worker or Admin guard
 const staffProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== "admin" && ctx.user.role !== "worker" && ctx.user.role !== "super_admin" && ctx.user.role !== "viewer")
+  if (ctx.user.role !== "admin" && ctx.user.role !== "worker" && ctx.user.role !== "super_admin" && ctx.user.role !== "viewer" && ctx.user.role !== "assessor")
     throw new TRPCError({ code: "FORBIDDEN", message: "Staff access required" });
+  return next({ ctx });
+});
+
+// Assessor guard (assessor + admin + super_admin)
+const assessorProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "assessor" && ctx.user.role !== "admin" && ctx.user.role !== "super_admin")
+    throw new TRPCError({ code: "FORBIDDEN", message: "Assessor access required" });
   return next({ ctx });
 });
 
@@ -264,6 +271,18 @@ export const appRouter = router({
     recentlyUpdated: staffProcedure.input(z.object({ days: z.number().optional(), limit: z.number().optional() }).optional()).query(async ({ input }) => getRecentlyUpdated(input?.days ?? 7, input?.limit ?? 10)),
     addedCount: staffProcedure.input(z.object({ days: z.number().optional() }).optional()).query(async ({ input }) => getAddedCount(input?.days ?? 7)),
     staffList: staffProcedure.query(async () => listStaffUsers()),
+
+    // Assessor: list only assessment-completed clients
+    assessorList: assessorProcedure.input(z.object({
+      search: z.string().optional(),
+      page: z.number().min(1).optional(),
+      pageSize: z.number().min(1).max(100).optional(),
+    })).query(async ({ input }) => {
+      const all = await listSubmissions({ search: input.search, page: input.page, pageSize: input.pageSize });
+      const rows = Array.isArray(all) ? all : (all as any).rows ?? [];
+      const filtered = rows.filter((r: any) => r.assessmentCompletedAt != null);
+      return filtered;
+    }),
 
     // Client list
     list: staffProcedure.input(z.object({
@@ -519,6 +538,7 @@ export const appRouter = router({
     // ─── Client edit/delete ────────────────────────────────────────────────
     updateClient: staffProcedure.input(z.object({
       id: z.number(),
+      // Top-level DB columns
       firstName: z.string().optional(),
       lastName: z.string().optional(),
       email: z.string().optional(),
@@ -527,6 +547,10 @@ export const appRouter = router({
       language: z.string().optional(),
       program: z.string().optional(),
       borough: z.string().optional(),
+      neighborhood: z.string().optional(),
+      supermarket: z.string().optional(),
+      referralSource: z.string().optional(),
+      // formData fields (merged into existing JSON)
       formData: z.record(z.string(), z.unknown()).optional(),
     })).mutation(async ({ input }) => {
       const { id, formData, ...fields } = input;
@@ -559,6 +583,14 @@ export const appRouter = router({
       adminNotes: z.string(),
     })).mutation(async ({ input }) => {
       await updateSubmissionFields(input.id, { adminNotes: input.adminNotes });
+      return { success: true };
+    }),
+
+    // ─── Assessor: approve client ──────────────────────────────────────────
+    approveClient: assessorProcedure.input(z.object({
+      id: z.number(),
+    })).mutation(async ({ input }) => {
+      await updateSubmissionFields(input.id, { status: "approved" } as any);
       return { success: true };
     }),
 

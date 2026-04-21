@@ -486,3 +486,12 @@
 - [ ] Make screening date editable in Assessment tab
 - [ ] Ensure all 16 SCN questions are editable and save correctly
 - [ ] Verify save/cancel flow works end-to-end without errors
+
+## Full Client Editing & Assessor Role
+- [x] Expand Edit Client dialog to include DOB, address (street, apt, city, state, zip), borough, neighborhood, vendor/supermarket, referral source
+- [x] Add assessor role to user enum (DB migration applied)
+- [x] Add assessorProcedure guard in routers.ts (assessor + admin + super_admin)
+- [x] Add assessorList procedure: returns only assessment-completed clients
+- [x] Add approveClient procedure: sets status to approved (assessor + admin)
+- [x] Build AssessorPortal page at /assessor: shows assessment-completed clients, Approve button with confirmation dialog
+- [x] Add /assessor route to App.tsx

@@ -10,7 +10,7 @@ export const users = mysqlTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin", "worker", "super_admin", "viewer"]).default("user").notNull(),
+  role: mysqlEnum("role", ["user", "admin", "worker", "super_admin", "viewer", "assessor"]).default("user").notNull(),
   /** Staff-specific: permissions JSON (e.g. { canView: true, canEdit: false, canExport: false, canDelete: false }) */
   permissions: json("permissions"),
   /** Hashed password for internal bcrypt authentication (null for legacy OAuth users) */
