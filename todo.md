@@ -506,3 +506,13 @@
 
 ## Household Member Count Sync (Apr 21)
 - [x] Sync additionalMembersCount when household members are edited via Edit Client dialog or Add Household Member action
+
+## Email Setup - Resend Domain Verified (Apr 21)
+- [x] Update outbound sender FROM address to use verified domain (noreply@freshselectmeals.com)
+- [x] Verify inbound webhook route exists and parses Resend inbound payload correctly
+- [x] Set inbound webhook URL in Resend dashboard
+- [x] Add Svix webhook signature verification to inbound email handler
+- [x] Write vitest for outbound email send (gracefully skips on network-restricted sandbox)
+- [x] Write vitest for inbound webhook parsing (signed payload + missing headers rejection)
+- [x] Update RESEND_API_KEY to krauszari account where both domains are verified
+- [x] 99/99 tests passing

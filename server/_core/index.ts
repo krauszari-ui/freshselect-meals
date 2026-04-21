@@ -10,6 +10,7 @@ import { serveStatic, setupVite } from "./vite";
 import { applySecurityMiddleware } from "./security";
 import { requestLogger } from "./logger";
 import { createClientEmail, getSubmissionById } from "../db";
+import { Webhook } from "svix";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -40,26 +41,41 @@ async function startServer() {
   // Request logger
   app.use(requestLogger);
 
-  // Body parser — tight limits to prevent DoS
-  app.use(express.json({ limit: "10mb" }));
-  app.use(express.urlencoded({ limit: "10mb", extended: true }));
-
-  // OAuth callback under /api/oauth/callback
-  registerOAuthRoutes(app);
-
-  // Health check endpoint
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", ts: Date.now() });
-  });
-
   // ─── Inbound email webhook (Resend forwards client replies here) ──────────
+  // IMPORTANT: Registered BEFORE the global express.json() middleware so that
+  // express.raw() captures the raw bytes Svix needs for signature verification.
   // Resend sends a POST to /api/inbound-email when a client replies.
   // Supported To address patterns:
-  //   reply-{submissionId}@freshselectmeals.com   ← new preferred format
+  //   reply-{submissionId}@freshselectmeals.com   ← preferred format
   //   client-{submissionId}@inbound.freshselectmeals.com  ← legacy format
-  app.post("/api/inbound-email", async (req, res) => {
+  app.post("/api/inbound-email", express.raw({ type: "*/*" }), async (req, res) => {
     try {
-      const payload = req.body;
+      // ── Signature verification ──────────────────────────────────────────────
+      const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
+      if (webhookSecret) {
+        const svixId = req.headers["svix-id"] as string | undefined;
+        const svixTimestamp = req.headers["svix-timestamp"] as string | undefined;
+        const svixSignature = req.headers["svix-signature"] as string | undefined;
+        if (!svixId || !svixTimestamp || !svixSignature) {
+          console.warn("[Inbound Email] Missing Svix headers — rejecting request");
+          res.status(400).json({ ok: false, error: "missing_svix_headers" });
+          return;
+        }
+        try {
+          const wh = new Webhook(webhookSecret);
+          // req.body is a Buffer when express.raw() is used
+          wh.verify(req.body, { "svix-id": svixId, "svix-timestamp": svixTimestamp, "svix-signature": svixSignature });
+        } catch (verifyErr) {
+          console.warn("[Inbound Email] Invalid webhook signature — rejecting request");
+          res.status(400).json({ ok: false, error: "invalid_signature" });
+          return;
+        }
+      }
+
+      // Parse the raw body into a JSON object
+      const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body);
+      const payload = JSON.parse(rawBody);
+
       // Resend inbound payload fields: from, to, subject, text, html, message_id, in_reply_to
       // "to" can be a string, an array of strings, or an array of {email, name} objects
       const rawTo: unknown = payload.to;
@@ -125,6 +141,18 @@ async function startServer() {
       console.error("[Inbound Email] Error processing webhook:", err);
       res.status(200).json({ ok: true }); // Always 200 to prevent Resend retries
     }
+  });
+
+  // Body parser — tight limits to prevent DoS (registered AFTER the raw inbound route)
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ limit: "10mb", extended: true }));
+
+  // OAuth callback under /api/oauth/callback
+  registerOAuthRoutes(app);
+
+  // Health check endpoint
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok", ts: Date.now() });
   });
 
   // tRPC API
