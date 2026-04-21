@@ -115,6 +115,7 @@ export interface ListSubmissionsOptions {
   supermarket?: string;
   neighborhood?: string;
   program?: string;
+  newApplicant?: string;
   language?: string;
   borough?: string;
   assignedTo?: number;
@@ -128,7 +129,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, supermarket, neighborhood, program, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, page = 1, pageSize = 20 } = opts;
+  const { search, status, stage, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -145,6 +146,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   if (supermarket && supermarket !== "all") conditions.push(eq(submissions.supermarket, supermarket));
   if (neighborhood && neighborhood !== "all") conditions.push(eq(submissions.neighborhood, neighborhood));
   if (program && program !== "all") conditions.push(eq(submissions.program, program));
+  if (newApplicant && newApplicant !== "all") conditions.push(eq(submissions.newApplicant, newApplicant));
   if (language && language !== "all") conditions.push(eq(submissions.language, language));
   if (borough && borough !== "all") conditions.push(eq(submissions.borough, borough));
   if (assignedTo) conditions.push(eq(submissions.assignedTo, assignedTo));
@@ -187,13 +189,14 @@ export async function getAllSubmissions(opts: { status?: string; supermarket?: s
 export async function getFilterCounts() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const [stageRows, neighborhoodRows, vendorRows, programRows, languageRows, boroughRows] = await Promise.all([
+  const [stageRows, neighborhoodRows, vendorRows, programRows, languageRows, boroughRows, applicantTypeRows] = await Promise.all([
     db.select({ value: submissions.stage, count: sql<number>`count(*)` }).from(submissions).groupBy(submissions.stage),
     db.select({ value: submissions.neighborhood, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.neighborhood} IS NOT NULL AND ${submissions.neighborhood} != ''`).groupBy(submissions.neighborhood),
     db.select({ value: submissions.supermarket, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.supermarket} IS NOT NULL AND ${submissions.supermarket} != ''`).groupBy(submissions.supermarket),
     db.select({ value: submissions.program, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.program} IS NOT NULL AND ${submissions.program} != ''`).groupBy(submissions.program),
     db.select({ value: submissions.language, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.language} IS NOT NULL AND ${submissions.language} != ''`).groupBy(submissions.language),
     db.select({ value: submissions.borough, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.borough} IS NOT NULL AND ${submissions.borough} != ''`).groupBy(submissions.borough),
+    db.select({ value: submissions.newApplicant, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.newApplicant} IS NOT NULL AND ${submissions.newApplicant} != ''`).groupBy(submissions.newApplicant),
   ]);
   const toMap = (rows: { value: string | null; count: number }[]) =>
     Object.fromEntries(rows.filter(r => r.value).map(r => [r.value as string, Number(r.count)]));
@@ -204,6 +207,7 @@ export async function getFilterCounts() {
     program: toMap(programRows as any),
     language: toMap(languageRows as any),
     borough: toMap(boroughRows as any),
+    applicantType: toMap(applicantTypeRows as any),
   };
 }
 

@@ -188,6 +188,8 @@ export const appRouter = router({
           borough: input.city === "Brooklyn" ? "Brooklyn" : input.city,
           neighborhood: input.neighborhood || null,
           additionalMembersCount: parseInt(input.additionalMembersCount || "0") || 0,
+          newApplicant: input.newApplicant || null,
+          transferAgencyName: (input as any).transferAgencyName || null,
         });
         console.log(`[Submission] ✓ Saved to database (ref: ${refNumber})`);
       } catch (dbErr: any) {
@@ -297,6 +299,7 @@ export const appRouter = router({
       supermarket: z.string().optional(),
       neighborhood: z.string().optional(),
       program: z.string().optional(),
+      newApplicant: z.string().optional(),
       language: z.string().optional(),
       borough: z.string().optional(),
       assignedTo: z.number().optional(),

@@ -424,6 +424,7 @@ export default function AdminClients() {
   const [workerFilter, setWorkerFilter] = useState("all");
   const [repFilter, setRepFilter] = useState("all");
   const [referralFilter, setReferralFilter] = useState("all");
+  const [applicantTypeFilter, setApplicantTypeFilter] = useState("all");
   const [assessmentCompletedFilter, setAssessmentCompletedFilter] = useState("all");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
@@ -456,6 +457,7 @@ export default function AdminClients() {
     neighborhood: neighborhoodFilter !== "all" ? neighborhoodFilter : undefined,
     supermarket: vendorFilter !== "all" ? vendorFilter : undefined,
     program: programFilter !== "all" ? programFilter : undefined,
+    newApplicant: applicantTypeFilter !== "all" ? applicantTypeFilter : undefined,
     assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
     intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
     referralSource: referralFilter !== "all" ? referralFilter : undefined,
@@ -660,6 +662,28 @@ export default function AdminClients() {
               </SelectContent>
             </Select>
 
+            {/* Applicant Type */}
+            <Select value={applicantTypeFilter} onValueChange={(v) => { setApplicantTypeFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[140px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">New / Transfer</SelectItem>
+                <SelectItem value="Yes">
+                  <span className="flex items-center justify-between w-full gap-2">
+                    New Client
+                    <CountBadge count={fc?.applicantType?.["Yes"]} />
+                  </span>
+                </SelectItem>
+                <SelectItem value="No">
+                  <span className="flex items-center justify-between w-full gap-2">
+                    Transfer
+                    <CountBadge count={fc?.applicantType?.["No"]} />
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
             {/* Program */}
             <Select value={programFilter} onValueChange={(v) => { setProgramFilter(v); setPage(1); }}>
               <SelectTrigger className="w-[130px] h-9 text-sm bg-white border-slate-200">
@@ -791,6 +815,7 @@ export default function AdminClients() {
                         {sortDir === "desc" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
                       </span>
                     </th>
+                    <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Type</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Stage</th>
                   </tr>
                 </thead>
@@ -842,6 +867,20 @@ export default function AdminClients() {
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-600">
                           {new Date(client.createdAt).toLocaleDateString("en-US")}
+                        </td>
+                        <td className="px-4 py-3">
+                          {client.newApplicant === "No" ? (
+                            <span className="inline-flex items-center gap-1">
+                              <Badge className="bg-amber-100 text-amber-700 text-[11px] font-medium border-0">Transfer</Badge>
+                              {client.transferAgencyName && (
+                                <span className="text-[11px] text-slate-400 truncate max-w-[100px]" title={client.transferAgencyName}>{client.transferAgencyName}</span>
+                              )}
+                            </span>
+                          ) : client.newApplicant === "Yes" ? (
+                            <Badge className="bg-emerald-50 text-emerald-700 text-[11px] font-medium border-0">New</Badge>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <Badge className={`${stageInfo.bg} ${stageInfo.text} text-[11px] font-medium border-0`}>
