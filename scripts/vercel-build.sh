@@ -44,7 +44,8 @@ npx esbuild src/index.ts \
   --external:@vitejs/* \
   --external:@babel/* \
   --external:lightningcss \
-  --external:tailwindcss
+  --external:tailwindcss \
+  --external:svix
 
 # 4. Create .vc-config.json for the serverless function
 echo "[4/6] Creating Vercel function config..."
