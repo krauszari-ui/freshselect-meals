@@ -801,7 +801,7 @@ export const appRouter = router({
         email: z.string().email(),
         name: z.string().min(1),
         password: z.string().min(8, "Password must be at least 8 characters"),
-        role: z.enum(["admin", "worker", "viewer"]),
+        role: z.enum(["admin", "worker", "viewer", "assessor"]),
         permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean(), showReferralLinks: z.boolean().default(true) }).optional(),
       })).mutation(async ({ input }) => {
         const existing = await getUserByEmail(input.email);
@@ -814,7 +814,7 @@ export const appRouter = router({
       updateStaff: superAdminProcedure.input(z.object({
         userId: z.number(),
         name: z.string().min(1).optional(),
-        role: z.enum(["admin", "worker", "viewer"]).optional(),
+        role: z.enum(["admin", "worker", "viewer", "assessor"]).optional(),
         permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean(), showReferralLinks: z.boolean().default(true) }).optional(),
         newPassword: z.string().min(8).optional(),
       })).mutation(async ({ input }) => {

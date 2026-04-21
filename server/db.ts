@@ -392,7 +392,7 @@ export async function createStaffUser(data: {
   email: string;
   name: string;
   passwordHash: string;
-  role: "admin" | "worker" | "viewer";
+  role: "admin" | "worker" | "viewer" | "assessor";
   permissions?: WorkerPermissions;
 }): Promise<number> {
   const db = await getDb();
@@ -443,7 +443,7 @@ export async function toggleWorkerActive(userId: number, isActive: boolean): Pro
   await db.update(users).set({ isActive: isActive ? 1 : 0 }).where(eq(users.id, userId));
 }
 
-export async function setUserRole(userId: number, role: "user" | "admin" | "worker" | "super_admin" | "viewer"): Promise<void> {
+export async function setUserRole(userId: number, role: "user" | "admin" | "worker" | "super_admin" | "viewer" | "assessor"): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(users).set({ role }).where(eq(users.id, userId));
