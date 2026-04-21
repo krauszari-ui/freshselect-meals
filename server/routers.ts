@@ -360,7 +360,7 @@ export const appRouter = router({
       // Resend inbound webhook at /api/inbound-email parses this to find the right client record.
       const INBOUND_DOMAIN = process.env.RESEND_INBOUND_DOMAIN ?? "inbound.freshselectmeals.com";
       const replyTo = `reply-${input.submissionId}@${INBOUND_DOMAIN}`;
-      const fromEmail = `FreshSelect Meals <admin@freshselectmeals.com>`;
+      const fromEmail = process.env.RESEND_FROM_EMAIL ?? `FreshSelect Meals <admin@freshselectmeals.com>`;
       const success = await sendEmail({
         to: submission.email,
         subject: input.subject,
