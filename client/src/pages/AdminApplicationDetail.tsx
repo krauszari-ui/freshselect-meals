@@ -177,6 +177,17 @@ export default function AdminApplicationDetail() {
                 {statusCfg.icon}
                 {statusCfg.label}
               </span>
+              {(form.newApplicant as string) && (
+                <span
+                  className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
+                    form.newApplicant === "New" || form.newApplicant === "Yes"
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : "bg-amber-50 text-amber-700 border-amber-200"
+                  }`}
+                >
+                  {form.newApplicant === "New" || form.newApplicant === "Yes" ? "New Client" : `Transfer${(form.transferAgencyName as string) ? ` — ${form.transferAgencyName as string}` : ""}`}
+                </span>
+              )}
             </div>
           </div>
           <span className="text-xs font-mono text-muted-foreground">#{sub.referenceNumber}</span>
@@ -418,6 +429,26 @@ export default function AdminApplicationDetail() {
                     <div className="flex justify-between">
                       <span>Referral</span>
                       <span>{sub.referralSource}</span>
+                    </div>
+                  )}
+                  {(form.newApplicant as string) && (
+                    <div className="flex justify-between items-center">
+                      <span>Type</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${
+                          form.newApplicant === "New" || form.newApplicant === "Yes"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {form.newApplicant === "New" || form.newApplicant === "Yes" ? "New Client" : "Transfer"}
+                      </span>
+                    </div>
+                  )}
+                  {(form.newApplicant === "Transfer" || form.newApplicant === "No") && (form.transferAgencyName as string) && (
+                    <div className="flex justify-between">
+                      <span>Transfer Agency</span>
+                      <span className="text-right max-w-[140px] truncate" title={form.transferAgencyName as string}>{form.transferAgencyName as string}</span>
                     </div>
                   )}
                 </div>
