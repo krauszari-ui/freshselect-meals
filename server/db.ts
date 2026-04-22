@@ -122,6 +122,7 @@ export interface ListSubmissionsOptions {
   intakeRep?: number;
   referralSource?: string;
   assessmentCompleted?: boolean;
+  zipcode?: string;
   page?: number;
   pageSize?: number;
 }
@@ -129,7 +130,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, page = 1, pageSize = 20 } = opts;
+  const { search, status, stage, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -153,6 +154,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   if (intakeRep) conditions.push(eq(submissions.intakeRep, intakeRep));
   if (referralSource && referralSource !== "all") conditions.push(eq(submissions.referralSource, referralSource));
   if (assessmentCompleted) conditions.push(sql`${submissions.assessmentCompletedAt} IS NOT NULL`);
+  if (zipcode && zipcode !== "all") conditions.push(eq(submissions.zipcode, zipcode));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const [rows, countResult, membersResult] = await Promise.all([
@@ -194,7 +196,7 @@ export async function getAllSubmissions(opts: { status?: string; supermarket?: s
 export async function getFilterCounts() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const [stageRows, neighborhoodRows, vendorRows, programRows, languageRows, boroughRows, applicantTypeRows] = await Promise.all([
+  const [stageRows, neighborhoodRows, vendorRows, programRows, languageRows, boroughRows, applicantTypeRows, zipcodeRows] = await Promise.all([
     db.select({ value: submissions.stage, count: sql<number>`count(*)` }).from(submissions).groupBy(submissions.stage),
     db.select({ value: submissions.neighborhood, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.neighborhood} IS NOT NULL AND ${submissions.neighborhood} != ''`).groupBy(submissions.neighborhood),
     db.select({ value: submissions.supermarket, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.supermarket} IS NOT NULL AND ${submissions.supermarket} != ''`).groupBy(submissions.supermarket),
@@ -202,6 +204,7 @@ export async function getFilterCounts() {
     db.select({ value: submissions.language, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.language} IS NOT NULL AND ${submissions.language} != ''`).groupBy(submissions.language),
     db.select({ value: submissions.borough, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.borough} IS NOT NULL AND ${submissions.borough} != ''`).groupBy(submissions.borough),
     db.select({ value: submissions.newApplicant, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.newApplicant} IS NOT NULL AND ${submissions.newApplicant} != ''`).groupBy(submissions.newApplicant),
+    db.select({ value: submissions.zipcode, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.zipcode} IS NOT NULL AND ${submissions.zipcode} != ''`).groupBy(submissions.zipcode).orderBy(desc(sql<number>`count(*)`)),
   ]);
   const toMap = (rows: { value: string | null; count: number }[]) =>
     Object.fromEntries(rows.filter(r => r.value).map(r => [r.value as string, Number(r.count)]));
@@ -213,6 +216,7 @@ export async function getFilterCounts() {
     language: toMap(languageRows as any),
     borough: toMap(boroughRows as any),
     applicantType: toMap(applicantTypeRows as any),
+    zipcode: toMap(zipcodeRows as any),
   };
 }
 

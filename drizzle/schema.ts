@@ -77,6 +77,8 @@ export const submissions = mysqlTable("submissions", {
   additionalMembersCount: int("additionalMembersCount").default(0),
   /** Program */
   program: varchar("program", { length: 64 }),
+  /** Zipcode */
+  zipcode: varchar("zipcode", { length: 10 }),
   /** Whether this is a new applicant or a transfer ("Yes" = new, "No" = transfer) */
   newApplicant: varchar("newApplicant", { length: 8 }),
   /** Name of the agency the client is transferring from (if transfer) */

@@ -426,6 +426,7 @@ export default function AdminClients() {
   const [referralFilter, setReferralFilter] = useState("all");
   const [applicantTypeFilter, setApplicantTypeFilter] = useState("all");
   const [assessmentCompletedFilter, setAssessmentCompletedFilter] = useState("all");
+  const [zipcodeFilter, setZipcodeFilter] = useState("all");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -461,10 +462,11 @@ export default function AdminClients() {
     assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
     intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
     referralSource: referralFilter !== "all" ? referralFilter : undefined,
-    assessmentCompleted: dbAssessmentCompleted,
-    page,
-    pageSize: 25,
-  });
+      assessmentCompleted: dbAssessmentCompleted,
+      zipcode: zipcodeFilter !== "all" ? zipcodeFilter : undefined,
+      page,
+      pageSize: 25,
+    });
 
   // Filter counts — loaded once, used to show per-option counts in dropdowns
   const filterCountsQuery = trpc.admin.filterCounts.useQuery(undefined, {
@@ -491,7 +493,7 @@ export default function AdminClients() {
   const totalPages = listData?.totalPages ?? 1;
   const totalCount = listData?.total ?? 0;
   const totalMembers = listData?.totalMembers ?? 0;
-  const hasActiveFilter = stageFilter !== "all" || neighborhoodFilter !== "all" || vendorFilter !== "all" || programFilter !== "all" || applicantTypeFilter !== "all" || languageFilter !== "all" || boroughFilter !== "all" || workerFilter !== "all" || repFilter !== "all" || referralFilter !== "all" || assessmentCompletedFilter !== "all" || debouncedSearch.trim() !== "";
+  const hasActiveFilter = stageFilter !== "all" || neighborhoodFilter !== "all" || vendorFilter !== "all" || programFilter !== "all" || applicantTypeFilter !== "all" || languageFilter !== "all" || boroughFilter !== "all" || workerFilter !== "all" || repFilter !== "all" || referralFilter !== "all" || assessmentCompletedFilter !== "all" || zipcodeFilter !== "all" || debouncedSearch.trim() !== "";
 
   // Sort is still done client-side on the current page (DB returns desc by default)
   const sortedRows = useMemo(() => {
@@ -646,6 +648,23 @@ export default function AdminClients() {
               </SelectContent>
             </Select>
 
+            {/* Zipcode */}
+            <Select value={zipcodeFilter} onValueChange={(v) => { setZipcodeFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[120px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Zipcode" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Zipcode</SelectItem>
+                {Object.entries((fc?.zipcode ?? {}) as Record<string, number>).sort((a, b) => b[1] - a[1]).map(([zip, count]) => (
+                  <SelectItem key={zip} value={zip}>
+                    <span className="flex items-center justify-between w-full gap-2">
+                      {zip}
+                      <CountBadge count={count as number} />
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {/* Vendor */}
             <Select value={vendorFilter} onValueChange={(v) => { setVendorFilter(v); setPage(1); }}>
               <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
