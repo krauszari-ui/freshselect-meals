@@ -15,6 +15,7 @@ import AdminAgency from "./pages/AdminAgency";
 import AdminClients from "./pages/AdminClients";
 import AdminClientDetail from "./pages/AdminClientDetail";
 import AdminDuplicates from "./pages/AdminDuplicates";
+import AdminAssessmentReport from "./pages/AdminAssessmentReport";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AdminReferrals from "./pages/AdminReferrals";
 import ReferrerPortal from "./pages/ReferrerPortal";
@@ -44,6 +45,7 @@ function Router() {
       <Route path={"/admin/clients/:id"} component={AdminClientDetail} />
       <Route path={"/admin/referrals"} component={AdminReferrals} />
       <Route path={"/admin/duplicates"} component={AdminDuplicates} />
+      <Route path={"/admin/assessment-report"} component={AdminAssessmentReport} />
 
       {/* Referrer Portal */}
       <Route path={"/referrer"} component={ReferrerPortal} />

@@ -12,7 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText, Trash2, Users,
+  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText, Trash2, Users, FileDown,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -432,6 +432,7 @@ export default function AdminClients() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 400);
@@ -477,6 +478,173 @@ export default function AdminClients() {
   const staffQuery = trpc.admin.staffList.useQuery();
   const referralLinksQuery = trpc.admin.referrals.list.useQuery();
   const referralLinks = (referralLinksQuery.data ?? []) as any[];
+
+  const handleExportPdf = async (ids: number[]) => {
+    if (ids.length === 0) return;
+    setPdfExporting(true);
+    try {
+      // Fetch full data for selected clients
+      const res = await fetch(`/api/trpc/admin.bulkGetByIds?input=${encodeURIComponent(JSON.stringify({ json: { ids } }))}`, {
+        credentials: "include",
+      });
+      const json = await res.json();
+      const clients: any[] = json?.result?.data?.json ?? [];
+      if (!clients.length) { toast.error("No client data returned"); return; }
+      // Build PDF using pdf-lib (dynamic import)
+      const { PDFDocument, rgb, StandardFonts } = await import("pdf-lib");
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const PAGE_W = 612, PAGE_H = 792;
+      const MARGIN = 50;
+      const LINE_H = 14;
+      const COL_W = (PAGE_W - MARGIN * 2) / 2;
+
+      const addPage = () => {
+        const p = pdfDoc.addPage([PAGE_W, PAGE_H]);
+        return { page: p, y: PAGE_H - MARGIN };
+      };
+
+      const drawText = (page: any, text: string, x: number, y: number, size = 10, isBold = false, color = rgb(0.1, 0.1, 0.1)) => {
+        page.drawText(String(text ?? "").slice(0, 120), { x, y, size, font: isBold ? boldFont : font, color });
+      };
+
+      const drawLine = (page: any, y: number) => {
+        page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+      };
+
+      const drawSection = (page: any, y: number, title: string) => {
+        page.drawRectangle({ x: MARGIN, y: y - 4, width: PAGE_W - MARGIN * 2, height: 16, color: rgb(0.9, 0.95, 0.9) });
+        drawText(page, title, MARGIN + 4, y, 9, true, rgb(0.1, 0.4, 0.1));
+        return y - LINE_H - 4;
+      };
+
+      for (const client of clients) {
+        let { page, y } = addPage();
+
+        // Header
+        page.drawRectangle({ x: 0, y: PAGE_H - 60, width: PAGE_W, height: 60, color: rgb(0.1, 0.4, 0.1) });
+        drawText(page, "FreshSelect Meals — Client Assessment", MARGIN, PAGE_H - 28, 14, true, rgb(1, 1, 1));
+        drawText(page, `Ref: ${client.referenceNumber || "—"}  |  Exported: ${new Date().toLocaleDateString()}`, MARGIN, PAGE_H - 46, 9, false, rgb(0.8, 1, 0.8));
+        y = PAGE_H - 75;
+
+        // Client name
+        drawText(page, `${client.firstName} ${client.lastName}`, MARGIN, y, 16, true);
+        y -= 18;
+        drawText(page, `Stage: ${client.stage || "—"}  |  Vendor: ${client.supermarket || "—"}  |  Medicaid ID: ${client.medicaidId || "—"}`, MARGIN, y, 9, false, rgb(0.4, 0.4, 0.4));
+        y -= 20;
+        drawLine(page, y); y -= 10;
+
+        const fd = (client.formData as any) || {};
+        const sq = fd.screeningQuestions || fd.screening || {};
+
+        // Personal Info
+        y = drawSection(page, y, "Personal Information");
+        const personalFields = [
+          ["Date of Birth", client.dateOfBirth ? new Date(client.dateOfBirth).toLocaleDateString() : "—"],
+          ["Cell Phone", client.cellPhone || "—"],
+          ["Email", client.email || "—"],
+          ["Address", `${fd.streetAddress || ""} ${fd.aptUnit || ""}, ${fd.city || ""}, ${fd.state || ""} ${fd.zipcode || ""}`],
+          ["Language", client.language || "—"],
+          ["Neighborhood", client.neighborhood || "—"],
+          ["Applicant Type", client.newApplicant || "—"],
+          ["Transfer Agency", client.transferAgencyName || "—"],
+        ];
+        for (let i = 0; i < personalFields.length; i++) {
+          const col = i % 2;
+          const row = Math.floor(i / 2);
+          const x = MARGIN + col * COL_W;
+          const fy = y - row * LINE_H;
+          drawText(page, `${personalFields[i][0]}:`, x, fy, 8, true, rgb(0.4, 0.4, 0.4));
+          drawText(page, personalFields[i][1], x + 90, fy, 8);
+        }
+        y -= Math.ceil(personalFields.length / 2) * LINE_H + 8;
+
+        // Health Categories
+        y = drawSection(page, y, "Health Categories");
+        const hc = (fd.healthCategories || []).join(", ") || "—";
+        drawText(page, hc, MARGIN, y, 8);
+        y -= LINE_H + 8;
+
+        // SCN Screening Questionnaire
+        y = drawSection(page, y, "SCN Screening Questionnaire");
+        const scnFields: [string, string][] = [
+          ["Living Situation", sq.livingSituation || "—"],
+          ["Utility Shutoff Risk", sq.utilityShutoff || "—"],
+          ["Receives SNAP", sq.receivesSnap || fd.hasSnap || "—"],
+          ["Receives WIC", sq.receivesWic || fd.hasWic || "—"],
+          ["Receives TANF", sq.receivesTanf || "—"],
+          ["Enrolled Health Home", sq.enrolledHealthHome || "—"],
+          ["Household Members", sq.householdMembersCount || fd.householdMembersCount || "—"],
+          ["Members w/ Medicaid", sq.householdMembersWithMedicaid || "—"],
+          ["Needs Work Assistance", sq.needsWorkAssistance || "—"],
+          ["Wants School/Training", sq.wantsSchoolHelp || sq.wantsSchoolTraining || "—"],
+          ["Transportation Barrier", sq.transportationBarrier || "—"],
+          ["Chronic Illness", sq.hasChronicIllness || "—"],
+          ["Illness Details", sq.chronicIllnessDetails || "—"],
+          ["Other Health Issues", sq.otherHealthIssues || "—"],
+          ["Meds Need Refrigeration", sq.medicationsRequireRefrigeration || "—"],
+          ["Pregnant/Postpartum", sq.pregnantOrPostpartum || "—"],
+          ["Due Date", fd.dueDate || sq.dueDate || "—"],
+          ["Breastmilk Refrigeration", sq.breastmilkRefrigeration || "—"],
+          ["Food Allergies", fd.foodAllergies || "—"],
+          ["Allergy Details", fd.foodAllergiesDetails || "—"],
+          ["Dietary Restrictions", fd.dietaryRestrictions || "—"],
+        ];
+        for (let i = 0; i < scnFields.length; i++) {
+          if (y < MARGIN + 20) { ({ page, y } = addPage()); y -= 10; }
+          const col = i % 2;
+          const row = Math.floor(i / 2);
+          if (col === 0) {
+            const fy = y - row * LINE_H;
+            drawText(page, `${scnFields[i][0]}:`, MARGIN, fy, 8, true, rgb(0.4, 0.4, 0.4));
+            drawText(page, scnFields[i][1], MARGIN + 100, fy, 8);
+          } else {
+            const fy = y - (row) * LINE_H;
+            drawText(page, `${scnFields[i][0]}:`, MARGIN + COL_W, fy, 8, true, rgb(0.4, 0.4, 0.4));
+            drawText(page, scnFields[i][1], MARGIN + COL_W + 100, fy, 8);
+          }
+        }
+        y -= Math.ceil(scnFields.length / 2) * LINE_H + 8;
+
+        // Household Members
+        if (y < MARGIN + 40) { ({ page, y } = addPage()); y -= 10; }
+        y = drawSection(page, y, "Household Members");
+        const members = fd.householdMembers || [];
+        if (members.length === 0) {
+          drawText(page, "No additional household members", MARGIN, y, 8, false, rgb(0.5, 0.5, 0.5));
+          y -= LINE_H;
+        } else {
+          for (const m of members) {
+            if (y < MARGIN + 20) { ({ page, y } = addPage()); y -= 10; }
+            drawText(page, `• ${m.name || "—"} | DOB: ${m.dateOfBirth || "—"} | Medicaid: ${m.medicaidId || "—"} | Rel: ${m.relationship || "—"}`, MARGIN, y, 8);
+            y -= LINE_H;
+          }
+        }
+        y -= 8;
+
+        // Footer
+        drawLine(page, MARGIN + 10);
+        drawText(page, `FreshSelect Meals SCN — Confidential — ${new Date().toLocaleDateString()}`, MARGIN, MARGIN, 7, false, rgb(0.6, 0.6, 0.6));
+        drawText(page, `Page ${pdfDoc.getPageCount()}`, PAGE_W - MARGIN - 30, MARGIN, 7, false, rgb(0.6, 0.6, 0.6));
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength) as ArrayBuffer], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `freshselect-assessments-${new Date().toISOString().split("T")[0]}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${clients.length} client${clients.length === 1 ? "" : "s"} to PDF`);
+    } catch (err: any) {
+      console.error(err);
+      toast.error("PDF export failed: " + (err?.message || "Unknown error"));
+    } finally {
+      setPdfExporting(false);
+    }
+  };
 
   const bulkDeleteMutation = trpc.admin.bulkDeleteClients.useMutation({
     onSuccess: (data) => {
@@ -776,14 +944,24 @@ export default function AdminClients() {
           </div>
         )}
 
-        {/* Bulk Delete Toolbar */}
+        {/* Bulk Action Toolbar */}
         {selectedIds.size > 0 && (
-          <div className="flex items-center gap-3 px-4 py-2.5 bg-red-50 border border-red-200 rounded-lg">
-            <span className="text-sm font-medium text-red-700">{selectedIds.size} client{selectedIds.size === 1 ? '' : 's'} selected</span>
+          <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+            <span className="text-sm font-medium text-slate-700">{selectedIds.size} client{selectedIds.size === 1 ? '' : 's'} selected</span>
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-1.5 border-red-300 text-red-700 hover:bg-red-100"
+              className="h-8 gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50 bg-white"
+              onClick={() => handleExportPdf(Array.from(selectedIds))}
+              disabled={pdfExporting}
+            >
+              {pdfExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+              Export PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 border-red-300 text-red-700 hover:bg-red-100 bg-white"
               onClick={() => setShowBulkDeleteConfirm(true)}
               disabled={bulkDeleteMutation.isPending}
             >
