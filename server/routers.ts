@@ -179,16 +179,9 @@ export const appRouter = router({
 
       console.log(`[Submission] Processing new submission for ${input.firstName} ${input.lastName} (ref: ${refNumber})`);
 
-      // Duplicate check: reject if same Medicaid ID already exists
-      const existing = await getSubmissionByMedicaidId(input.medicaidId);
-      if (existing) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: `DUPLICATE:${existing.referenceNumber}`,
-        });
-      }
-
       // Step 1: Save to database (this is the ONLY critical step)
+      // Duplicate detection is now handled by the UNIQUE index on medicaidId (ER_DUP_ENTRY / errno 1062).
+      // The pre-INSERT lookup has been removed to eliminate the read-before-write race condition under load.
       try {
         await createSubmission({
           referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName,
@@ -206,6 +199,14 @@ export const appRouter = router({
         });
         console.log(`[Submission] ✓ Saved to database (ref: ${refNumber})`);
       } catch (dbErr: any) {
+        // MySQL duplicate-key error (UNIQUE constraint on medicaidId)
+        if (dbErr?.code === "ER_DUP_ENTRY" || dbErr?.errno === 1062) {
+          const dup = await getSubmissionByMedicaidId(input.medicaidId);
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `DUPLICATE:${dup?.referenceNumber ?? "UNKNOWN"}`,
+          });
+        }
         const errMsg = dbErr?.message || String(dbErr);
         console.error(`[Submission] ✗ Database save failed (ref: ${refNumber}): ${errMsg}`);
         // Surface DB_URL missing error clearly in logs

@@ -28,11 +28,12 @@ export async function getDb() {
       const pool = mysql.createPool({
         uri: url.toString(),
         ssl: sslConfig,
-        connectionLimit: 5,
+        connectionLimit: 20,
         waitForConnections: true,
-        queueLimit: 10,
+        queueLimit: 0,
         enableKeepAlive: true,
         keepAliveInitialDelay: 10000,
+        idleTimeout: 60_000,
       });
       _db = drizzle(pool);
     } catch (error) {
