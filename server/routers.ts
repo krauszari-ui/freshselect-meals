@@ -190,6 +190,7 @@ export const appRouter = router({
           additionalMembersCount: parseInt(input.additionalMembersCount || "0") || 0,
           newApplicant: input.newApplicant || null,
           transferAgencyName: (input as any).transferAgencyName || null,
+          zipcode: input.zipcode ? String(input.zipcode).trim().substring(0, 5) : null,
         });
         console.log(`[Submission] ✓ Saved to database (ref: ${refNumber})`);
       } catch (dbErr: any) {
@@ -306,6 +307,7 @@ export const appRouter = router({
       intakeRep: z.number().optional(),
       referralSource: z.string().optional(),
       assessmentCompleted: z.boolean().optional(),
+      zipcode: z.string().optional(),
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional(),
     })).query(async ({ input }) => listSubmissions(input)),
