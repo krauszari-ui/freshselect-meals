@@ -1,4 +1,4 @@
-import { int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { index, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -97,7 +97,13 @@ export const submissions = mysqlTable("submissions", {
   /** Reason for rejection provided by assessor */
   rejectionReason: text("rejectionReason"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (t) => ({
+  idx_submissions_medicaidId: uniqueIndex("idx_submissions_medicaidId").on(t.medicaidId),
+  idx_submissions_createdAt: index("idx_submissions_createdAt").on(t.createdAt),
+  idx_submissions_status: index("idx_submissions_status").on(t.status),
+  idx_submissions_stage: index("idx_submissions_stage").on(t.stage),
+  idx_submissions_email: index("idx_submissions_email").on(t.email),
+}));
 
 export type Submission = typeof submissions.$inferSelect;
 export type InsertSubmission = typeof submissions.$inferInsert;
