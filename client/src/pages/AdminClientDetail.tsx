@@ -326,7 +326,8 @@ export default function AdminClientDetail() {
   }
 
   const fd = (client as any).formData as any || {};
-  const screening = fd.screening || fd.screeningQuestions || {};
+  // screeningQuestions is the canonical key used by the intake form; screening is the legacy/edited key
+  const screening = fd.screeningQuestions || fd.screening || {};
   const healthCategories = fd.healthCategories || [];
   const householdMembers = fd.householdMembers || [];
   const additionalAddresses = fd.additionalAddresses || [];
@@ -1132,21 +1133,24 @@ export default function AdminClientDetail() {
                 {!scnEditMode ? (
                   <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-slate-300" onClick={() => {
                     const fd2 = (client.formData as any) || {};
-                    const sc = fd2.screening || {};
+                    // screeningQuestions is the canonical key from the intake form
+                    const sc = fd2.screeningQuestions || fd2.screening || {};
                     const hc2 = fd2.healthCategories || [];
                     setScnEdits({
                       screenerName: fd2.screenerName || intakeRepName || "",
                       screeningDate: fd2.screeningDate || (client.createdAt ? new Date(client.createdAt).toISOString().split("T")[0] : ""),
                       livingSituation: String(sc.livingSituation || ""),
                       utilityShutoff: String(sc.utilityShutoff || ""),
-                      receivesSnap: String(fd2.receivesSnap ?? fd2.hasSnap ?? sc.receivesSnap ?? ""),
-                      receivesWic: String(fd2.receivesWic ?? fd2.hasWic ?? sc.receivesWic ?? ""),
+                      receivesSnap: String(sc.receivesSnap ?? fd2.receivesSnap ?? fd2.hasSnap ?? ""),
+                      receivesWic: String(sc.receivesWic ?? fd2.receivesWic ?? fd2.hasWic ?? ""),
                       receivesTanf: String(sc.receivesTanf || ""),
                       enrolledHealthHome: String(sc.enrolledHealthHome || (hc2.includes("Enrolled in Health Home Care Management") ? "Yes" : "") || ""),
-                      householdMemberCount: String(fd2.householdMemberCount || ""),
+                      // form uses householdMembersCount (plural), not householdMemberCount
+                      householdMemberCount: String(sc.householdMembersCount || fd2.householdMembersCount || fd2.householdMemberCount || ""),
                       householdMembersWithMedicaid: String(sc.householdMembersWithMedicaid || ""),
                       needsWorkAssistance: String(sc.needsWorkAssistance || ""),
-                      wantsSchoolTraining: String(sc.wantsSchoolTraining ?? sc.wantsSchoolHelp ?? ""),
+                      // form uses wantsSchoolHelp, not wantsSchoolTraining
+                      wantsSchoolTraining: String(sc.wantsSchoolHelp ?? sc.wantsSchoolTraining ?? ""),
                       transportationBarrier: String(sc.transportationBarrier || ""),
                       hasChronicIllness: String(sc.hasChronicIllness || ""),
                       chronicIllnessDetails: String(sc.chronicIllnessDetails || fd2.chronicIllnessDetails || ""),
@@ -1155,6 +1159,10 @@ export default function AdminClientDetail() {
                       pregnantOrPostpartum: String(sc.pregnantOrPostpartum || (hc2.includes("Pregnant") || hc2.includes("Postpartum") ? "Yes" : "") || ""),
                       dueDate: String(fd2.dueDate || sc.dueDate || ""),
                       breastmilkRefrigeration: String(sc.breastmilkRefrigeration || ""),
+                      // Food allergies / dietary restrictions (top-level formData fields)
+                      foodAllergies: String(fd2.foodAllergies || ""),
+                      foodAllergiesDetails: String(fd2.foodAllergiesDetails || ""),
+                      dietaryRestrictions: String(fd2.dietaryRestrictions || ""),
                     });
                     setScnEditMode(true);
                   }}>
@@ -1164,8 +1172,8 @@ export default function AdminClientDetail() {
                   <>
                     <Button size="sm" variant="outline" className="h-7 text-xs border-slate-300" onClick={() => { setScnEditMode(false); setScnEdits({}); }}>Cancel</Button>
                     <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1" disabled={updateScreeningMutation.isPending} onClick={() => {
-                      const { screenerName, screeningDate, dueDate, ...screeningFields } = scnEdits;
-                      updateScreeningMutation.mutate({ id, formData: { screenerName, screeningDate, dueDate, screening: screeningFields } });
+                      const { screenerName, screeningDate, dueDate, foodAllergies, foodAllergiesDetails, dietaryRestrictions, ...screeningFields } = scnEdits;
+                      updateScreeningMutation.mutate({ id, formData: { screenerName, screeningDate, dueDate, foodAllergies, foodAllergiesDetails, dietaryRestrictions, screeningQuestions: screeningFields } });
                     }}>
                       {updateScreeningMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
                     </Button>
@@ -1392,8 +1400,45 @@ export default function AdminClientDetail() {
 
             <div className="mt-6 pt-4 border-t border-slate-200">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Food Allergies / Dietary Restrictions</h3>
-              <InfoLine label="Food allergies" value={fd.foodAllergies || fd.foodAllergiesDetails || "—"} />
-              <InfoLine label="Dietary restrictions" value={fd.dietaryRestrictions || "—"} />
+              {scnEditMode ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                    <span className="text-sm text-slate-600">Food allergies?</span>
+                    <Select value={scnEdits.foodAllergies || ""} onValueChange={(v) => setScnEdits((prev) => ({ ...prev, foodAllergies: v, foodAllergiesDetails: v === "No" ? "" : prev.foodAllergiesDetails }))}>
+                      <SelectTrigger className="h-7 text-sm w-28 border-slate-300"><SelectValue placeholder="Select..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Yes">Yes</SelectItem>
+                        <SelectItem value="No">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {scnEdits.foodAllergies === "Yes" && (
+                    <div className="py-2 border-b border-slate-100 bg-amber-50/50 px-3 rounded">
+                      <Label className="text-xs text-amber-700 font-medium">Allergy details</Label>
+                      <Input
+                        className="h-7 text-sm mt-1 border-amber-200 focus:border-amber-400"
+                        value={scnEdits.foodAllergiesDetails || ""}
+                        onChange={(e) => setScnEdits((prev) => ({ ...prev, foodAllergiesDetails: e.target.value }))}
+                        placeholder="e.g. Peanuts, Shellfish..."
+                      />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                    <span className="text-sm text-slate-600">Dietary restrictions</span>
+                    <Input
+                      className="h-7 text-sm w-44 border-slate-300"
+                      value={scnEdits.dietaryRestrictions || ""}
+                      onChange={(e) => setScnEdits((prev) => ({ ...prev, dietaryRestrictions: e.target.value }))}
+                      placeholder="e.g. Kosher, Halal, Vegetarian..."
+                    />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <InfoLine label="Food allergies" value={fd.foodAllergies === "Yes" ? (fd.foodAllergiesDetails || "Yes") : (fd.foodAllergies || "—")} />
+                  <InfoLine label="Dietary restrictions" value={fd.dietaryRestrictions || "—"} />
+                </>
+              )}
             </div>
             <div className="mt-6 pt-4 border-t border-slate-200">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Household Appliance / Cooking Needs</h3>
