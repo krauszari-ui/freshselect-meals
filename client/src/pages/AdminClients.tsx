@@ -669,16 +669,16 @@ export default function AdminClients() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">New / Transfer</SelectItem>
-                <SelectItem value="Yes">
+                <SelectItem value="New">
                   <span className="flex items-center justify-between w-full gap-2">
                     New Client
-                    <CountBadge count={fc?.applicantType?.["Yes"]} />
+                    <CountBadge count={fc?.applicantType?.["New"]} />
                   </span>
                 </SelectItem>
-                <SelectItem value="No">
+                <SelectItem value="Transfer">
                   <span className="flex items-center justify-between w-full gap-2">
                     Transfer
-                    <CountBadge count={fc?.applicantType?.["No"]} />
+                    <CountBadge count={fc?.applicantType?.["Transfer"]} />
                   </span>
                 </SelectItem>
               </SelectContent>
@@ -869,14 +869,14 @@ export default function AdminClients() {
                           {new Date(client.createdAt).toLocaleDateString("en-US")}
                         </td>
                         <td className="px-4 py-3">
-                          {client.newApplicant === "No" ? (
+                          {client.newApplicant === "Transfer" ? (
                             <span className="inline-flex items-center gap-1">
                               <Badge className="bg-amber-100 text-amber-700 text-[11px] font-medium border-0">Transfer</Badge>
                               {client.transferAgencyName && (
                                 <span className="text-[11px] text-slate-400 truncate max-w-[100px]" title={client.transferAgencyName}>{client.transferAgencyName}</span>
                               )}
                             </span>
-                          ) : client.newApplicant === "Yes" ? (
+                          ) : client.newApplicant === "New" ? (
                             <Badge className="bg-emerald-50 text-emerald-700 text-[11px] font-medium border-0">New</Badge>
                           ) : (
                             <span className="text-xs text-slate-400">—</span>
