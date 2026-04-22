@@ -707,7 +707,11 @@ export default function Home() {
       setRefNumber(data.referenceNumber);
       setSubmitted(true);
     },
-    retry: 2, // Retry up to 2 times on failure
+    // Do NOT retry on duplicate (CONFLICT) errors
+    retry: (failureCount, error: any) => {
+      if (error?.message?.startsWith("DUPLICATE:")) return false;
+      return failureCount < 2;
+    },
   });
 
   const update = <K extends keyof FormData>(key: K, value: FormData[K]) => {
@@ -1829,26 +1833,43 @@ export default function Home() {
           </Button>
         </div>
 
-        {submitMutation.isError && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm text-red-700 font-medium">
-                  {submitMutation.error?.message || "Something went wrong. Please try again."}
-                </p>
-                <p className="text-xs text-red-600 mt-1">If the problem persists, call (718) 307-4664 or email info@freshselectmeals.com.</p>
+        {submitMutation.isError && (() => {
+          const errMsg = (submitMutation.error as any)?.message || "";
+          const isDuplicate = errMsg.startsWith("DUPLICATE:");
+          const dupRef = isDuplicate ? errMsg.split(":")[1] : null;
+          return isDuplicate ? (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-8">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm text-amber-800 font-semibold">Application Already Submitted</p>
+                  <p className="text-sm text-amber-700 mt-1">
+                    A FreshSelect Meals application for this Medicaid ID has already been received.
+                    {dupRef && <> Your reference number is <strong>{dupRef}</strong>.</>}
+                  </p>
+                  <p className="text-xs text-amber-600 mt-2">If you believe this is an error, please call <strong>(718) 307-4664</strong> or email <strong>info@freshselectmeals.com</strong>.</p>
+                </div>
               </div>
             </div>
-            <Button
-              type="button"
-              className="mt-3 bg-red-600 hover:bg-red-700 text-white text-sm"
-              onClick={() => { submitMutation.reset(); handleSubmit(); }}
-            >
-              Try Again
-            </Button>
-          </div>
-        )}
+          ) : (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm text-red-700 font-medium">Something went wrong. Please try again.</p>
+                  <p className="text-xs text-red-600 mt-1">If the problem persists, call (718) 307-4664 or email info@freshselectmeals.com.</p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                className="mt-3 bg-red-600 hover:bg-red-700 text-white text-sm"
+                onClick={() => { submitMutation.reset(); handleSubmit(); }}
+              >
+                Try Again
+              </Button>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

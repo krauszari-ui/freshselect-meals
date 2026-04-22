@@ -18,6 +18,7 @@ import {
   updateReferralLink, deleteReferralLink, incrementReferralUsage, getReferralStats,
   getReferralLinkByEmail, getClientsByReferralCode, getUserByEmail,
   getSubmissionByRef,
+  getSubmissionByMedicaidId,
   createStaffUser, setPasswordResetToken, getUserByResetToken, clearPasswordResetToken,
   createReferrerMessage, listReferrerMessages, listReferrerMessagesBySubmission, markReferrerMessageRead, getUnreadCountByReferrer,
   deleteReferrerMessage, markAllReferrerMessagesRead,
@@ -175,6 +176,15 @@ export const appRouter = router({
       const consentAt = new Date();
 
       console.log(`[Submission] Processing new submission for ${input.firstName} ${input.lastName} (ref: ${refNumber})`);
+
+      // Duplicate check: reject if same Medicaid ID already exists
+      const existing = await getSubmissionByMedicaidId(input.medicaidId);
+      if (existing) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `DUPLICATE:${existing.referenceNumber}`,
+        });
+      }
 
       // Step 1: Save to database (this is the ONLY critical step)
       try {
