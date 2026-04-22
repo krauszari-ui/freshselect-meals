@@ -535,3 +535,8 @@
 - [ ] Assessment Completion Report page (stats by stage/vendor/neighborhood)
 - [ ] Bulk client selection on AdminClients page
 - [ ] Export selected clients as one combined PDF (client info + assessment answers)
+
+## Regressions to fix (Apr 22)
+- [ ] Filter option counts missing on Clients page (vendor, neighborhood, stage counts)
+- [ ] Zipcode filter not working
+- [ ] Transfer agency name not showing in client list
