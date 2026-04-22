@@ -22,6 +22,11 @@ vi.mock("./db", () => ({
   getAllSubmissions: vi.fn(),
   incrementReferralUsage: (...args: unknown[]) => mockIncrementReferralUsage(...args),
   getReferralLinkByCode: (...args: unknown[]) => mockGetReferralLinkByCode(...args),
+  getSubmissionByMedicaidId: vi.fn().mockResolvedValue(undefined), // No duplicate by default
+  getFilterCounts: vi.fn().mockResolvedValue({}),
+  listStaffUsers: vi.fn().mockResolvedValue([]),
+  listReferralLinks: vi.fn().mockResolvedValue([]),
+  getSubmissionByRef: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock the email module

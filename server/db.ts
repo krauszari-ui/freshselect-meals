@@ -107,6 +107,12 @@ export async function getSubmissionById(id: number): Promise<Submission | undefi
   const result = await db.select().from(submissions).where(eq(submissions.id, id)).limit(1);
   return result[0];
 }
+export async function getSubmissionByMedicaidId(medicaidId: string): Promise<Submission | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(submissions).where(eq(submissions.medicaidId, medicaidId)).orderBy(desc(submissions.createdAt)).limit(1);
+  return result[0];
+}
 
 export interface ListSubmissionsOptions {
   search?: string;
