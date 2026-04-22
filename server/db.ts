@@ -164,7 +164,17 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const [rows, countResult, membersResult] = await Promise.all([
-    db.select().from(submissions).where(where).orderBy(desc(submissions.createdAt)).limit(pageSize).offset(offset),
+    db.select({
+      id: submissions.id, firstName: submissions.firstName, lastName: submissions.lastName,
+      email: submissions.email, cellPhone: submissions.cellPhone, medicaidId: submissions.medicaidId,
+      referenceNumber: submissions.referenceNumber, status: submissions.status, stage: submissions.stage,
+      supermarket: submissions.supermarket, neighborhood: submissions.neighborhood, borough: submissions.borough,
+      zipcode: submissions.zipcode, newApplicant: submissions.newApplicant, program: submissions.program,
+      language: submissions.language, additionalMembersCount: submissions.additionalMembersCount,
+      assignedTo: submissions.assignedTo, intakeRep: submissions.intakeRep, referralSource: submissions.referralSource,
+      createdAt: submissions.createdAt, updatedAt: submissions.updatedAt,
+      assessmentCompletedAt: submissions.assessmentCompletedAt,
+    }).from(submissions).where(where).orderBy(desc(submissions.createdAt)).limit(pageSize).offset(offset),
     db.select({ count: sql<number>`count(*)` }).from(submissions).where(where),
     db.select({ totalAdditional: sql<number>`COALESCE(SUM(additionalMembersCount), 0)`, totalClients: sql<number>`count(*)` }).from(submissions).where(where),
   ]);
@@ -198,32 +208,59 @@ export async function getAllSubmissions(opts: { status?: string; supermarket?: s
   return rows;
 }
 
-// Returns per-value counts for all filterable dimensions in a single DB round-trip
-export async function getFilterCounts() {
+// Server-side cache for filterCounts (30 second TTL)
+let _filterCountsCache: { data: Awaited<ReturnType<typeof _getFilterCountsRaw>>; expiresAt: number } | null = null;
+
+async function _getFilterCountsRaw() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const [stageRows, neighborhoodRows, vendorRows, programRows, languageRows, boroughRows, applicantTypeRows, zipcodeRows] = await Promise.all([
-    db.select({ value: submissions.stage, count: sql<number>`count(*)` }).from(submissions).groupBy(submissions.stage),
-    db.select({ value: submissions.neighborhood, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.neighborhood} IS NOT NULL AND ${submissions.neighborhood} != ''`).groupBy(submissions.neighborhood),
-    db.select({ value: submissions.supermarket, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.supermarket} IS NOT NULL AND ${submissions.supermarket} != ''`).groupBy(submissions.supermarket),
-    db.select({ value: submissions.program, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.program} IS NOT NULL AND ${submissions.program} != ''`).groupBy(submissions.program),
-    db.select({ value: submissions.language, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.language} IS NOT NULL AND ${submissions.language} != ''`).groupBy(submissions.language),
-    db.select({ value: submissions.borough, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.borough} IS NOT NULL AND ${submissions.borough} != ''`).groupBy(submissions.borough),
-    db.select({ value: submissions.newApplicant, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.newApplicant} IS NOT NULL AND ${submissions.newApplicant} != ''`).groupBy(submissions.newApplicant),
-    db.select({ value: submissions.zipcode, count: sql<number>`count(*)` }).from(submissions).where(sql`${submissions.zipcode} IS NOT NULL AND ${submissions.zipcode} != ''`).groupBy(submissions.zipcode).orderBy(desc(sql<number>`count(*)`)),
-  ]);
-  const toMap = (rows: { value: string | null; count: number }[]) =>
-    Object.fromEntries(rows.filter(r => r.value).map(r => [r.value as string, Number(r.count)]));
-  return {
-    stage: toMap(stageRows as any),
-    neighborhood: toMap(neighborhoodRows as any),
-    vendor: toMap(vendorRows as any),
-    program: toMap(programRows as any),
-    language: toMap(languageRows as any),
-    borough: toMap(boroughRows as any),
-    applicantType: toMap(applicantTypeRows as any),
-    zipcode: toMap(zipcodeRows as any),
+  // Single query using conditional aggregation — one table scan instead of 8
+  const result = await db.execute(sql`
+    SELECT
+      stage                                                      AS dim,
+      'stage'                                                    AS category,
+      COUNT(*)                                                   AS cnt
+    FROM submissions GROUP BY stage
+    UNION ALL
+    SELECT neighborhood, 'neighborhood', COUNT(*)
+    FROM submissions WHERE neighborhood IS NOT NULL AND neighborhood != '' GROUP BY neighborhood
+    UNION ALL
+    SELECT supermarket, 'vendor', COUNT(*)
+    FROM submissions WHERE supermarket IS NOT NULL AND supermarket != '' GROUP BY supermarket
+    UNION ALL
+    SELECT program, 'program', COUNT(*)
+    FROM submissions WHERE program IS NOT NULL AND program != '' GROUP BY program
+    UNION ALL
+    SELECT language, 'language', COUNT(*)
+    FROM submissions WHERE language IS NOT NULL AND language != '' GROUP BY language
+    UNION ALL
+    SELECT borough, 'borough', COUNT(*)
+    FROM submissions WHERE borough IS NOT NULL AND borough != '' GROUP BY borough
+    UNION ALL
+    SELECT newApplicant, 'applicantType', COUNT(*)
+    FROM submissions WHERE newApplicant IS NOT NULL AND newApplicant != '' GROUP BY newApplicant
+    UNION ALL
+    SELECT zipcode, 'zipcode', COUNT(*)
+    FROM submissions WHERE zipcode IS NOT NULL AND zipcode != '' GROUP BY zipcode
+  `);
+  const out: Record<string, Record<string, number>> = {
+    stage: {}, neighborhood: {}, vendor: {}, program: {}, language: {}, borough: {}, applicantType: {}, zipcode: {},
   };
+  for (const row of result as any[]) {
+    const cat = row.category as string;
+    const dim = row.dim as string;
+    if (cat && dim && out[cat] !== undefined) out[cat][dim] = Number(row.cnt);
+  }
+  return out;
+}
+
+// Returns per-value counts for all filterable dimensions — cached 30s to reduce DB load
+export async function getFilterCounts() {
+  const now = Date.now();
+  if (_filterCountsCache && _filterCountsCache.expiresAt > now) return _filterCountsCache.data;
+  const data = await _getFilterCountsRaw();
+  _filterCountsCache = { data, expiresAt: now + 30_000 };
+  return data;
 }
 
 export async function updateSubmissionStatus(id: number, status: Submission["status"], adminNotes?: string): Promise<void> {
