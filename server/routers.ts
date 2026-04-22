@@ -323,6 +323,53 @@ export const appRouter = router({
     })).query(async ({ input }) => listSubmissions(input)),
 
     filterCounts: staffProcedure.query(async () => getFilterCounts()),
+    getDuplicates: staffProcedure.query(async () => {
+      const db = await (await import('./db')).getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      const { sql, eq, and } = await import('drizzle-orm');
+      // Duplicate Medicaid IDs
+      const dupMedicaid = await db.execute(sql`
+        SELECT medicaidId as matchKey, 'medicaid' as matchType, COUNT(*) as cnt,
+          GROUP_CONCAT(id ORDER BY createdAt ASC SEPARATOR ',') as ids
+        FROM submissions
+        WHERE medicaidId IS NOT NULL AND medicaidId != ''
+        GROUP BY medicaidId HAVING COUNT(*) > 1
+      `);
+      // Duplicate phones (normalized)
+      const dupPhone = await db.execute(sql`
+        SELECT REGEXP_REPLACE(cellPhone,'[^0-9]','') as matchKey, 'phone' as matchType, COUNT(*) as cnt,
+          GROUP_CONCAT(id ORDER BY createdAt ASC SEPARATOR ',') as ids
+        FROM submissions
+        WHERE cellPhone IS NOT NULL AND cellPhone != ''
+        GROUP BY REGEXP_REPLACE(cellPhone,'[^0-9]','')
+        HAVING COUNT(*) > 1
+      `);
+      const allGroups = [...(dupMedicaid as any[]), ...(dupPhone as any[])];
+      // Fetch full details for all flagged IDs
+      const allIds = Array.from(new Set(allGroups.flatMap((g: any) => String(g.ids).split(',').map(Number))));
+      if (allIds.length === 0) return [];
+      const { submissions } = await import('../drizzle/schema');
+      const { inArray } = await import('drizzle-orm');
+      const rows = await db.select({
+        id: submissions.id, firstName: submissions.firstName, lastName: submissions.lastName,
+        medicaidId: submissions.medicaidId, cellPhone: submissions.cellPhone,
+        email: submissions.email, createdAt: submissions.createdAt,
+        stage: submissions.stage, status: submissions.status,
+        supermarket: submissions.supermarket, neighborhood: submissions.neighborhood,
+      }).from(submissions).where(inArray(submissions.id, allIds));
+      const rowMap = new Map(rows.map(r => [r.id, r]));
+      return allGroups.map((g: any) => ({
+        matchKey: g.matchKey,
+        matchType: g.matchType,
+        count: Number(g.cnt),
+        records: String(g.ids).split(',').map(Number).map(id => rowMap.get(id)).filter(Boolean),
+      }));
+    }),
+    deleteDuplicate: staffProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      const { deleteSubmission } = await import('./db');
+      await deleteSubmission(input.id);
+      return { success: true };
+    }),
 
     getById: staffProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
       const submission = await getSubmissionById(input.id);
