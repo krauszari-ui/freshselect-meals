@@ -180,12 +180,12 @@ export default function AdminApplicationDetail() {
               {(form.newApplicant as string) && (
                 <span
                   className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
-                    form.newApplicant === "New" || form.newApplicant === "Yes"
+                    form.newApplicant === "New"
                       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                       : "bg-amber-50 text-amber-700 border-amber-200"
                   }`}
                 >
-                  {form.newApplicant === "New" || form.newApplicant === "Yes" ? "New Client" : `Transfer${(form.transferAgencyName as string) ? ` — ${form.transferAgencyName as string}` : ""}`}
+                  {form.newApplicant === "New" ? "New Client" : `Transfer${(form.transferAgencyName as string) ? ` — ${form.transferAgencyName as string}` : ""}`}
                 </span>
               )}
             </div>
@@ -279,14 +279,14 @@ export default function AdminApplicationDetail() {
                 <Field
                   label="Applicant Type"
                   value={
-                    form.newApplicant === "Yes" || form.newApplicant === "New"
+                    form.newApplicant === "New"
                       ? "New Client"
-                      : form.newApplicant === "No" || form.newApplicant === "Transfer"
+                      : form.newApplicant === "Transfer"
                       ? `Transfer${form.transferAgencyName ? ` — ${form.transferAgencyName}` : ""}`
                       : (form.newApplicant as string) || "—"
                   }
                 />
-                {(form.newApplicant === "No" || form.newApplicant === "Transfer") && (form.transferAgencyName as string) && (
+                {form.newApplicant === "Transfer" && (form.transferAgencyName as string) && (
                   <Field label="Transfer Agency" value={form.transferAgencyName as string} />
                 )}
                 <Field label="Food Allergies" value={form.foodAllergies as string} />
@@ -436,16 +436,16 @@ export default function AdminApplicationDetail() {
                       <span>Type</span>
                       <span
                         className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${
-                          form.newApplicant === "New" || form.newApplicant === "Yes"
+                          form.newApplicant === "New"
                             ? "bg-emerald-50 text-emerald-700"
                             : "bg-amber-50 text-amber-700"
                         }`}
                       >
-                        {form.newApplicant === "New" || form.newApplicant === "Yes" ? "New Client" : "Transfer"}
+                        {form.newApplicant === "New" ? "New Client" : "Transfer"}
                       </span>
                     </div>
                   )}
-                  {(form.newApplicant === "Transfer" || form.newApplicant === "No") && (form.transferAgencyName as string) && (
+                  {form.newApplicant === "Transfer" && (form.transferAgencyName as string) && (
                     <div className="flex justify-between">
                       <span>Transfer Agency</span>
                       <span className="text-right max-w-[140px] truncate" title={form.transferAgencyName as string}>{form.transferAgencyName as string}</span>
