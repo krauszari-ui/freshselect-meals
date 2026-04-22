@@ -174,6 +174,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
       assignedTo: submissions.assignedTo, intakeRep: submissions.intakeRep, referralSource: submissions.referralSource,
       createdAt: submissions.createdAt, updatedAt: submissions.updatedAt,
       assessmentCompletedAt: submissions.assessmentCompletedAt,
+      transferAgencyName: submissions.transferAgencyName,
     }).from(submissions).where(where).orderBy(desc(submissions.createdAt)).limit(pageSize).offset(offset),
     db.select({ count: sql<number>`count(*)` }).from(submissions).where(where),
     db.select({ totalAdditional: sql<number>`COALESCE(SUM(additionalMembersCount), 0)`, totalClients: sql<number>`count(*)` }).from(submissions).where(where),
