@@ -25,6 +25,8 @@ import {
   createClientEmail, listClientEmails, deleteClientEmailById,
   createStageHistoryEntry, getStageHistoryBySubmission,
   getFilterCounts,
+  getAssessmentReport,
+  getSubmissionsByIds,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -369,6 +371,12 @@ export const appRouter = router({
       const { deleteSubmission } = await import('./db');
       await deleteSubmission(input.id);
       return { success: true };
+    }),
+
+    assessmentReport: staffProcedure.query(async () => getAssessmentReport()),
+
+    bulkGetByIds: staffProcedure.input(z.object({ ids: z.array(z.number()).min(1).max(200) })).query(async ({ input }) => {
+      return getSubmissionsByIds(input.ids);
     }),
 
     getById: staffProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {

@@ -529,3 +529,9 @@
 - [x] 99/99 tests passing
 - [ ] Push to GitHub to trigger Vercel redeploy
 - [ ] Verify Resend webhook deliveries return 200 after redeploy
+
+## Assessment Report & Bulk PDF Export
+
+- [ ] Assessment Completion Report page (stats by stage/vendor/neighborhood)
+- [ ] Bulk client selection on AdminClients page
+- [ ] Export selected clients as one combined PDF (client info + assessment answers)

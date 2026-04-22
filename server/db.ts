@@ -1,4 +1,4 @@
-import { and, desc, eq, like, ne, or, sql, isNull, isNotNull, asc, gte, lte } from "drizzle-orm";
+import { and, desc, eq, like, ne, or, sql, isNull, isNotNull, asc, gte, lte, inArray } from "drizzle-orm";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import {
@@ -791,4 +791,67 @@ export async function getStageHistoryBySubmission(submissionId: number) {
   return db.select().from(stageHistory)
     .where(eq(stageHistory.submissionId, submissionId))
     .orderBy(asc(stageHistory.createdAt));
+}
+
+// ─── Assessment Report ────────────────────────────────────────────────────────
+
+export async function getAssessmentReport() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.execute(sql`
+    SELECT
+      stage,
+      supermarket                                                     AS vendor,
+      neighborhood,
+      COUNT(*)                                                        AS total,
+      SUM(CASE WHEN assessmentCompletedAt IS NOT NULL THEN 1 ELSE 0 END) AS completed,
+      SUM(CASE WHEN assessmentCompletedAt IS NULL THEN 1 ELSE 0 END)     AS pending
+    FROM submissions
+    GROUP BY stage, supermarket, neighborhood
+    ORDER BY stage, supermarket, neighborhood
+  `);
+
+  // Aggregate totals
+  const byStage: Record<string, { total: number; completed: number; pending: number }> = {};
+  const byVendor: Record<string, { total: number; completed: number; pending: number }> = {};
+  const byNeighborhood: Record<string, { total: number; completed: number; pending: number }> = {};
+  let grandTotal = 0, grandCompleted = 0, grandPending = 0;
+
+  for (const row of result as any[]) {
+    const total = Number(row.total);
+    const completed = Number(row.completed);
+    const pending = Number(row.pending);
+    const stage = row.stage as string;
+    const vendor = row.vendor as string;
+    const neighborhood = (row.neighborhood as string) || "Unknown";
+
+    grandTotal += total; grandCompleted += completed; grandPending += pending;
+
+    if (!byStage[stage]) byStage[stage] = { total: 0, completed: 0, pending: 0 };
+    byStage[stage].total += total; byStage[stage].completed += completed; byStage[stage].pending += pending;
+
+    if (vendor) {
+      if (!byVendor[vendor]) byVendor[vendor] = { total: 0, completed: 0, pending: 0 };
+      byVendor[vendor].total += total; byVendor[vendor].completed += completed; byVendor[vendor].pending += pending;
+    }
+
+    if (neighborhood) {
+      if (!byNeighborhood[neighborhood]) byNeighborhood[neighborhood] = { total: 0, completed: 0, pending: 0 };
+      byNeighborhood[neighborhood].total += total; byNeighborhood[neighborhood].completed += completed; byNeighborhood[neighborhood].pending += pending;
+    }
+  }
+
+  return { grandTotal, grandCompleted, grandPending, byStage, byVendor, byNeighborhood };
+}
+
+// ─── Bulk Fetch by IDs (for PDF export) ──────────────────────────────────────
+
+export async function getSubmissionsByIds(ids: number[]) {
+  if (ids.length === 0) return [];
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(submissions)
+    .where(inArray(submissions.id, ids))
+    .orderBy(asc(submissions.lastName), asc(submissions.firstName));
 }
