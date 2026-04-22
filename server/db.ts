@@ -159,7 +159,8 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   if (assignedTo) conditions.push(eq(submissions.assignedTo, assignedTo));
   if (intakeRep) conditions.push(eq(submissions.intakeRep, intakeRep));
   if (referralSource && referralSource !== "all") conditions.push(eq(submissions.referralSource, referralSource));
-  if (assessmentCompleted) conditions.push(sql`${submissions.assessmentCompletedAt} IS NOT NULL`);
+  if (assessmentCompleted === true) conditions.push(sql`${submissions.assessmentCompletedAt} IS NOT NULL`);
+  else if (assessmentCompleted === false) conditions.push(sql`${submissions.assessmentCompletedAt} IS NULL`);
   if (zipcode && zipcode !== "all") conditions.push(eq(submissions.zipcode, zipcode));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -247,7 +248,9 @@ async function _getFilterCountsRaw() {
   const out: Record<string, Record<string, number>> = {
     stage: {}, neighborhood: {}, vendor: {}, program: {}, language: {}, borough: {}, applicantType: {}, zipcode: {},
   };
-  for (const row of result as any[]) {
+  // Drizzle mysql2 execute() returns [rows, fields] — extract rows from index 0
+  const rows = (Array.isArray((result as any)[0]) ? (result as any)[0] : result) as any[];
+  for (const row of rows) {
     const cat = row.category as string;
     const dim = row.dim as string;
     if (cat && dim && out[cat] !== undefined) out[cat][dim] = Number(row.cnt);
