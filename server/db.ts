@@ -155,12 +155,17 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   if (assessmentCompleted) conditions.push(sql`${submissions.assessmentCompletedAt} IS NOT NULL`);
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
-  const [rows, countResult] = await Promise.all([
+  const [rows, countResult, membersResult] = await Promise.all([
     db.select().from(submissions).where(where).orderBy(desc(submissions.createdAt)).limit(pageSize).offset(offset),
     db.select({ count: sql<number>`count(*)` }).from(submissions).where(where),
+    db.select({ totalAdditional: sql<number>`COALESCE(SUM(additionalMembersCount), 0)`, totalClients: sql<number>`count(*)` }).from(submissions).where(where),
   ]);
   const total = Number(countResult[0]?.count ?? 0);
-  return { rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  const totalAdditional = Number(membersResult[0]?.totalAdditional ?? 0);
+  const totalClients = Number(membersResult[0]?.totalClients ?? 0);
+  // totalMembers = each client counts as 1 (primary) + their additional household members
+  const totalMembers = totalClients + totalAdditional;
+  return { rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize), totalMembers };
 }
 
 export async function getAllSubmissions(opts: { status?: string; supermarket?: string; stage?: string; neighborhood?: string; language?: string; borough?: string; search?: string; assignedTo?: number; intakeRep?: number; referralSource?: string } = {}) {

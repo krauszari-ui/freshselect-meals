@@ -12,7 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText, Trash2,
+  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText, Trash2, Users,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -490,6 +490,8 @@ export default function AdminClients() {
   const rows = listData?.rows ?? [];
   const totalPages = listData?.totalPages ?? 1;
   const totalCount = listData?.total ?? 0;
+  const totalMembers = listData?.totalMembers ?? 0;
+  const hasActiveFilter = stageFilter !== "all" || neighborhoodFilter !== "all" || vendorFilter !== "all" || programFilter !== "all" || applicantTypeFilter !== "all" || languageFilter !== "all" || boroughFilter !== "all" || workerFilter !== "all" || repFilter !== "all" || referralFilter !== "all" || assessmentCompletedFilter !== "all" || debouncedSearch.trim() !== "";
 
   // Sort is still done client-side on the current page (DB returns desc by default)
   const sortedRows = useMemo(() => {
@@ -774,6 +776,39 @@ export default function AdminClients() {
             </Button>
           </div>
         )}
+
+        {/* Filtered Totals Bar */}
+        <div className={`flex items-center gap-4 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+          hasActiveFilter
+            ? "bg-blue-50 border-blue-200 text-blue-800"
+            : "bg-slate-50 border-slate-200 text-slate-600"
+        }`}>
+          {listQuery.isLoading ? (
+            <span className="flex items-center gap-2 text-slate-400">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Calculating...
+            </span>
+          ) : (
+            <>
+              <span className="flex items-center gap-1.5">
+                <Users className="h-4 w-4 opacity-70" />
+                <span className="font-semibold">{totalCount.toLocaleString()}</span>
+                <span className="font-normal opacity-80">{hasActiveFilter ? "matching clients" : "total clients"}</span>
+              </span>
+              <span className="text-slate-300">|</span>
+              <span className="flex items-center gap-1.5">
+                <span className="font-semibold">{totalMembers.toLocaleString()}</span>
+                <span className="font-normal opacity-80">{hasActiveFilter ? "matching members" : "total members"}</span>
+              </span>
+              {hasActiveFilter && (
+                <>
+                  <span className="text-slate-300">|</span>
+                  <span className="text-xs opacity-70 italic">filtered view</span>
+                </>
+              )}
+            </>
+          )}
+        </div>
 
         {/* Table */}
         <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
