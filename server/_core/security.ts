@@ -22,6 +22,9 @@ const ALLOWED_ORIGINS = [
   "https://www.freshselectmeals.com",
   // Vercel preview deployments
   /^https:\/\/freshselect-meals[a-z0-9-]*\.vercel\.app$/,
+  // Manus dev / preview environments (multi-level subdomains like 3000-xxx.us2.manus.computer)
+  /^https:\/\/[\w.-]+\.manus\.computer$/,
+  /^https:\/\/[\w.-]+\.manus\.space$/,
   // Local development
   /^https?:\/\/localhost(:\d+)?$/,
   /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
