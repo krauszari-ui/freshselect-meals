@@ -707,11 +707,8 @@ export default function Home() {
       setRefNumber(data.referenceNumber);
       setSubmitted(true);
     },
-    // Do NOT retry on duplicate (CONFLICT) errors
-    retry: (failureCount, error: any) => {
-      if (error?.message?.startsWith("DUPLICATE:")) return false;
-      return failureCount < 2;
-    },
+    // Never retry form submissions — duplicates are enforced server-side via UNIQUE index
+    retry: false,
   });
 
   const update = <K extends keyof FormData>(key: K, value: FormData[K]) => {
