@@ -713,11 +713,18 @@ export const appRouter = router({
       const existing = await getSubmissionById(input.id);
       if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       const existingFd = (existing.formData as Record<string, unknown>) || {};
-      const { screening: newScreening, ...topLevelFields } = input.formData as any;
+      const { screening: newScreening, screeningQuestions: newScreeningQuestions, ...topLevelFields } = input.formData as any;
+      // Support both canonical 'screeningQuestions' key (intake form) and legacy 'screening' key
+      const incomingScreening = newScreeningQuestions || newScreening || {};
+      const mergedScreening = {
+        ...((existingFd as any)?.screeningQuestions || (existingFd as any)?.screening || {}),
+        ...incomingScreening,
+      };
       const merged = {
         ...existingFd,
         ...topLevelFields,
-        screening: { ...((existingFd as any)?.screening || {}), ...(newScreening || {}) },
+        screeningQuestions: mergedScreening,
+        screening: mergedScreening, // keep legacy key in sync
       };
       await updateSubmissionFields(input.id, { formData: merged } as any);
       return { success: true };
