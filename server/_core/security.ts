@@ -44,10 +44,10 @@ export const globalLimiter = rateLimit({
   skip: (req) => req.path === "/api/health",
 });
 
-/** Form submission limiter: 10 submissions / 15 min per IP */
+/** Form submission limiter: 20 submissions / 15 min per IP */
 export const submissionLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 20,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: { error: "Too many form submissions. Please wait before submitting again." },
