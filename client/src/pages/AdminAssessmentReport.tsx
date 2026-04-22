@@ -3,7 +3,8 @@ import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Clock, Users, BarChart3, Store, MapPin, Layers } from "lucide-react";
+import { CheckCircle2, Clock, Users, BarChart3, Store, MapPin, Layers, RefreshCw, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const STAGE_LABELS: Record<string, string> = {
   referral: "Referral",
@@ -69,7 +70,7 @@ function CompletionRow({
 }
 
 export default function AdminAssessmentReport() {
-  const { data, isLoading } = trpc.admin.assessmentReport.useQuery();
+  const { data, isLoading, isError, error, refetch } = trpc.admin.assessmentReport.useQuery();
 
   if (isLoading) {
     return (
@@ -78,6 +79,23 @@ export default function AdminAssessmentReport() {
           {[...Array(3)].map((_, i) => (
             <div key={i} className="h-48 bg-slate-100 rounded-xl animate-pulse" />
           ))}
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (isError) {
+    return (
+      <AdminLayout>
+        <div className="p-6 flex flex-col items-center justify-center min-h-[300px] gap-4">
+          <AlertCircle className="h-10 w-10 text-red-400" />
+          <div className="text-center">
+            <p className="text-slate-700 font-medium">Failed to load assessment report</p>
+            <p className="text-sm text-slate-500 mt-1">{(error as any)?.message || "An error occurred"}</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
+            <RefreshCw className="h-4 w-4" /> Retry
+          </Button>
         </div>
       </AdminLayout>
     );
