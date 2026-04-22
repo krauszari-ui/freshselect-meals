@@ -28,9 +28,9 @@ const STAGE_COLORS: Record<string, string> = {
 
 function CompletionRow({
   label,
-  total,
-  completed,
-  pending,
+  total: rawTotal,
+  completed: rawCompleted,
+  pending: rawPending,
   color = "bg-emerald-500",
 }: {
   label: string;
@@ -39,6 +39,9 @@ function CompletionRow({
   pending: number;
   color?: string;
 }) {
+  const total = Number(rawTotal) || 0;
+  const completed = Number(rawCompleted) || 0;
+  const pending = Number(rawPending) || 0;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
   return (
     <div className="flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-0">
@@ -103,7 +106,12 @@ export default function AdminAssessmentReport() {
 
   if (!data) return <AdminLayout><div className="p-6 text-slate-500">No data available</div></AdminLayout>;
 
-  const { grandTotal, grandCompleted, grandPending, byStage, byVendor, byNeighborhood } = data;
+  const grandTotal = Number(data.grandTotal) || 0;
+  const grandCompleted = Number(data.grandCompleted) || 0;
+  const grandPending = Number(data.grandPending) || 0;
+  const byStage = data.byStage || {};
+  const byVendor = data.byVendor || {};
+  const byNeighborhood = data.byNeighborhood || {};
   const grandPct = grandTotal > 0 ? Math.round((grandCompleted / grandTotal) * 100) : 0;
 
   return (
@@ -194,6 +202,7 @@ export default function AdminAssessmentReport() {
           <CardContent className="px-5 pb-4">
             {Object.entries(byStage)
               .sort((a, b) => b[1].total - a[1].total)
+              .filter(([stage]) => stage && stage !== 'null' && stage !== 'undefined')
               .map(([stage, counts]) => (
                 <CompletionRow
                   key={stage}
