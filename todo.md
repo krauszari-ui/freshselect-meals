@@ -540,3 +540,23 @@
 - [ ] Filter option counts missing on Clients page (vendor, neighborhood, stage counts)
 - [ ] Zipcode filter not working
 - [ ] Transfer agency name not showing in client list
+
+## Notification Bell System (April 2026)
+- [ ] notifications DB table (id, type, title, body, link, isRead, createdAt)
+- [ ] tRPC procedures: notifications.list, notifications.markRead, notifications.markAllRead, notifications.unreadCount
+- [ ] Auto-create notification on inbound client email reply
+- [ ] Auto-create notification on referrer message reply
+- [ ] Auto-create notification on new form submission
+- [ ] Auto-create notification on task status change
+- [ ] AdminNotifications.tsx page with full list, read/unread state, click-to-navigate
+- [ ] Bell icon in AdminLayout sidebar with live unread count badge
+
+## Notification Bell System (April 2026)
+- [ ] notifications DB table (id, type, title, body, link, isRead, createdAt)
+- [ ] tRPC procedures: notifications.list, notifications.markRead, notifications.markAllRead, notifications.unreadCount
+- [ ] Auto-create notification on inbound client email reply
+- [ ] Auto-create notification on referrer message reply
+- [ ] Auto-create notification on new form submission
+- [ ] Auto-create notification on task status change
+- [ ] AdminNotifications.tsx page with full list, read/unread state, click-to-navigate
+- [ ] Bell icon in AdminLayout sidebar with live unread count badge

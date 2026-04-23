@@ -9,7 +9,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { applySecurityMiddleware, submissionLimiter, loginLimiter, uploadLimiter } from "./security";
 import { requestLogger } from "./logger";
-import { createClientEmail, getSubmissionById } from "../db";
+import { createClientEmail, getSubmissionById, createNotification } from "../db";
 import { Webhook } from "svix";
 import { Resend } from "resend";
 
@@ -170,6 +170,17 @@ async function startServer() {
       });
 
       console.log(`[Inbound Email] Stored reply from ${fromEmail} for client #${submissionId} (subject: "${subject}")`);
+
+      // Create in-app notification for staff
+      const clientName = [submission.firstName, submission.lastName].filter(Boolean).join(" ") || `Client #${submissionId}`;
+      createNotification({
+        type: "inbound_email",
+        title: `Email reply from ${clientName}`,
+        body: `Subject: ${subject}${body ? " — " + body.slice(0, 120) + (body.length > 120 ? "…" : "") : ""}`,
+        link: `/admin/clients/${submissionId}`,
+        submissionId,
+      }).catch((e: unknown) => console.warn("[Notification] Failed to create inbound email notification:", e));
+
       res.status(200).json({ ok: true });
 
     } catch (err) {

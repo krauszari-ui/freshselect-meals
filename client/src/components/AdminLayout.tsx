@@ -3,10 +3,11 @@ import { getLoginUrl } from "@/const";
 import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Users, ClipboardList, FileText, Building2,
-  LogOut, Loader2, ShieldCheck, ChevronRight, Leaf, Link2, UserCog, AlertTriangle, BarChart3,
+  LogOut, Loader2, ShieldCheck, ChevronRight, Leaf, Link2, UserCog, AlertTriangle, BarChart3, Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { type ReactNode } from "react";
+import { trpc } from "@/lib/trpc";
 
 const NAV_ITEMS = [
   { path: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -26,6 +27,13 @@ const ADMIN_ONLY_NAV_ITEMS = [
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [location] = useLocation();
+
+  // Poll unread notification count every 30 seconds
+  const { data: unreadData } = trpc.notifications.unreadCount.useQuery(undefined, {
+    refetchInterval: 30_000,
+    enabled: !!user,
+  });
+  const unreadCount = unreadData?.count ?? 0;
 
   if (loading) {
     return (
@@ -60,9 +68,22 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   const initials = user.name ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
 
+  const allNavItems = [
+    ...NAV_ITEMS.filter((item) => {
+      if (item.path === "/admin/referrals" && user.role === "worker") {
+        const perms = (user.permissions as any) || {};
+        return perms.showReferralLinks !== false;
+      }
+      if (user.role === "assessor" && item.path !== "/admin/clients") return false;
+      return true;
+    }),
+    ...((["super_admin", "admin"].includes(user.role)) ? ADMIN_ONLY_NAV_ITEMS : []),
+    ...(user.role === "assessor" ? [{ path: "/assessor", label: "Assessor Portal", icon: ClipboardList }] : []),
+  ];
+
   return (
     <div className="min-h-screen flex bg-slate-50">
-      {/* Sidebar - Green theme matching FreshSelect branding */}
+      {/* Sidebar */}
       <aside className="w-56 bg-green-900 text-white flex flex-col shrink-0 sticky top-0 h-screen">
         {/* Logo */}
         <div className="p-4 flex items-center gap-3">
@@ -76,17 +97,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 py-2 px-2 space-y-0.5">
-          {[...NAV_ITEMS.filter((item) => {
-            if (item.path === "/admin/referrals" && user.role === "worker") {
-              const perms = (user.permissions as any) || {};
-              return perms.showReferralLinks !== false;
-            }
-            // Assessors only see Clients and Assessor Portal
-            if (user.role === "assessor" && item.path !== "/admin/clients") return false;
-            return true;
-          }), ...((["super_admin", "admin"].includes(user.role)) ? ADMIN_ONLY_NAV_ITEMS : []),
-          ...(user.role === "assessor" ? [{ path: "/assessor", label: "Assessor Portal", icon: ClipboardList }] : [])].map((item) => {
+        <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
+          {allNavItems.map((item) => {
             const active = location === item.path || (item.path !== "/admin/dashboard" && location.startsWith(item.path));
             const Icon = item.icon;
             return (
@@ -107,6 +119,34 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+
+          {/* Notifications bell — always visible to all staff */}
+          <Link href="/admin/notifications">
+            <button
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                location === "/admin/notifications"
+                  ? "bg-green-600 text-white font-medium"
+                  : "text-green-200 hover:text-white hover:bg-green-800"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Bell className="h-[18px] w-[18px] shrink-0" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )}
+                </div>
+                <span>Notifications</span>
+              </div>
+              {location === "/admin/notifications"
+                ? <ChevronRight className="h-4 w-4 opacity-60" />
+                : unreadCount > 0
+                  ? <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{unreadCount > 99 ? "99+" : unreadCount}</span>
+                  : null}
+            </button>
+          </Link>
         </nav>
 
         {/* User section at bottom */}
