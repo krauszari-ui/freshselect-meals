@@ -27,6 +27,8 @@ import {
   getFilterCounts,
   getAssessmentReport,
   getSubmissionsByIds,
+  createNotification, listNotifications, getUnreadNotificationCount,
+  markNotificationRead, markAllNotificationsRead,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -238,6 +240,14 @@ export const appRouter = router({
           } else {
             console.log(`[Email] Skipped (load test mode) for ref: ${refNumber}`);
           }
+          // In-app notification for new submission
+          createNotification({
+            type: "new_submission",
+            title: `New application: ${input.firstName} ${input.lastName}`,
+            body: `Ref: ${refNumber} \u2014 ${input.supermarket} \u2014 ${input.email}`,
+            link: `/admin/clients`,
+            submissionId: null,
+          }).catch((e: unknown) => console.warn("[Notification] new_submission:", e));
 
           // Generate Household Attestation + HIPAA PDF (non-blocking)
           generateAttestationPdf({
@@ -887,6 +897,14 @@ export const appRouter = router({
           direction: "referrer",
           attachmentUrl: input.attachmentUrl ?? null,
         });
+        // Fire in-app notification for staff
+        createNotification({
+          type: "referrer_reply",
+          title: `New message from referrer: ${link.referrerName || link.email || link.code}`,
+          body: input.message.slice(0, 160) + (input.message.length > 160 ? "\u2026" : ""),
+          link: input.submissionId ? `/admin/clients/${input.submissionId}` : `/admin/referrals`,
+          submissionId: input.submissionId ?? null,
+        }).catch((e: unknown) => console.warn("[Notification] referrer_reply:", e));
         return { success: true, id };
       }),
       markAllRead: publicProcedure.input(z.object({
@@ -1016,6 +1034,32 @@ export const appRouter = router({
       return { valid: true, email: user.email, name: user.name };
     }),
   }),
-});
 
+  notifications: router({
+    list: protectedProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(200).optional().default(50) }))
+      .query(async ({ input }) => {
+        return listNotifications(input.limit);
+      }),
+
+    unreadCount: protectedProcedure
+      .query(async () => {
+        return { count: await getUnreadNotificationCount() };
+      }),
+
+    markRead: protectedProcedure
+      .input(z.object({ id: z.number().int() }))
+      .mutation(async ({ input }) => {
+        await markNotificationRead(input.id);
+        return { success: true };
+      }),
+
+    markAllRead: protectedProcedure
+      .mutation(async () => {
+        await markAllNotificationsRead();
+        return { success: true };
+      }),
+  }),
+});
 export type AppRouter = typeof appRouter;
+

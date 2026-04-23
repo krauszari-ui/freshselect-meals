@@ -1,4 +1,4 @@
-import { and, desc, eq, like, ne, or, sql, isNull, isNotNull, asc, gte, lte, inArray } from "drizzle-orm";
+import { and, count, desc, eq, like, ne, or, sql, isNull, isNotNull, asc, gte, lte, inArray } from "drizzle-orm";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import {
@@ -9,6 +9,7 @@ import {
   services, InsertService, Service,
   referralLinks, InsertReferralLink, ReferralLink,
   stageHistory, InsertStageHistory,
+  notifications, InsertNotification, Notification,
 } from "../drizzle/schema";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -865,3 +866,41 @@ export async function getSubmissionsByIds(ids: number[]) {
     .where(inArray(submissions.id, ids))
     .orderBy(asc(submissions.lastName), asc(submissions.firstName));
 }
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export async function createNotification(payload: Omit<InsertNotification, "id" | "createdAt" | "isRead">) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.insert(notifications).values({ ...payload, isRead: false });
+  return (result[0] as any).insertId as number;
+}
+
+export async function listNotifications(limit = 50): Promise<Notification[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(notifications)
+    .orderBy(desc(notifications.createdAt))
+    .limit(limit);
+}
+
+export async function getUnreadNotificationCount(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db.select({ count: count() }).from(notifications).where(eq(notifications.isRead, false));
+  return Number(rows[0]?.count ?? 0);
+}
+
+export async function markNotificationRead(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+}
+
+export async function markAllNotificationsRead() {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(notifications).set({ isRead: true }).where(eq(notifications.isRead, false));
+}
+
+export type { Notification };

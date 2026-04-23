@@ -1,4 +1,4 @@
-import { index, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { boolean, index, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -311,3 +311,26 @@ export const stageHistory = mysqlTable("stageHistory", {
 });
 export type StageHistory = typeof stageHistory.$inferSelect;
 export type InsertStageHistory = typeof stageHistory.$inferInsert;
+
+/**
+ * In-app notifications for admin/staff — surfaces events like inbound emails,
+ * referrer replies, new submissions, and task updates.
+ */
+export const notifications = mysqlTable("notifications", {
+  id: int("id").primaryKey().autoincrement(),
+  /** Category of event */
+  type: varchar("type", { length: 64 }).notNull(),
+  /** Short headline shown in the bell dropdown */
+  title: varchar("title", { length: 256 }).notNull(),
+  /** Longer description shown on the notifications page */
+  body: text("body"),
+  /** Deep-link URL to the relevant page (e.g. /admin/clients/123) */
+  link: varchar("link", { length: 512 }),
+  /** Optional: related submission/client ID */
+  submissionId: int("submissionId"),
+  /** false = unread (bold), true = read */
+  isRead: boolean("isRead").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
