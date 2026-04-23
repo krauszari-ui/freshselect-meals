@@ -356,7 +356,10 @@ export const appRouter = router({
         GROUP BY REGEXP_REPLACE(cellPhone,'[^0-9]','')
         HAVING COUNT(*) > 1
       `);
-      const allGroups = [...(dupMedicaid as any[]), ...(dupPhone as any[])];
+      // Drizzle mysql2 execute() returns [rows, fields] — extract rows from index 0
+      const medicaidRows = (Array.isArray((dupMedicaid as any)[0]) ? (dupMedicaid as any)[0] : dupMedicaid) as any[];
+      const phoneRows = (Array.isArray((dupPhone as any)[0]) ? (dupPhone as any)[0] : dupPhone) as any[];
+      const allGroups = [...medicaidRows, ...phoneRows];
       // Fetch full details for all flagged IDs
       const allIds = Array.from(new Set(allGroups.flatMap((g: any) => String(g.ids).split(',').map(Number))));
       if (allIds.length === 0) return [];
