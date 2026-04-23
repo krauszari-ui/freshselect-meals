@@ -409,7 +409,7 @@ export default function AdminClientDetail() {
     if (isBlank(hhCount)) missing.push("Q7: Household members count");
     if (isBlank(screening.householdMembersWithMedicaid)) missing.push("Q8: Members with Medicaid");
     if (isBlank(screening.needsWorkAssistance)) missing.push("Q9: Needs work assistance");
-    const schoolVal = screening.wantsSchoolHelp ?? screening.wantsSchoolTraining;
+    const schoolVal = screening.wantsSchoolHelp ?? screening.wantsSchoolTraining ?? fd.wantsSchoolHelp ?? fd.wantsSchoolTraining;
     if (isBlank(schoolVal)) missing.push("Q10: Wants school/training help");
     if (isBlank(screening.transportationBarrier)) missing.push("Q11: Transportation barrier");
     if (isBlank(screening.hasChronicIllness)) missing.push("Q12: Has chronic illness");
@@ -426,32 +426,6 @@ export default function AdminClientDetail() {
     if (isBlank(fd.foodAllergies)) missing.push("Food allergies");
     return missing;
   })();
-  // Also check health category condition details
-  const MEDICAL_CONDITIONS_VALIDATE = [
-    "HIV / AIDS", "Hypertension", "Chronic Condition",
-    "Substance Use Disorder", "Diabetes", "Serious Mental Illness (SMI)",
-  ];
-  const conditionDetailsValidate: Record<string, { clientName: string; docUrls: string[] }> = (fd as any).conditionDetails || {};
-  const selectedMedicalValidate = healthCategories.filter((c: string) => MEDICAL_CONDITIONS_VALIDATE.includes(c));
-  for (const condition of selectedMedicalValidate) {
-    const det = conditionDetailsValidate[condition];
-    if (!det?.clientName || !det?.clientName.trim()) {
-      assessmentMissingFields.push(`${condition}: client name required`);
-    }
-    if (!det?.docUrls || det.docUrls.length === 0) {
-      assessmentMissingFields.push(`${condition}: supporting document required`);
-    }
-  }
-  // Other health category requires a description
-  if (healthCategories.includes("Other")) {
-    const otherDet = conditionDetailsValidate["Other"];
-    if (!otherDet?.clientName || !otherDet?.clientName.trim()) {
-      assessmentMissingFields.push("Other: condition description required");
-    }
-    if (!otherDet?.docUrls || otherDet.docUrls.length === 0) {
-      assessmentMissingFields.push("Other: supporting document required");
-    }
-  }
   const canMarkCompleted = assessmentMissingFields.length === 0;
   const uploadedDocuments = fd.uploadedDocuments || fd.documents || {} as Record<string, string>;
 
@@ -1246,8 +1220,8 @@ export default function AdminClientDetail() {
 
 
 
-            {/* ── Health Categories Card ─────────────────────────────────────── */}
-            {(() => {
+            {/* Health Categories card removed — condition details are collected on the client intake form only */}
+            {false && (() => {
               // Medical conditions that require a client name + supporting documents
               const MEDICAL_CONDITIONS = [
                 "HIV / AIDS",
@@ -1541,6 +1515,15 @@ export default function AdminClientDetail() {
                     <Button size="sm" variant="outline" className="h-7 text-xs border-slate-300" onClick={() => { setScnEditMode(false); setScnEdits({}); }}>Cancel</Button>
                     <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1" disabled={updateScreeningMutation.isPending} onClick={() => {
                       const { screenerName, screeningDate, dueDate, foodAllergies, foodAllergiesDetails, dietaryRestrictions, ...screeningFields } = scnEdits;
+                      // Normalize aliases so both old and new keys are always in sync after save
+                      // wantsSchoolTraining (admin key) → also write wantsSchoolHelp (intake form key)
+                      if (screeningFields.wantsSchoolTraining !== undefined) {
+                        screeningFields.wantsSchoolHelp = screeningFields.wantsSchoolTraining;
+                      }
+                      // householdMemberCount (admin key) → also write householdMembersCount (intake form key)
+                      if (screeningFields.householdMemberCount !== undefined) {
+                        screeningFields.householdMembersCount = screeningFields.householdMemberCount;
+                      }
                       updateScreeningMutation.mutate({ id, formData: { screenerName, screeningDate, dueDate, foodAllergies, foodAllergiesDetails, dietaryRestrictions, screeningQuestions: screeningFields } });
                     }}>
                       {updateScreeningMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
