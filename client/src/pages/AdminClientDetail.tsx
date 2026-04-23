@@ -1,4 +1,7 @@
 import AdminLayout from "@/components/AdminLayout";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -328,11 +331,48 @@ export default function AdminClientDetail() {
   const fd = (client as any).formData as any || {};
   // screeningQuestions is the canonical key used by the intake form; screening is the legacy/edited key
   const screening = fd.screeningQuestions || fd.screening || {};
+
   const healthCategories = fd.healthCategories || [];
   const householdMembers = fd.householdMembers || [];
   const additionalAddresses = fd.additionalAddresses || [];
   const additionalPhones = fd.additionalPhones || [];
   const additionalEmails = fd.additionalEmails || [];
+
+  // ── Assessment completeness validation ───────────────────────────────────
+  // Returns array of missing field labels; empty = all answered → button enabled
+  const assessmentMissingFields = (() => {
+    const missing: string[] = [];
+    const isBlank = (v: unknown) => v === undefined || v === null || String(v).trim() === "";
+    if (isBlank(screening.livingSituation)) missing.push("Q1: Living situation");
+    if (isBlank(screening.utilityShutoff)) missing.push("Q2: Utility shutoff threat");
+    const snapVal = screening.receivesSnap ?? fd.receivesSnap ?? fd.hasSnap;
+    if (isBlank(snapVal)) missing.push("Q3: Receives SNAP");
+    const wicVal = screening.receivesWic ?? fd.receivesWic ?? fd.hasWic;
+    if (isBlank(wicVal)) missing.push("Q4: Receives WIC");
+    if (isBlank(screening.receivesTanf)) missing.push("Q5: Receives TANF");
+    if (isBlank(screening.enrolledHealthHome)) missing.push("Q6: Enrolled in Health Home");
+    const hhCount = screening.householdMembersCount || fd.householdMembersCount || fd.householdMemberCount || screening.householdMemberCount;
+    if (isBlank(hhCount)) missing.push("Q7: Household members count");
+    if (isBlank(screening.householdMembersWithMedicaid)) missing.push("Q8: Members with Medicaid");
+    if (isBlank(screening.needsWorkAssistance)) missing.push("Q9: Needs work assistance");
+    const schoolVal = screening.wantsSchoolHelp ?? screening.wantsSchoolTraining;
+    if (isBlank(schoolVal)) missing.push("Q10: Wants school/training help");
+    if (isBlank(screening.transportationBarrier)) missing.push("Q11: Transportation barrier");
+    if (isBlank(screening.hasChronicIllness)) missing.push("Q12: Has chronic illness");
+    if (isBlank(screening.otherHealthIssues)) missing.push("Q13: Other health issues");
+    if (isBlank(screening.medicationsRequireRefrigeration)) missing.push("Q14: Medications require refrigeration");
+    const pregnantVal2 = screening.pregnantOrPostpartum ||
+      (healthCategories.includes("Pregnant") || healthCategories.includes("Postpartum") ? "Yes" : undefined);
+    if (isBlank(pregnantVal2)) missing.push("Q15: Pregnant or postpartum");
+    if (String(pregnantVal2).toLowerCase() === "yes" || pregnantVal2 === true) {
+      const dueDateVal = fd.dueDate || screening.dueDate;
+      if (isBlank(dueDateVal)) missing.push("Due date (required when pregnant/postpartum)");
+    }
+    if (isBlank(screening.breastmilkRefrigeration)) missing.push("Q16: Breastmilk refrigeration needed");
+    if (isBlank(fd.foodAllergies)) missing.push("Food allergies");
+    return missing;
+  })();
+  const canMarkCompleted = assessmentMissingFields.length === 0;
   const uploadedDocuments = fd.uploadedDocuments || fd.documents || {} as Record<string, string>;
 
   // Build a human-readable label map for document keys
@@ -1194,15 +1234,33 @@ export default function AdminClientDetail() {
                   <p className="text-xs text-emerald-600 mt-0.5">Completed {new Date((client as any).assessmentCompletedAt).toLocaleDateString()}</p>
                 )}
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className={`h-7 text-xs ${ (client as any).assessmentCompletedAt ? "border-emerald-300 text-emerald-700 hover:bg-emerald-100" : "border-amber-300 text-amber-700 hover:bg-amber-100" }`}
-                disabled={updateAssessmentCompletedMutation.isPending}
-                onClick={() => updateAssessmentCompletedMutation.mutate({ id, completed: !(client as any).assessmentCompletedAt })}
-              >
-                {updateAssessmentCompletedMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : (client as any).assessmentCompletedAt ? "Mark Incomplete" : "Mark Completed"}
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={`h-7 text-xs ${ (client as any).assessmentCompletedAt ? "border-emerald-300 text-emerald-700 hover:bg-emerald-100" : "border-amber-300 text-amber-700 hover:bg-amber-100" }`}
+                        disabled={updateAssessmentCompletedMutation.isPending || (!(client as any).assessmentCompletedAt && !canMarkCompleted)}
+                        onClick={() => updateAssessmentCompletedMutation.mutate({ id, completed: !(client as any).assessmentCompletedAt })}
+                      >
+                        {updateAssessmentCompletedMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : (client as any).assessmentCompletedAt ? "Mark Incomplete" : "Mark Completed"}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {!(client as any).assessmentCompletedAt && !canMarkCompleted && (
+                    <TooltipContent side="left" className="max-w-xs">
+                      <p className="font-semibold mb-1 text-xs">Complete all questions first:</p>
+                      <ul className="text-xs space-y-0.5">
+                        {assessmentMissingFields.map((f) => (
+                          <li key={f}>• {f}</li>
+                        ))}
+                      </ul>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
             </div>
 
             <div className="mb-6">
