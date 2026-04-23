@@ -214,7 +214,7 @@ export async function getAllSubmissions(opts: { status?: string; supermarket?: s
 // Server-side cache for filterCounts (30 second TTL)
 let _filterCountsCache: { data: Awaited<ReturnType<typeof _getFilterCountsRaw>>; expiresAt: number } | null = null;
 
-async function _getFilterCountsRaw() {
+export async function _getFilterCountsRaw() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   // Single query using conditional aggregation — one table scan instead of 8
@@ -258,6 +258,9 @@ async function _getFilterCountsRaw() {
   }
   return out;
 }
+
+/** Reset the filter counts cache — for testing only */
+export function _resetFilterCountsCache() { _filterCountsCache = null; }
 
 // Returns per-value counts for all filterable dimensions — cached 30s to reduce DB load
 export async function getFilterCounts() {
