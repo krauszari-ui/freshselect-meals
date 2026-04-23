@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Clock, Users, BarChart3, Store, MapPin, Layers, RefreshCw, AlertCircle } from "lucide-react";
+import { CheckCircle2, Clock, Users, BarChart3, Store, MapPin, Layers, RefreshCw, AlertCircle, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { toast } from "sonner";
 
 const STAGE_LABELS: Record<string, string> = {
   referral: "Referral",
@@ -72,8 +74,188 @@ function CompletionRow({
   );
 }
 
+async function exportAssessmentReportPDF(data: {
+  grandTotal: number;
+  grandCompleted: number;
+  grandPending: number;
+  byStage: Record<string, { total: number; completed: number; pending: number }>;
+  byVendor: Record<string, { total: number; completed: number; pending: number }>;
+  byNeighborhood: Record<string, { total: number; completed: number; pending: number }>;
+}) {
+  const pdfDoc = await PDFDocument.create();
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const fontReg  = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+  const PAGE_W  = 595;
+  const PAGE_H  = 842;
+  const MARGIN  = 45;
+  const COL_W   = PAGE_W - MARGIN * 2;
+  const LINE_H  = 16;
+
+  const colorGreen  = rgb(0.13, 0.55, 0.33);
+  const colorAmber  = rgb(0.85, 0.55, 0.10);
+  const colorSlate  = rgb(0.35, 0.40, 0.47);
+  const colorBlack  = rgb(0.10, 0.10, 0.12);
+  const colorLight  = rgb(0.94, 0.96, 0.98);
+  const colorBorder = rgb(0.86, 0.88, 0.92);
+
+  let page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+  let y = PAGE_H - MARGIN;
+
+  const drawFooter = () => {
+    page.drawLine({ start: { x: MARGIN, y: MARGIN + 14 }, end: { x: PAGE_W - MARGIN, y: MARGIN + 14 }, thickness: 0.5, color: colorBorder });
+    page.drawText(`FreshSelect Meals SCN — Confidential — ${new Date().toLocaleDateString()}`, { x: MARGIN, y: MARGIN + 4, size: 7, font: fontReg, color: colorSlate });
+    page.drawText(`Page ${pdfDoc.getPageCount()}`, { x: PAGE_W - MARGIN - 30, y: MARGIN + 4, size: 7, font: fontReg, color: colorSlate });
+  };
+
+  const addPage = () => {
+    drawFooter();
+    page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+    y = PAGE_H - MARGIN;
+  };
+
+  const ensureSpace = (needed: number) => {
+    if (y - needed < MARGIN + 30) addPage();
+  };
+
+  const drawSectionHeader = (title: string) => {
+    ensureSpace(28);
+    y -= 6;
+    page.drawRectangle({ x: MARGIN, y: y - 18, width: COL_W, height: 22, color: colorLight, borderColor: colorBorder, borderWidth: 0.5 });
+    page.drawText(title, { x: MARGIN + 8, y: y - 12, size: 10, font: fontBold, color: colorBlack });
+    y -= 26;
+  };
+
+  const drawTableRow = (label: string, completed: number | string, pending: number | string, total: number | string, isHeader = false) => {
+    ensureSpace(LINE_H + 2);
+    const tot = Number(total) || 0;
+    const com = Number(completed) || 0;
+    const pen = Number(pending) || 0;
+    const pct = tot > 0 ? Math.round((com / tot) * 100) : 0;
+    const font = isHeader ? fontBold : fontReg;
+    const textColor = isHeader ? colorBlack : colorSlate;
+
+    if (isHeader) {
+      page.drawRectangle({ x: MARGIN, y: y - LINE_H + 3, width: COL_W, height: LINE_H, color: rgb(0.88, 0.90, 0.94) });
+    }
+
+    page.drawText(String(label), { x: MARGIN + 4, y: y - 9, size: 8, font, color: textColor, maxWidth: COL_W * 0.40 });
+    page.drawText(String(completed), { x: MARGIN + COL_W * 0.60, y: y - 9, size: 8, font, color: isHeader ? colorBlack : colorGreen });
+    page.drawText(String(pending),   { x: MARGIN + COL_W * 0.72, y: y - 9, size: 8, font, color: isHeader ? colorBlack : colorAmber });
+    page.drawText(String(total),     { x: MARGIN + COL_W * 0.84, y: y - 9, size: 8, font, color: textColor });
+    page.drawText(isHeader ? "%" : `${pct}%`, { x: MARGIN + COL_W * 0.93, y: y - 9, size: 8, font, color: isHeader ? colorBlack : colorGreen });
+
+    if (!isHeader) {
+      const barX = MARGIN + COL_W * 0.44;
+      const barW = COL_W * 0.14;
+      const barY = y - 8;
+      page.drawRectangle({ x: barX, y: barY, width: barW, height: 4, color: colorLight });
+      if (pct > 0) page.drawRectangle({ x: barX, y: barY, width: barW * (pct / 100), height: 4, color: colorGreen });
+      page.drawLine({ start: { x: MARGIN, y: y - LINE_H + 2 }, end: { x: PAGE_W - MARGIN, y: y - LINE_H + 2 }, thickness: 0.3, color: colorBorder });
+    }
+
+    y -= LINE_H;
+  };
+
+  // ── Title block ──────────────────────────────────────────────────────────
+  page.drawRectangle({ x: 0, y: PAGE_H - 70, width: PAGE_W, height: 70, color: colorGreen });
+  page.drawText("FreshSelect Meals SCN", { x: MARGIN, y: PAGE_H - 28, size: 14, font: fontBold, color: rgb(1, 1, 1) });
+  page.drawText("Assessment Completion Report", { x: MARGIN, y: PAGE_H - 46, size: 11, font: fontReg, color: rgb(0.85, 0.95, 0.88) });
+  page.drawText(`Generated: ${new Date().toLocaleString()}`, { x: MARGIN, y: PAGE_H - 62, size: 8, font: fontReg, color: rgb(0.75, 0.90, 0.80) });
+  y = PAGE_H - 85;
+
+  // ── Summary cards ────────────────────────────────────────────────────────
+  const grandTotal     = Number(data.grandTotal) || 0;
+  const grandCompleted = Number(data.grandCompleted) || 0;
+  const grandPending   = Number(data.grandPending) || 0;
+  const grandPct       = grandTotal > 0 ? Math.round((grandCompleted / grandTotal) * 100) : 0;
+
+  const cardW = (COL_W - 12) / 3;
+  [
+    { label: "Total Clients",         value: String(grandTotal),     color: colorSlate },
+    { label: "Assessments Completed", value: String(grandCompleted), color: colorGreen },
+    { label: "Pending Assessment",    value: String(grandPending),   color: colorAmber },
+  ].forEach((c, i) => {
+    const cx = MARGIN + i * (cardW + 6);
+    page.drawRectangle({ x: cx, y: y - 44, width: cardW, height: 48, color: colorLight, borderColor: colorBorder, borderWidth: 0.5 });
+    page.drawText(c.value, { x: cx + 8, y: y - 20, size: 18, font: fontBold, color: c.color });
+    page.drawText(c.label, { x: cx + 8, y: y - 36, size: 7.5, font: fontReg, color: colorSlate });
+  });
+  y -= 56;
+
+  // Overall progress bar
+  y -= 8;
+  page.drawText(`Overall Completion Rate: ${grandPct}%`, { x: MARGIN, y, size: 9, font: fontBold, color: colorBlack });
+  y -= 10;
+  page.drawRectangle({ x: MARGIN, y: y - 6, width: COL_W, height: 8, color: colorLight, borderColor: colorBorder, borderWidth: 0.3 });
+  if (grandPct > 0) page.drawRectangle({ x: MARGIN, y: y - 6, width: COL_W * (grandPct / 100), height: 8, color: colorGreen });
+  page.drawText(`${grandCompleted} completed`, { x: MARGIN, y: y - 18, size: 7.5, font: fontReg, color: colorSlate });
+  page.drawText(`${grandPending} pending`, { x: PAGE_W - MARGIN - 50, y: y - 18, size: 7.5, font: fontReg, color: colorSlate });
+  y -= 28;
+
+  // ── By Stage ─────────────────────────────────────────────────────────────
+  drawSectionHeader("By Stage");
+  drawTableRow("Stage", "Completed", "Pending", "Total", true);
+  Object.entries(data.byStage)
+    .filter(([s]) => s && s !== "null" && s !== "undefined")
+    .sort((a, b) => Number(b[1].total) - Number(a[1].total))
+    .forEach(([stage, c]) => drawTableRow(STAGE_LABELS[stage] || stage, c.completed, c.pending, c.total));
+
+  // ── By Vendor ────────────────────────────────────────────────────────────
+  y -= 10;
+  drawSectionHeader("By Vendor / Supermarket");
+  drawTableRow("Vendor", "Completed", "Pending", "Total", true);
+  Object.entries(data.byVendor)
+    .sort((a, b) => Number(b[1].total) - Number(a[1].total))
+    .forEach(([vendor, c]) => drawTableRow(vendor, c.completed, c.pending, c.total));
+
+  // ── By Neighborhood ──────────────────────────────────────────────────────
+  y -= 10;
+  drawSectionHeader("By Neighborhood");
+  drawTableRow("Neighborhood", "Completed", "Pending", "Total", true);
+  Object.entries(data.byNeighborhood)
+    .sort((a, b) => Number(b[1].total) - Number(a[1].total))
+    .forEach(([hood, c]) => drawTableRow(hood, c.completed, c.pending, c.total));
+
+  drawFooter();
+
+  const pdfBytes = await pdfDoc.save();
+  const blob = new Blob(
+    [pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength) as ArrayBuffer],
+    { type: "application/pdf" }
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `freshselect-assessment-report-${new Date().toISOString().split("T")[0]}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function AdminAssessmentReport() {
   const { data, isLoading, isError, error, refetch } = trpc.admin.assessmentReport.useQuery();
+  const [pdfExporting, setPdfExporting] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    if (!data) return;
+    setPdfExporting(true);
+    try {
+      await exportAssessmentReportPDF({
+        grandTotal:     Number((data as any).grandTotal) || 0,
+        grandCompleted: Number((data as any).grandCompleted) || 0,
+        grandPending:   Number((data as any).grandPending) || 0,
+        byStage:        ((data as any).byStage || {}) as Record<string, { total: number; completed: number; pending: number }>,
+        byVendor:       ((data as any).byVendor || {}) as Record<string, { total: number; completed: number; pending: number }>,
+        byNeighborhood: ((data as any).byNeighborhood || {}) as Record<string, { total: number; completed: number; pending: number }>,
+      });
+      toast.success("Assessment report exported to PDF");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("PDF export failed: " + (err?.message || "Unknown error"));
+    } finally {
+      setPdfExporting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -106,26 +288,40 @@ export default function AdminAssessmentReport() {
 
   if (!data) return <AdminLayout><div className="p-6 text-slate-500">No data available</div></AdminLayout>;
 
-  const grandTotal = Number(data.grandTotal) || 0;
-  const grandCompleted = Number(data.grandCompleted) || 0;
-  const grandPending = Number(data.grandPending) || 0;
-  const byStage = data.byStage || {};
-  const byVendor = data.byVendor || {};
-  const byNeighborhood = data.byNeighborhood || {};
+  const grandTotal = Number((data as any).grandTotal) || 0;
+  const grandCompleted = Number((data as any).grandCompleted) || 0;
+  const grandPending = Number((data as any).grandPending) || 0;
+  const byStage = (data as any).byStage || {};
+  const byVendor = (data as any).byVendor || {};
+  const byNeighborhood = (data as any).byNeighborhood || {};
   const grandPct = grandTotal > 0 ? Math.round((grandCompleted / grandTotal) * 100) : 0;
 
   return (
     <AdminLayout>
       <div className="p-6 max-w-5xl mx-auto space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <BarChart3 className="h-6 w-6 text-emerald-600" />
-            Assessment Completion Report
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Overview of SCN screening assessment completion across all clients
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+              <BarChart3 className="h-6 w-6 text-emerald-600" />
+              Assessment Completion Report
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              Overview of SCN screening assessment completion across all clients
+            </p>
+          </div>
+          <Button
+            onClick={handleDownloadPDF}
+            disabled={pdfExporting || !data}
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+          >
+            {pdfExporting ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {pdfExporting ? "Generating..." : "Download PDF"}
+          </Button>
         </div>
 
         {/* Summary Cards */}
@@ -201,9 +397,9 @@ export default function AdminAssessmentReport() {
           </CardHeader>
           <CardContent className="px-5 pb-4">
             {Object.entries(byStage)
-              .sort((a, b) => b[1].total - a[1].total)
+              .sort((a: any, b: any) => b[1].total - a[1].total)
               .filter(([stage]) => stage && stage !== 'null' && stage !== 'undefined')
-              .map(([stage, counts]) => (
+              .map(([stage, counts]: any) => (
                 <CompletionRow
                   key={stage}
                   label={STAGE_LABELS[stage] || stage}
@@ -226,8 +422,8 @@ export default function AdminAssessmentReport() {
           </CardHeader>
           <CardContent className="px-5 pb-4">
             {Object.entries(byVendor)
-              .sort((a, b) => b[1].total - a[1].total)
-              .map(([vendor, counts]) => (
+              .sort((a: any, b: any) => b[1].total - a[1].total)
+              .map(([vendor, counts]: any) => (
                 <CompletionRow
                   key={vendor}
                   label={vendor}
@@ -250,8 +446,8 @@ export default function AdminAssessmentReport() {
           </CardHeader>
           <CardContent className="px-5 pb-4">
             {Object.entries(byNeighborhood)
-              .sort((a, b) => b[1].total - a[1].total)
-              .map(([hood, counts]) => (
+              .sort((a: any, b: any) => b[1].total - a[1].total)
+              .map(([hood, counts]: any) => (
                 <CompletionRow
                   key={hood}
                   label={hood}
