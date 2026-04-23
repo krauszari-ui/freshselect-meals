@@ -232,10 +232,64 @@ export default function AdminClientDetail() {
   // SCN Assessment editing state
   const [scnEditMode, setScnEditMode] = useState(false);
   const [scnEdits, setScnEdits] = useState<Record<string, string>>({});
+
+  // Health condition details editing state
+  // conditionEdits: { [conditionKey]: { clientName: string; docUrls: string[] } }
+  const [conditionEditMode, setConditionEditMode] = useState(false);
+  const [conditionEdits, setConditionEdits] = useState<Record<string, { clientName: string; docUrls: string[] }>>({});
+  const [uploadingConditionDoc, setUploadingConditionDoc] = useState<string | null>(null); // conditionKey being uploaded
+  const conditionDocInputRef = useRef<HTMLInputElement>(null);
+  const [pendingConditionDocKey, setPendingConditionDocKey] = useState<string | null>(null);
+
+  const handleConditionDocUpload = async (e: React.ChangeEvent<HTMLInputElement>, conditionKey: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingConditionDoc(conditionKey);
+    try {
+      const reader = new FileReader();
+      const fileData = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadDocumentMutation.mutateAsync({
+        fileName: file.name, fileData, contentType: file.type || "application/octet-stream", category: "condition-doc",
+      });
+      setConditionEdits((prev) => ({
+        ...prev,
+        [conditionKey]: {
+          clientName: prev[conditionKey]?.clientName || "",
+          docUrls: [...(prev[conditionKey]?.docUrls || []), result.url],
+        },
+      }));
+      toast.success(`Document uploaded: ${file.name}`);
+    } catch { toast.error("Failed to upload document"); }
+    finally { setUploadingConditionDoc(null); e.target.value = ""; }
+  };
   const updateScreeningMutation = trpc.admin.updateScreeningAnswers.useMutation({
     onSuccess: () => { utils.admin.getById.invalidate({ id }); setScnEditMode(false); setScnEdits({}); toast.success("SCN answers saved"); },
     onError: (err) => toast.error(err.message),
   });
+
+  // Save condition details (client name + docs) via the same updateScreeningAnswers procedure
+  const saveConditionDetails = () => {
+    // Merge conditionEdits into formData.conditionDetails
+    const existingDetails = (fd as any).conditionDetails || {};
+    const merged: Record<string, { clientName: string; docUrls: string[] }> = { ...existingDetails };
+    for (const [key, val] of Object.entries(conditionEdits)) {
+      merged[key] = val;
+    }
+    updateScreeningMutation.mutate({
+      id,
+      formData: { conditionDetails: merged },
+    }, {
+      onSuccess: () => {
+        setConditionEditMode(false);
+        setConditionEdits({});
+        toast.success("Health condition details saved");
+      },
+    });
+  };
   const updateAssessmentCompletedMutation = trpc.admin.updateAssessmentCompleted.useMutation({
     onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Assessment status updated"); },
     onError: (err) => toast.error(err.message),
@@ -372,6 +426,32 @@ export default function AdminClientDetail() {
     if (isBlank(fd.foodAllergies)) missing.push("Food allergies");
     return missing;
   })();
+  // Also check health category condition details
+  const MEDICAL_CONDITIONS_VALIDATE = [
+    "HIV / AIDS", "Hypertension", "Chronic Condition",
+    "Substance Use Disorder", "Diabetes", "Serious Mental Illness (SMI)",
+  ];
+  const conditionDetailsValidate: Record<string, { clientName: string; docUrls: string[] }> = (fd as any).conditionDetails || {};
+  const selectedMedicalValidate = healthCategories.filter((c: string) => MEDICAL_CONDITIONS_VALIDATE.includes(c));
+  for (const condition of selectedMedicalValidate) {
+    const det = conditionDetailsValidate[condition];
+    if (!det?.clientName || !det?.clientName.trim()) {
+      assessmentMissingFields.push(`${condition}: client name required`);
+    }
+    if (!det?.docUrls || det.docUrls.length === 0) {
+      assessmentMissingFields.push(`${condition}: supporting document required`);
+    }
+  }
+  // Other health category requires a description
+  if (healthCategories.includes("Other")) {
+    const otherDet = conditionDetailsValidate["Other"];
+    if (!otherDet?.clientName || !otherDet?.clientName.trim()) {
+      assessmentMissingFields.push("Other: condition description required");
+    }
+    if (!otherDet?.docUrls || otherDet.docUrls.length === 0) {
+      assessmentMissingFields.push("Other: supporting document required");
+    }
+  }
   const canMarkCompleted = assessmentMissingFields.length === 0;
   const uploadedDocuments = fd.uploadedDocuments || fd.documents || {} as Record<string, string>;
 
@@ -1165,6 +1245,254 @@ export default function AdminClientDetail() {
             </div>
 
 
+
+            {/* ── Health Categories Card ─────────────────────────────────────── */}
+            {(() => {
+              // Medical conditions that require a client name + supporting documents
+              const MEDICAL_CONDITIONS = [
+                "HIV / AIDS",
+                "Hypertension",
+                "Chronic Condition",
+                "Substance Use Disorder",
+                "Diabetes",
+                "Serious Mental Illness (SMI)",
+              ];
+              const conditionDetails: Record<string, { clientName: string; docUrls: string[] }> = (fd as any).conditionDetails || {};
+              const selectedMedical = healthCategories.filter((c: string) => MEDICAL_CONDITIONS.includes(c));
+              const hasPregnant = healthCategories.includes("Pregnant");
+              const hasOther = healthCategories.includes("Other");
+              const otherDetails = (fd as any).otherHealthCategoryDetails || "";
+
+              // Helper: get current value for a condition (edit mode overrides saved data)
+              const getCondEdit = (key: string) => conditionEditMode
+                ? (conditionEdits[key] ?? { clientName: conditionDetails[key]?.clientName || "", docUrls: conditionDetails[key]?.docUrls || [] })
+                : (conditionDetails[key] ?? { clientName: "", docUrls: [] });
+
+              if (healthCategories.length === 0) return null;
+
+              return (
+                <div className="bg-white rounded-lg border border-slate-200 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold text-slate-900">Health Categories</h2>
+                    <div className="flex items-center gap-2">
+                      {!conditionEditMode ? (
+                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-slate-300" onClick={() => {
+                          // Pre-populate edits from saved data
+                          const init: Record<string, { clientName: string; docUrls: string[] }> = {};
+                          for (const c of selectedMedical) {
+                            init[c] = { clientName: conditionDetails[c]?.clientName || "", docUrls: conditionDetails[c]?.docUrls || [] };
+                          }
+                          if (hasOther) init["Other"] = { clientName: conditionDetails["Other"]?.clientName || "", docUrls: conditionDetails["Other"]?.docUrls || [] };
+                          setConditionEdits(init);
+                          setConditionEditMode(true);
+                        }}>
+                          <Pencil className="h-3 w-3" /> Edit
+                        </Button>
+                      ) : (
+                        <>
+                          <Button size="sm" variant="outline" className="h-7 text-xs border-slate-300" onClick={() => { setConditionEditMode(false); setConditionEdits({}); }}>Cancel</Button>
+                          <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1" disabled={updateScreeningMutation.isPending} onClick={saveConditionDetails}>
+                            {updateScreeningMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Selected categories as badges */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {healthCategories.map((cat: string) => (
+                      <span key={cat} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">{cat}</span>
+                    ))}
+                  </div>
+
+                  {/* Medical condition sub-sections */}
+                  {selectedMedical.length > 0 && (
+                    <div className="space-y-4">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Required: Condition Details & Supporting Documents</p>
+                      {selectedMedical.map((condition: string) => {
+                        const cKey = condition;
+                        const cData = getCondEdit(cKey);
+                        const isMissing = !conditionDetails[cKey]?.clientName || (conditionDetails[cKey]?.docUrls || []).length === 0;
+                        return (
+                          <div key={cKey} className={`rounded-lg border p-4 ${isMissing ? "border-red-200 bg-red-50/40" : "border-slate-200 bg-slate-50/40"}`}>
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-sm font-semibold text-slate-800">{condition}</span>
+                              {isMissing && <span className="text-xs text-red-600 font-medium bg-red-100 px-2 py-0.5 rounded">Required</span>}
+                              {!isMissing && <span className="text-xs text-emerald-600 font-medium bg-emerald-100 px-2 py-0.5 rounded">Complete</span>}
+                            </div>
+
+                            {/* Client name for this condition */}
+                            <div className="mb-3">
+                              <Label className="text-xs text-slate-600 mb-1 block">Client name for this condition *</Label>
+                              {conditionEditMode ? (
+                                <Input
+                                  className="h-7 text-sm border-slate-300"
+                                  placeholder="Full name of client with this condition"
+                                  value={cData.clientName}
+                                  onChange={(e) => setConditionEdits((prev) => ({
+                                    ...prev,
+                                    [cKey]: { ...prev[cKey], clientName: e.target.value },
+                                  }))}
+                                />
+                              ) : (
+                                <p className={`text-sm ${cData.clientName ? "text-slate-900" : "text-red-500 italic"}`}>
+                                  {cData.clientName || "Not entered — required"}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Supporting documents */}
+                            <div>
+                              <Label className="text-xs text-slate-600 mb-1 block">Supporting documents *</Label>
+                              {cData.docUrls.length > 0 ? (
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                  {cData.docUrls.map((url: string, i: number) => (
+                                    <div key={i} className="flex items-center gap-1">
+                                      <a href={url} target="_blank" rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-xs bg-blue-50 border border-blue-200 rounded px-2 py-0.5 text-blue-700 hover:bg-blue-100">
+                                        <Paperclip className="w-3 h-3" /> Doc {i + 1}
+                                      </a>
+                                      {conditionEditMode && (
+                                        <button
+                                          onClick={() => setConditionEdits((prev) => ({
+                                            ...prev,
+                                            [cKey]: { ...prev[cKey], docUrls: prev[cKey].docUrls.filter((_, j) => j !== i) },
+                                          }))}
+                                          className="text-red-400 hover:text-red-600 text-xs"
+                                        >&times;</button>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                !conditionEditMode && <p className="text-sm text-red-500 italic mb-2">No documents uploaded — required</p>
+                              )}
+                              {conditionEditMode && (
+                                <>
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    id={`conditionDoc-${cKey}`}
+                                    onChange={(e) => handleConditionDocUpload(e, cKey)}
+                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                  />
+                                  <Button
+                                    type="button" variant="outline" size="sm"
+                                    className="h-7 text-xs gap-1 border-slate-300"
+                                    disabled={uploadingConditionDoc === cKey}
+                                    onClick={() => document.getElementById(`conditionDoc-${cKey}`)?.click()}
+                                  >
+                                    {uploadingConditionDoc === cKey ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                                    Upload Document
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Pregnant: due date reminder */}
+                  {hasPregnant && (
+                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/40 p-4">
+                      <p className="text-sm font-semibold text-amber-800 mb-1">Pregnant</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-slate-600">Due date</span>
+                        <span className={`text-sm ${fd.dueDate || screening.dueDate ? "text-slate-900" : "text-red-500 italic"}`}>
+                          {fd.dueDate || screening.dueDate ? new Date(fd.dueDate || screening.dueDate).toLocaleDateString() : "Not entered — required (edit in SCN section below)"}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Other: required follow-up text */}
+                  {hasOther && (() => {
+                    const otherSaved = conditionDetails["Other"]?.clientName || otherDetails;
+                    const otherDocsSaved = conditionDetails["Other"]?.docUrls || [];
+                    const otherEdit = conditionEditMode ? conditionEdits["Other"] : null;
+                    const otherNameVal = otherEdit?.clientName ?? otherSaved;
+                    const otherDocsVal = otherEdit?.docUrls ?? otherDocsSaved;
+                    const otherMissing = !otherSaved && !otherEdit?.clientName;
+                    return (
+                      <div className={`mt-4 rounded-lg border p-4 ${otherMissing ? "border-red-200 bg-red-50/40" : "border-slate-200 bg-slate-50/40"}`}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-sm font-semibold text-slate-800">Other</span>
+                          {otherMissing && <span className="text-xs text-red-600 font-medium bg-red-100 px-2 py-0.5 rounded">Required</span>}
+                          {!otherMissing && <span className="text-xs text-emerald-600 font-medium bg-emerald-100 px-2 py-0.5 rounded">Complete</span>}
+                        </div>
+                        <div className="mb-3">
+                          <Label className="text-xs text-slate-600 mb-1 block">Please describe the condition *</Label>
+                          {conditionEditMode ? (
+                            <Input
+                              className="h-7 text-sm border-slate-300"
+                              placeholder="Describe the health condition"
+                              value={otherEdit?.clientName || ""}
+                              onChange={(e) => setConditionEdits((prev) => ({
+                                ...prev,
+                                "Other": { clientName: e.target.value, docUrls: prev["Other"]?.docUrls || [] },
+                              }))}
+                            />
+                          ) : (
+                            <p className={`text-sm ${otherNameVal ? "text-slate-900" : "text-red-500 italic"}`}>
+                              {otherNameVal || "Not entered — required"}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <Label className="text-xs text-slate-600 mb-1 block">Supporting documents *</Label>
+                          {otherDocsVal.length > 0 ? (
+                            <div className="flex flex-wrap gap-2 mb-2">
+                              {otherDocsVal.map((url: string, i: number) => (
+                                <div key={i} className="flex items-center gap-1">
+                                  <a href={url} target="_blank" rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs bg-blue-50 border border-blue-200 rounded px-2 py-0.5 text-blue-700 hover:bg-blue-100">
+                                    <Paperclip className="w-3 h-3" /> Doc {i + 1}
+                                  </a>
+                                  {conditionEditMode && (
+                                    <button
+                                      onClick={() => setConditionEdits((prev) => ({
+                                        ...prev,
+                                        "Other": { ...prev["Other"], docUrls: prev["Other"].docUrls.filter((_, j) => j !== i) },
+                                      }))}
+                                      className="text-red-400 hover:text-red-600 text-xs"
+                                    >&times;</button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            !conditionEditMode && <p className="text-sm text-red-500 italic mb-2">No documents uploaded — required</p>
+                          )}
+                          {conditionEditMode && (
+                            <>
+                              <input
+                                type="file"
+                                className="hidden"
+                                id="conditionDoc-Other"
+                                onChange={(e) => handleConditionDocUpload(e, "Other")}
+                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                              />
+                              <Button
+                                type="button" variant="outline" size="sm"
+                                className="h-7 text-xs gap-1 border-slate-300"
+                                disabled={uploadingConditionDoc === "Other"}
+                                onClick={() => document.getElementById("conditionDoc-Other")?.click()}
+                              >
+                                {uploadingConditionDoc === "Other" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                                Upload Document
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })()}
 
             <div className="bg-white rounded-lg border border-slate-200 p-6">
             <div className="flex items-center justify-between mb-4">
