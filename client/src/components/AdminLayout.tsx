@@ -28,10 +28,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [location] = useLocation();
 
-  // Poll unread notification count every 30 seconds
+  // Poll unread notification count every 30 seconds (assessors don't see the bell)
   const { data: unreadData } = trpc.notifications.unreadCount.useQuery(undefined, {
     refetchInterval: 30_000,
-    enabled: !!user,
+    enabled: !!user && user.role !== "assessor",
   });
   const unreadCount = unreadData?.count ?? 0;
 
@@ -120,8 +120,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             );
           })}
 
-          {/* Notifications bell — always visible to all staff */}
-          <Link href="/admin/notifications">
+          {/* Notifications bell — hidden for assessor role */}
+          {user.role !== "assessor" && <Link href="/admin/notifications">
             <button
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors ${
                 location === "/admin/notifications"
@@ -146,7 +146,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                   ? <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{unreadCount > 99 ? "99+" : unreadCount}</span>
                   : null}
             </button>
-          </Link>
+          </Link>}
         </nav>
 
         {/* User section at bottom */}
