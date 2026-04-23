@@ -7,7 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { applySecurityMiddleware } from "./security";
+import { applySecurityMiddleware, submissionLimiter, loginLimiter, uploadLimiter } from "./security";
 import { requestLogger } from "./logger";
 import { createClientEmail, getSubmissionById } from "../db";
 import { Webhook } from "svix";
@@ -189,6 +189,11 @@ async function startServer() {
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", ts: Date.now() });
   });
+
+  // Per-route rate limiters (applied before tRPC handler)
+  app.use("/api/trpc/submission.submit", submissionLimiter);
+  app.use("/api/trpc/auth.adminLogin", loginLimiter);
+  app.use("/api/trpc/upload.document", uploadLimiter);
 
   // tRPC API
   app.use(

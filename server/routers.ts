@@ -200,7 +200,10 @@ export const appRouter = router({
         console.log(`[Submission] ✓ Saved to database (ref: ${refNumber})`);
       } catch (dbErr: any) {
         // MySQL duplicate-key error (UNIQUE constraint on medicaidId)
-        if (dbErr?.code === "ER_DUP_ENTRY" || dbErr?.errno === 1062) {
+        // Drizzle wraps the mysql2 error in dbErr.cause, so check both levels
+        const isDupEntry = dbErr?.code === "ER_DUP_ENTRY" || dbErr?.errno === 1062
+          || dbErr?.cause?.code === "ER_DUP_ENTRY" || dbErr?.cause?.errno === 1062;
+        if (isDupEntry) {
           const dup = await getSubmissionByMedicaidId(input.medicaidId);
           throw new TRPCError({
             code: "CONFLICT",
@@ -226,9 +229,15 @@ export const appRouter = router({
             incrementReferralUsage(input.ref).catch((err) => console.warn("[Referral] Failed to track:", err));
           }
           // Send emails (non-blocking, with individual try-catch)
+          // _skipEmail: true suppresses Resend calls during load tests / CI
+          const skipEmail = (input as any)._skipEmail === true;
           const emailPayload = { referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName, email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId, supermarket: input.supermarket, formData: input as unknown as Record<string, unknown> };
-          sendApplicantConfirmation(emailPayload).catch((err) => console.warn("[Email] Applicant confirmation failed:", err));
-          sendAdminNotification(emailPayload).catch((err) => console.warn("[Email] Admin notification failed:", err));
+          if (!skipEmail) {
+            sendApplicantConfirmation(emailPayload).catch((err) => console.warn("[Email] Applicant confirmation failed:", err));
+            sendAdminNotification(emailPayload).catch((err) => console.warn("[Email] Admin notification failed:", err));
+          } else {
+            console.log(`[Email] Skipped (load test mode) for ref: ${refNumber}`);
+          }
 
           // Generate Household Attestation + HIPAA PDF (non-blocking)
           generateAttestationPdf({
