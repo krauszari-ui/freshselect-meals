@@ -560,3 +560,11 @@
 - [ ] Auto-create notification on task status change
 - [ ] AdminNotifications.tsx page with full list, read/unread state, click-to-navigate
 - [ ] Bell icon in AdminLayout sidebar with live unread count badge
+
+## Health Categories Conditional Required Fields
+- [x] Add "Health Conditions" section to Assessment tab: for HIV/AIDS, Hypertension, Chronic Condition, Substance Use Disorder, Diabetes, SMI — show client name for that condition + document upload fields (required)
+- [x] Add "Other" health category follow-up answer field (required when Other is selected)
+- [x] Add "Pregnant" follow-up fields in health categories section (due date already exists in SCN, but also show in health categories section)
+- [x] Update canMarkCompleted validation to require conditionClientName + conditionDocuments for each medical condition category selected
+- [x] Update updateScreeningAnswers tRPC procedure to save conditionDetails (name + doc URLs per condition)
+- [x] Run tests and save checkpoint
