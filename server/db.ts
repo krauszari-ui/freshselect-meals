@@ -823,7 +823,9 @@ export async function getAssessmentReport() {
   const byNeighborhood: Record<string, { total: number; completed: number; pending: number }> = {};
   let grandTotal = 0, grandCompleted = 0, grandPending = 0;
 
-  for (const row of result as any[]) {
+  // Drizzle mysql2 execute() returns [rows, fields] — extract rows from index 0
+  const rows = (Array.isArray((result as any)[0]) ? (result as any)[0] : result) as any[];
+  for (const row of rows) {
     const total = Number(row.total);
     const completed = Number(row.completed);
     const pending = Number(row.pending);
