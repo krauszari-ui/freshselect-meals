@@ -568,3 +568,9 @@
 - [x] Update canMarkCompleted validation to require conditionClientName + conditionDocuments for each medical condition category selected
 - [x] Update updateScreeningAnswers tRPC procedure to save conditionDetails (name + doc URLs per condition)
 - [x] Run tests and save checkpoint
+
+## Assessment Tab Fixes (Round 2)
+- [x] Remove Health Categories card from Assessment tab (condition details belong on intake form only)
+- [x] Remove conditionDetails validation from canMarkCompleted (not an admin-side requirement)
+- [x] Fix Q10 (wants school help/training) not clearing missing-field flag when answered
+- [x] Fix SCN edit mode answers disappearing after save

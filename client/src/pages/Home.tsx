@@ -83,6 +83,8 @@ interface FormData {
   state: string;
   zipcode: string;
   healthCategories: string[];
+  conditionClientNames: Record<string, string>; // { [conditionKey]: clientName }
+  otherConditionDescription: string;
   dueDate: string;
   miscarriageDate: string;
   infantName: string;
@@ -157,6 +159,8 @@ const INITIAL_FORM: FormData = {
   state: "NY",
   zipcode: "",
   healthCategories: [],
+  conditionClientNames: {},
+  otherConditionDescription: "",
   dueDate: "",
   miscarriageDate: "",
   infantName: "",
@@ -240,6 +244,17 @@ const HEALTH_CATEGORIES = [
   "Hypertension",
   "Serious Mental Illness (SMI)",
   "Chronic Condition",
+  "Other",
+];
+
+// Categories that require a client name + supporting document upload
+const MEDICAL_CONDITION_CATEGORIES = [
+  "HIV / AIDS",
+  "Hypertension",
+  "Chronic Condition",
+  "Substance Use Disorder",
+  "Diabetes",
+  "Serious Mental Illness (SMI)",
 ];
 
 const STEP_LABELS = [
@@ -272,7 +287,7 @@ function validateStep1(form: FormData): FormErrors {
   return e;
 }
 
-function validateStep2(form: FormData): FormErrors {
+function validateStep2(form: FormData, uploads?: Record<string, { url: string; fileName: string }>): FormErrors {
   const e: FormErrors = {};
   const sq = form.screeningQuestions;
   // Screening questions (kept: 1-4 and 5-8 renumbered)
@@ -291,6 +306,27 @@ function validateStep2(form: FormData): FormErrors {
   if (!form.newApplicant) e.newApplicant = "Required";
   // Transfer agency name required when transferring
   if (form.newApplicant === "Transfer" && !form.transferAgencyName.trim()) e.transferAgencyName = "Agency name is required for transfers";
+  // Medical condition categories: require client name + document
+  const selectedMedical = form.healthCategories.filter((c) => MEDICAL_CONDITION_CATEGORIES.includes(c));
+  for (const condition of selectedMedical) {
+    if (!form.conditionClientNames[condition]?.trim()) {
+      e[`conditionName_${condition}`] = `Client name for ${condition} is required`;
+    }
+    // Document upload check: category key is conditionDoc_<condition>
+    const docKey = `conditionDoc_${condition}`;
+    if (uploads && !uploads[docKey]) {
+      e[`conditionDoc_${condition}`] = `Supporting document for ${condition} is required`;
+    }
+  }
+  // Other: require description + document
+  if (form.healthCategories.includes("Other")) {
+    if (!form.otherConditionDescription.trim()) {
+      e.otherConditionDescription = "Please describe the condition";
+    }
+    if (uploads && !uploads["conditionDoc_Other"]) {
+      e["conditionDoc_Other"] = "Supporting document for Other condition is required";
+    }
+  }
   // Conditional health fields
   if (form.healthCategories.includes("Pregnant") && !form.dueDate)
     e.dueDate = "Due date is required";
@@ -748,7 +784,7 @@ export default function Home() {
   const goNext = () => {
     let errs: FormErrors = {};
     if (step === 1) errs = validateStep1(form);
-    else if (step === 2) errs = validateStep2(form);
+    else if (step === 2) errs = validateStep2(form, uploads);
     else if (step === 3) errs = validateStep3(form);
     else if (step === 4) errs = validateStep4(form);
 
@@ -779,6 +815,18 @@ export default function Home() {
       uploadedDocuments[key] = doc.url;
     }
 
+    // Build conditionDetails: { [conditionKey]: { clientName, docUrl } }
+    const conditionDetails: Record<string, { clientName: string; docUrl: string }> = {};
+    const allConditions = [...MEDICAL_CONDITION_CATEGORIES, "Other"];
+    for (const condition of allConditions) {
+      if (!form.healthCategories.includes(condition)) continue;
+      const clientName = condition === "Other" ? form.otherConditionDescription : (form.conditionClientNames[condition] || "");
+      const docUrl = uploads[`conditionDoc_${condition}`]?.url || "";
+      if (clientName || docUrl) {
+        conditionDetails[condition] = { clientName, docUrl };
+      }
+    }
+
     // Auto-populate hasWic/hasSnap from screening answers (UI fields were removed as duplicates)
     const hasWic = form.hasWic || form.screeningQuestions.receivesWic || "No";
     const hasSnap = form.hasSnap || form.screeningQuestions.receivesSnap || "No";
@@ -789,7 +837,8 @@ export default function Home() {
       hasSnap,
       ref: ref || undefined,
       uploadedDocuments: Object.keys(uploadedDocuments).length > 0 ? uploadedDocuments : undefined,
-    });
+      conditionDetails: Object.keys(conditionDetails).length > 0 ? conditionDetails : undefined,
+    } as any);
   };
 
   // ─── Render ─────────────────────────────────────────────────────────────
@@ -1166,6 +1215,70 @@ export default function Home() {
                         </label>
                       ))}
                     </div>
+
+                    {/* Medical condition sub-sections: client name + document upload */}
+                    {MEDICAL_CONDITION_CATEGORIES.filter((c) => form.healthCategories.includes(c)).map((condition) => (
+                      <div key={condition} className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-3 space-y-3">
+                        <h4 className="font-semibold text-stone-700 flex items-center gap-2">
+                          <span className="text-blue-600">♥</span> {condition} — Required Details
+                        </h4>
+                        <div>
+                          <Label className="text-stone-700">Client name for this condition *</Label>
+                          <Input
+                            value={form.conditionClientNames[condition] || ""}
+                            onChange={(e) => update("conditionClientNames", { ...form.conditionClientNames, [condition]: e.target.value })}
+                            className={errors[`conditionName_${condition}`] ? "border-red-400 mt-1" : "mt-1"}
+                            placeholder="Full name of the person with this condition"
+                          />
+                          {errors[`conditionName_${condition}`] && (
+                            <p className="text-red-500 text-xs mt-1">{errors[`conditionName_${condition}`]}</p>
+                          )}
+                        </div>
+                        <FileUploadField
+                          label={`Supporting document for ${condition} *`}
+                          category={`conditionDoc_${condition}`}
+                          uploads={uploads}
+                          setUploads={setUploads}
+                          uploading={uploading}
+                          setUploading={setUploading}
+                        />
+                        {errors[`conditionDoc_${condition}`] && (
+                          <p className="text-red-500 text-xs">{errors[`conditionDoc_${condition}`]}</p>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Other condition: description + document */}
+                    {form.healthCategories.includes("Other") && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-3 space-y-3">
+                        <h4 className="font-semibold text-stone-700 flex items-center gap-2">
+                          <span className="text-blue-600">♥</span> Other Condition — Required Details
+                        </h4>
+                        <div>
+                          <Label className="text-stone-700">Please describe the condition *</Label>
+                          <Input
+                            value={form.otherConditionDescription}
+                            onChange={(e) => update("otherConditionDescription", e.target.value)}
+                            className={errors.otherConditionDescription ? "border-red-400 mt-1" : "mt-1"}
+                            placeholder="Describe the health condition"
+                          />
+                          {errors.otherConditionDescription && (
+                            <p className="text-red-500 text-xs mt-1">{errors.otherConditionDescription}</p>
+                          )}
+                        </div>
+                        <FileUploadField
+                          label="Supporting document for Other condition *"
+                          category="conditionDoc_Other"
+                          uploads={uploads}
+                          setUploads={setUploads}
+                          uploading={uploading}
+                          setUploading={setUploading}
+                        />
+                        {errors["conditionDoc_Other"] && (
+                          <p className="text-red-500 text-xs">{errors["conditionDoc_Other"]}</p>
+                        )}
+                      </div>
+                    )}
 
                     {/* Conditional: Pregnant -> Due Date */}
                     {form.healthCategories.includes("Pregnant") && (
