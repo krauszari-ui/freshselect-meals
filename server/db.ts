@@ -861,6 +861,18 @@ export async function getAssessmentReport() {
   return { grandTotal, grandCompleted, grandPending, byStage, byVendor, byNeighborhood };
 }
 
+// ─── Completed Assessments Export ───────────────────────────────────────────
+
+export async function getCompletedAssessmentsExport() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db
+    .select()
+    .from(submissions)
+    .where(sql`${submissions.assessmentCompletedAt} IS NOT NULL`)
+    .orderBy(asc(submissions.lastName), asc(submissions.firstName));
+}
+
 // ─── Bulk Fetch by IDs (for PDF export) ──────────────────────────────────────
 
 export async function getSubmissionsByIds(ids: number[]) {

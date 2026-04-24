@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Clock, Users, BarChart3, Store, MapPin, Layers, RefreshCw, AlertCircle, Download } from "lucide-react";
+import { CheckCircle2, Clock, Users, BarChart3, Store, MapPin, Layers, RefreshCw, AlertCircle, Download, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { toast } from "sonner";
@@ -232,9 +232,96 @@ async function exportAssessmentReportPDF(data: {
   URL.revokeObjectURL(url);
 }
 
+function escapeCSV(val: unknown): string {
+  if (val === null || val === undefined) return "";
+  const s = String(val).replace(/"/g, '""');
+  return /[,"\n\r]/.test(s) ? `"${s}"` : s;
+}
+
+function downloadCSV(rows: unknown[][], filename: string) {
+  const csv = rows.map(r => r.map(escapeCSV).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function AdminAssessmentReport() {
   const { data, isLoading, isError, error, refetch } = trpc.admin.assessmentReport.useQuery();
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [csvExporting, setCsvExporting] = useState(false);
+  const exportQuery = trpc.admin.exportCompletedAssessments.useQuery(undefined, { enabled: false });
+
+  const handleExportCSV = async () => {
+    setCsvExporting(true);
+    try {
+      const result = await exportQuery.refetch();
+      const clients = (result.data ?? []) as any[];
+      if (clients.length === 0) { toast.info("No completed assessments to export."); return; }
+
+      const headers = [
+        "Reference #", "First Name", "Last Name", "Date of Birth", "Medicaid ID",
+        "Cell Phone", "Home Phone", "Email",
+        "Street Address", "Apt/Unit", "City", "State", "Zipcode", "Neighborhood", "Borough",
+        "Stage", "Status", "Supermarket",
+        "Health Categories", "Due Date", "Miscarriage Date",
+        "Infant Name", "Infant DOB", "Infant Medicaid ID",
+        "Employed", "Spouse Employed", "Has WIC", "Has SNAP",
+        "New Applicant", "Transfer Agency",
+        "Household Members Count", "Food Allergies", "Dietary Restrictions",
+        "Meal Focus", "Needs Refrigerator", "Needs Microwave", "Needs Cooking Utensils",
+        "Guardian Name", "HIPAA Consent At",
+        "Assessment Completed At", "Assessment Completed By",
+        "Referral Source", "Intake Rep", "Assigned Worker",
+        "Created At", "Updated At",
+        // SCN Screening
+        "SCN: Living Situation", "SCN: Utility Shutoff", "SCN: Receives SNAP", "SCN: Receives WIC",
+        "SCN: Household Members Count", "SCN: Members with Medicaid",
+        "SCN: Needs Work Assistance", "SCN: Wants School Help", "SCN: Transportation Barrier",
+        "SCN: Medications Require Refrigeration", "SCN: Pregnant/Postpartum", "SCN: Breastmilk Refrigeration",
+      ];
+
+      const rows = clients.map((c: any) => {
+        const fd = (c.formData ?? {}) as any;
+        const sq = fd.screeningQuestions ?? fd.screening ?? {};
+        return [
+          c.referenceNumber, c.firstName, c.lastName, c.dateOfBirth, c.medicaidId,
+          c.cellPhone, c.homePhone, c.email,
+          c.streetAddress, c.aptUnit, c.city, c.state, c.zipcode, c.neighborhood, c.borough,
+          c.stage, c.status, c.supermarket,
+          (fd.healthCategories ?? []).join("; "),
+          fd.dueDate, fd.miscarriageDate,
+          fd.infantName, fd.infantDateOfBirth, fd.infantMedicaidId,
+          fd.employed, fd.spouseEmployed, fd.hasWic, fd.hasSnap,
+          fd.newApplicant, fd.transferAgencyName,
+          c.additionalMembersCount, fd.foodAllergiesDetails ?? fd.foodAllergies, fd.dietaryRestrictions,
+          (fd.mealFocus ?? []).join("; "),
+          fd.needsRefrigerator, fd.needsMicrowave, fd.needsCookingUtensils,
+          fd.guardianName,
+          c.hipaaConsentAt ? new Date(c.hipaaConsentAt).toLocaleString() : "",
+          c.assessmentCompletedAt ? new Date(c.assessmentCompletedAt).toLocaleString() : "",
+          c.assessmentCompletedBy,
+          c.referralSource, c.intakeRep, c.assignedWorker,
+          c.createdAt ? new Date(c.createdAt).toLocaleString() : "",
+          c.updatedAt ? new Date(c.updatedAt).toLocaleString() : "",
+          sq.livingSituation, sq.utilityShutoff, sq.receivesSnap, sq.receivesWic,
+          sq.householdMembersCount, sq.householdMembersWithMedicaid,
+          sq.needsWorkAssistance, sq.wantsSchoolHelp ?? sq.wantsSchoolTraining, sq.transportationBarrier,
+          sq.medicationsRequireRefrigeration, sq.pregnantOrPostpartum, sq.breastmilkRefrigeration,
+        ];
+      });
+
+      downloadCSV([headers, ...rows], `freshselect-completed-assessments-${new Date().toISOString().split("T")[0]}.csv`);
+      toast.success(`Exported ${clients.length} completed assessment${clients.length !== 1 ? "s" : ""}`);
+    } catch (err: any) {
+      toast.error("CSV export failed: " + (err?.message || "Unknown error"));
+    } finally {
+      setCsvExporting(false);
+    }
+  };
 
   const handleDownloadPDF = async () => {
     if (!data) return;
@@ -310,18 +397,33 @@ export default function AdminAssessmentReport() {
               Overview of SCN screening assessment completion across all clients
             </p>
           </div>
-          <Button
-            onClick={handleDownloadPDF}
-            disabled={pdfExporting || !data}
-            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
-          >
-            {pdfExporting ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            {pdfExporting ? "Generating..." : "Download PDF"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleExportCSV}
+              disabled={csvExporting}
+              className="gap-2 border-teal-600 text-teal-700 hover:bg-teal-50 shrink-0"
+            >
+              {csvExporting ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="h-4 w-4" />
+              )}
+              {csvExporting ? "Exporting..." : "Export CSV"}
+            </Button>
+            <Button
+              onClick={handleDownloadPDF}
+              disabled={pdfExporting || !data}
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+            >
+              {pdfExporting ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              {pdfExporting ? "Generating..." : "Download PDF"}
+            </Button>
+          </div>
         </div>
 
         {/* Summary Cards */}

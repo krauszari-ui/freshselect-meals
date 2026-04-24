@@ -609,3 +609,8 @@
 - [ ] Change 3: Pre-fill assessment answers from intake form data
 - [ ] Change 4: Change supporting documents from required to preferred
 - [ ] Change 5: Fix document/image upload errors
+
+## Export Completed Assessments
+- [ ] Add exportAssessments tRPC procedure returning all completed assessments with full client data
+- [ ] Add Export CSV button to assessment reports page
+- [ ] Run tests and save checkpoint
