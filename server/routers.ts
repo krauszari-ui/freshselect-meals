@@ -26,6 +26,7 @@ import {
   createStageHistoryEntry, getStageHistoryBySubmission,
   getFilterCounts,
   getAssessmentReport,
+  getCompletedAssessmentsExport,
   getSubmissionsByIds,
   createNotification, listNotifications, getUnreadNotificationCount,
   markNotificationRead, markAllNotificationsRead,
@@ -398,6 +399,7 @@ export const appRouter = router({
     }),
 
     assessmentReport: staffProcedure.query(async () => getAssessmentReport()),
+    exportCompletedAssessments: staffProcedure.query(async () => getCompletedAssessmentsExport()),
 
     bulkGetByIds: staffProcedure.input(z.object({ ids: z.array(z.number()).min(1).max(200) })).query(async ({ input }) => {
       return getSubmissionsByIds(input.ids);
