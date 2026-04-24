@@ -592,3 +592,13 @@
 ## Assessment & Overview Fixes (Round 4)
 - [x] Fix Q8 (members with Medicaid) to read from screeningQuestions first, not stale intake value
 - [x] Add Postpartum infant sub-fields (infant name, DOB, Medicaid ID) to admin Overview tab Health Categories section
+
+## Full QA Sweep Fixes (Apr 24)
+- [x] AdminTasks: Wire Intake Rep filter (hard-coded value="all", no onValueChange)
+- [x] AdminTasks: Wire Assigned Worker filter (hard-coded value="all", no onValueChange)
+- [x] AdminTasks: Wire Completed From / To date filters (no state binding)
+- [x] AdminTasks: Add assignedTo + completedFrom/completedTo to tasks.list tRPC procedure and listTasks DB helper
+- [x] AdminClients: Remove broken "Zipcode Eligibility" placeholder filter
+- [x] AdminClients: Fix AddClientDialog hardcoded dummy household member and healthCategories
+- [x] ReferrerPortal: Fix null-safety crash in client search (firstName/lastName/email/cellPhone may be null)
+- [x] AdminDocuments: Fix upload button state — setUploading(false) fires before mutation completes

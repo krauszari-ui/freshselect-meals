@@ -59,16 +59,18 @@ export default function AdminDocuments() {
       const base64 = btoa(
         new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
       );
-      uploadMutation.mutate({
-        name: uploadData.fileName || file.name,
-        category: uploadData.category as any,
-        fileData: base64,
-        contentType: file.type || "application/octet-stream",
-        submissionId: null,
-      });
+      uploadMutation.mutate(
+        {
+          name: uploadData.fileName || file.name,
+          category: uploadData.category as any,
+          fileData: base64,
+          contentType: file.type || "application/octet-stream",
+          submissionId: null,
+        },
+        { onSettled: () => setUploading(false) }
+      );
     } catch {
       toast.error("Failed to read file");
-    } finally {
       setUploading(false);
     }
   };

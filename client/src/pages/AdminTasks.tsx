@@ -19,6 +19,9 @@ export default function AdminTasks() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"open" | "completed" | "verified">("open");
   const [areaFilter, setAreaFilter] = useState("all");
+  const [assignedToFilter, setAssignedToFilter] = useState("all");
+  const [completedFrom, setCompletedFrom] = useState("");
+  const [completedTo, setCompletedTo] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [newTask, setNewTask] = useState({ submissionId: "", description: "", area: "intake_rep" as "intake_rep" | "assigned_worker" });
 
@@ -33,6 +36,9 @@ export default function AdminTasks() {
     search: debouncedSearch || undefined,
     status: statusFilter,
     area: areaFilter !== "all" ? areaFilter as any : undefined,
+    assignedTo: assignedToFilter !== "all" ? Number(assignedToFilter) : undefined,
+    completedFrom: completedFrom || undefined,
+    completedTo: completedTo || undefined,
   });
   const statsQuery = trpc.admin.tasks.stats.useQuery();
   const staffQuery = trpc.admin.staffList.useQuery();
@@ -104,26 +110,13 @@ export default function AdminTasks() {
               </SelectContent>
             </Select>
 
-            {/* Intake Rep */}
-            <Select value="all">
+            {/* Assigned To */}
+            <Select value={assignedToFilter} onValueChange={(v) => { setAssignedToFilter(v); }}>
               <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Intake Rep" />
+                <SelectValue placeholder="Assigned To" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                {staffList.map((s: any) => (
-                  <SelectItem key={s.id} value={String(s.id)}>{s.name || `User #${s.id}`}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Assigned Worker */}
-            <Select value="all">
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Assigned Worker" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="all">All Staff</SelectItem>
                 {staffList.map((s: any) => (
                   <SelectItem key={s.id} value={String(s.id)}>{s.name || `User #${s.id}`}</SelectItem>
                 ))}
@@ -131,10 +124,20 @@ export default function AdminTasks() {
             </Select>
 
             {/* Completed From */}
-            <Input type="date" className="h-9 text-sm" placeholder="mm/dd/yyyy" />
+            <Input
+              type="date"
+              className="h-9 text-sm"
+              value={completedFrom}
+              onChange={(e) => setCompletedFrom(e.target.value)}
+            />
 
             {/* Completed To */}
-            <Input type="date" className="h-9 text-sm" placeholder="mm/dd/yyyy" />
+            <Input
+              type="date"
+              className="h-9 text-sm"
+              value={completedTo}
+              onChange={(e) => setCompletedTo(e.target.value)}
+            />
           </div>
         </div>
 

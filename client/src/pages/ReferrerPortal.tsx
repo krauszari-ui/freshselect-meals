@@ -156,10 +156,10 @@ export default function ReferrerPortal() {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
-      c.firstName.toLowerCase().includes(q) ||
-      c.lastName.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      c.cellPhone.includes(q)
+      (c.firstName ?? "").toLowerCase().includes(q) ||
+      (c.lastName ?? "").toLowerCase().includes(q) ||
+      (c.email ?? "").toLowerCase().includes(q) ||
+      (c.cellPhone ?? "").includes(q)
     );
   });
 
