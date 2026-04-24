@@ -180,7 +180,7 @@ export const appRouter = router({
       const refNumber = Math.random().toString(36).substring(2, 8).toUpperCase();
       const consentAt = new Date();
 
-      console.log(`[Submission] Processing new submission for ${input.firstName} ${input.lastName} (ref: ${refNumber})`);
+      console.log(`[Submission] Processing new submission (ref: ${refNumber})`);
 
       // Step 1: Save to database (this is the ONLY critical step)
       // Duplicate detection is now handled by the UNIQUE index on medicaidId (ER_DUP_ENTRY / errno 1062).
