@@ -416,7 +416,7 @@ export default function AdminClientDetail() {
     if (isBlank(screening.otherHealthIssues)) missing.push("Q13: Other health issues");
     if (isBlank(screening.medicationsRequireRefrigeration)) missing.push("Q14: Medications require refrigeration");
     const pregnantVal2 = screening.pregnantOrPostpartum ||
-      (healthCategories.includes("Pregnant") || healthCategories.includes("Postpartum") ? "Yes" : undefined);
+      (healthCategories.includes("Pregnant") || healthCategories.some((c: string) => c.startsWith("Postpartum")) ? "Yes" : undefined);
     if (isBlank(pregnantVal2)) missing.push("Q15: Pregnant or postpartum");
     if (String(pregnantVal2).toLowerCase() === "yes" || pregnantVal2 === true) {
       const dueDateVal = fd.dueDate || screening.dueDate;
@@ -1498,7 +1498,7 @@ export default function AdminClientDetail() {
                       chronicIllnessDetails: String(sc.chronicIllnessDetails || fd2.chronicIllnessDetails || ""),
                       otherHealthIssues: String(sc.otherHealthIssues || ""),
                       medicationsRequireRefrigeration: String(sc.medicationsRequireRefrigeration || ""),
-                      pregnantOrPostpartum: String(sc.pregnantOrPostpartum || (hc2.includes("Pregnant") || hc2.includes("Postpartum") ? "Yes" : "") || ""),
+                      pregnantOrPostpartum: String(sc.pregnantOrPostpartum || (hc2.includes("Pregnant") || hc2.some((c: string) => c.startsWith("Postpartum")) ? "Yes" : "") || ""),
                       dueDate: String(fd2.dueDate || sc.dueDate || ""),
                       breastmilkRefrigeration: String(sc.breastmilkRefrigeration || ""),
                       // Food allergies / dietary restrictions (top-level formData fields)
@@ -1636,7 +1636,7 @@ export default function AdminClientDetail() {
                   <div className="flex items-center justify-between py-2 border-b border-slate-100">
                     <span className="text-sm text-slate-600">{num}. {label}</span>
                     <Input
-                      type="number" min="0" max="20"
+                      type="number" min="0"
                       className="h-7 text-sm w-20 border-slate-300"
                       value={editVal}
                       onChange={(e) => setScnEdits((prev) => ({ ...prev, [field]: e.target.value }))}
@@ -1652,7 +1652,7 @@ export default function AdminClientDetail() {
 
               const pregnantVal = scnEdits.pregnantOrPostpartum !== undefined
                 ? scnEdits.pregnantOrPostpartum
-                : String(screening.pregnantOrPostpartum || (healthCategories.includes("Pregnant") || healthCategories.includes("Postpartum") ? "Yes" : ""));
+                : String(screening.pregnantOrPostpartum || (healthCategories.includes("Pregnant") || healthCategories.some((c: string) => c.startsWith("Postpartum")) ? "Yes" : ""));
               const chronicVal = scnEdits.hasChronicIllness !== undefined
                 ? scnEdits.hasChronicIllness
                 : String(screening.hasChronicIllness || "");
@@ -1688,7 +1688,7 @@ export default function AdminClientDetail() {
                   <YesNoRow num={6} label="Enrolled in Health Home" field="enrolledHealthHome" currentValue={screening.enrolledHealthHome || healthCategories.includes("Enrolled in Health Home Care Management")} />
 
                   {/* Q7–8: Household counts */}
-                  <NumberRow num={7} label="Household members" field="householdMemberCount" currentValue={fd.householdMemberCount || String(householdMembers.length)} />
+                  <NumberRow num={7} label="Household members" field="householdMemberCount" currentValue={screening.householdMembersCount || screening.householdMemberCount || fd.householdMembersCount || fd.householdMemberCount || String(householdMembers.length)} />
                   <NumberRow num={8} label="Household members with Medicaid" field="householdMembersWithMedicaid" currentValue={screening.householdMembersWithMedicaid} />
 
                   {/* Q9–11: Yes/No */}
@@ -1725,7 +1725,7 @@ export default function AdminClientDetail() {
 
                   {/* Q15: Pregnant or postpartum — Yes/No + conditional due date */}
                   {!scnEditMode ? (
-                    <ScreeningLine num={15} label="Pregnant or postpartum" value={screening.pregnantOrPostpartum || (healthCategories.includes("Pregnant") || healthCategories.includes("Postpartum") ? "Yes" : undefined)} />
+                    <ScreeningLine num={15} label="Pregnant or postpartum" value={screening.pregnantOrPostpartum || (healthCategories.includes("Pregnant") || healthCategories.some((c: string) => c.startsWith("Postpartum")) ? "Yes" : undefined)} />
                   ) : (
                     <div className="flex items-center justify-between py-2 border-b border-slate-100">
                       <span className="text-sm text-slate-600">15. Pregnant or postpartum</span>
@@ -1740,7 +1740,7 @@ export default function AdminClientDetail() {
                       </Select>
                     </div>
                   )}
-                  {(scnEditMode ? pregnantVal === "Yes" : (screening.pregnantOrPostpartum === "Yes" || screening.pregnantOrPostpartum === true || healthCategories.includes("Pregnant"))) && (
+                  {(scnEditMode ? pregnantVal === "Yes" : (screening.pregnantOrPostpartum === "Yes" || screening.pregnantOrPostpartum === true || healthCategories.includes("Pregnant") || healthCategories.some((c: string) => c.startsWith("Postpartum")))) && (
                     <div className={`py-2 border-b border-slate-100 ${scnEditMode ? "bg-blue-50/50 px-3 rounded" : ""}`}>
                       {scnEditMode ? (
                         <div className="space-y-1">

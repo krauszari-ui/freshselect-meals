@@ -584,3 +584,7 @@
 - [x] Add Audit Log nav item to AdminLayout (admin-only section)
 - [x] Update submission.test.ts mock to include createNotification, logAudit, getAuditLogs
 - [x] 115/115 tests passing
+
+## Assessment Bug Fixes (Round 3)
+- [x] Fix numeric SCN answers jumping to wrong value on save (e.g. 10 → 9)
+- [x] Fix Pregnant/health categories not showing in assessment tab when selected in intake form
