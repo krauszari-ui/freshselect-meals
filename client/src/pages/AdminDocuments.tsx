@@ -50,15 +50,14 @@ export default function AdminDocuments() {
 
   const docs = (docsQuery.data ?? []) as any[];
 
-  const handleFileUpload = async () => {
+  const handleFileUpload = () => {
     const file = fileRef.current?.files?.[0];
     if (!file) { toast.error("Please select a file"); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("File must be under 10 MB"); return; }
     setUploading(true);
-    try {
-      const buffer = await file.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
-      );
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
       uploadMutation.mutate(
         {
           name: uploadData.fileName || file.name,
@@ -69,10 +68,12 @@ export default function AdminDocuments() {
         },
         { onSettled: () => setUploading(false) }
       );
-    } catch {
-      toast.error("Failed to read file");
+    };
+    reader.onerror = () => {
+      toast.error("Failed to read file. Please try again.");
       setUploading(false);
-    }
+    };
+    reader.readAsDataURL(file);
   };
 
   return (

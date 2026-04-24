@@ -60,8 +60,6 @@ interface ScreeningQuestions {
   needsWorkAssistance: string;
   wantsSchoolHelp: string;
   transportationBarrier: string;
-  hasChronicIllness: string;
-  otherHealthIssues: string;
   medicationsRequireRefrigeration: string;
   pregnantOrPostpartum: string;
   breastmilkRefrigeration: string;
@@ -136,8 +134,6 @@ const INITIAL_SCREENING: ScreeningQuestions = {
   needsWorkAssistance: "",
   wantsSchoolHelp: "",
   transportationBarrier: "",
-  hasChronicIllness: "",
-  otherHealthIssues: "",
   medicationsRequireRefrigeration: "",
   pregnantOrPostpartum: "",
   breastmilkRefrigeration: "",
@@ -295,8 +291,6 @@ function validateStep2(form: FormData, uploads?: Record<string, { url: string; f
   if (!sq.utilityShutoff) e["sq.utilityShutoff"] = "Required";
   if (!sq.receivesSnap) e["sq.receivesSnap"] = "Required";
   if (!sq.receivesWic) e["sq.receivesWic"] = "Required";
-  if (!sq.hasChronicIllness) e["sq.hasChronicIllness"] = "Required";
-  if (!sq.otherHealthIssues) e["sq.otherHealthIssues"] = "Required";
   if (!sq.medicationsRequireRefrigeration) e["sq.medicationsRequireRefrigeration"] = "Required";
   if (!sq.breastmilkRefrigeration) e["sq.breastmilkRefrigeration"] = "Required";
   // Health categories required
@@ -312,20 +306,14 @@ function validateStep2(form: FormData, uploads?: Record<string, { url: string; f
     if (!form.conditionClientNames[condition]?.trim()) {
       e[`conditionName_${condition}`] = `Client name for ${condition} is required`;
     }
-    // Document upload check: category key is conditionDoc_<condition>
-    const docKey = `conditionDoc_${condition}`;
-    if (uploads && !uploads[docKey]) {
-      e[`conditionDoc_${condition}`] = `Supporting document for ${condition} is required`;
-    }
+    // Document upload is preferred but not required
   }
   // Other: require description + document
   if (form.healthCategories.includes("Other")) {
     if (!form.otherConditionDescription.trim()) {
       e.otherConditionDescription = "Please describe the condition";
     }
-    if (uploads && !uploads["conditionDoc_Other"]) {
-      e["conditionDoc_Other"] = "Supporting document for Other condition is required";
-    }
+    // Document upload for Other is preferred but not required
   }
   // Conditional health fields
   if (form.healthCategories.includes("Pregnant") && !form.dueDate)
@@ -1163,12 +1151,10 @@ export default function Home() {
                       </div>
                     ))}
 
-                    {/* Q5-Q8 Yes/No */}
+                    {/* Q5-Q6 Yes/No */}
                     {[
-                      { key: "hasChronicIllness" as const, label: "5. Has chronic illness *" },
-                      { key: "otherHealthIssues" as const, label: "6. Other known health issues *" },
-                      { key: "medicationsRequireRefrigeration" as const, label: "7. Medications require refrigeration *" },
-                      { key: "breastmilkRefrigeration" as const, label: "8. Breastmilk refrigeration needed *" },
+                      { key: "medicationsRequireRefrigeration" as const, label: "5. Medications require refrigeration *" },
+                      { key: "breastmilkRefrigeration" as const, label: "6. Breastmilk refrigeration needed *" },
                     ].map(({ key, label }) => (
                       <div key={key}>
                         <Label className="text-stone-700">{label}</Label>
@@ -1220,7 +1206,7 @@ export default function Home() {
                     {MEDICAL_CONDITION_CATEGORIES.filter((c) => form.healthCategories.includes(c)).map((condition) => (
                       <div key={condition} className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-3 space-y-3">
                         <h4 className="font-semibold text-stone-700 flex items-center gap-2">
-                          <span className="text-blue-600">♥</span> {condition} — Required Details
+                          <span className="text-blue-600">♥</span> {condition} — Details
                         </h4>
                         <div>
                           <Label className="text-stone-700">Client name for this condition *</Label>
@@ -1235,7 +1221,7 @@ export default function Home() {
                           )}
                         </div>
                         <FileUploadField
-                          label={`Supporting document for ${condition} *`}
+                          label={`Supporting document for ${condition} (preferred)`}
                           category={`conditionDoc_${condition}`}
                           uploads={uploads}
                           setUploads={setUploads}
@@ -1252,7 +1238,7 @@ export default function Home() {
                     {form.healthCategories.includes("Other") && (
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-3 space-y-3">
                         <h4 className="font-semibold text-stone-700 flex items-center gap-2">
-                          <span className="text-blue-600">♥</span> Other Condition — Required Details
+                          <span className="text-blue-600">♥</span> Other Condition — Details
                         </h4>
                         <div>
                           <Label className="text-stone-700">Please describe the condition *</Label>
@@ -1267,7 +1253,7 @@ export default function Home() {
                           )}
                         </div>
                         <FileUploadField
-                          label="Supporting document for Other condition *"
+                          label="Supporting document for Other condition (preferred)"
                           category="conditionDoc_Other"
                           uploads={uploads}
                           setUploads={setUploads}

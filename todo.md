@@ -602,3 +602,10 @@
 - [x] AdminClients: Fix AddClientDialog hardcoded dummy household member and healthCategories
 - [x] ReferrerPortal: Fix null-safety crash in client search (firstName/lastName/email/cellPhone may be null)
 - [x] AdminDocuments: Fix upload button state — setUploading(false) fires before mutation completes
+
+## Sequential Changes (Apr 24)
+- [ ] Change 1: Remove SCN Q5 and Q6 from assessment questionnaire
+- [ ] Change 2: Display health category responses on client detail page
+- [ ] Change 3: Pre-fill assessment answers from intake form data
+- [ ] Change 4: Change supporting documents from required to preferred
+- [ ] Change 5: Fix document/image upload errors
