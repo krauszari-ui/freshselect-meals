@@ -574,3 +574,13 @@
 - [x] Remove conditionDetails validation from canMarkCompleted (not an admin-side requirement)
 - [x] Fix Q10 (wants school help/training) not clearing missing-field flag when answered
 - [x] Fix SCN edit mode answers disappearing after save
+
+## Admin Audit Log (Apr 24)
+- [x] Add audit_log table to Drizzle schema and apply migration SQL
+- [x] Add logAudit and getAuditLogs helpers to server/db.ts
+- [x] Wire logAudit into key admin mutations: stage_changed, assessment_completed/incomplete, scn_edited, notes_edited, client_deleted, client_approved, client_rejected
+- [x] Add auditLog.list tRPC procedure (admin-only, with action/actorId/clientId filters + pagination)
+- [x] Build AdminAuditLog page with color-coded action badges, timestamp, staff name, client link, details column, filters, and pagination
+- [x] Add Audit Log nav item to AdminLayout (admin-only section)
+- [x] Update submission.test.ts mock to include createNotification, logAudit, getAuditLogs
+- [x] 115/115 tests passing
