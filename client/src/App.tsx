@@ -17,6 +17,7 @@ import AdminClientDetail from "./pages/AdminClientDetail";
 import AdminDuplicates from "./pages/AdminDuplicates";
 import AdminAssessmentReport from "./pages/AdminAssessmentReport";
 import AdminNotifications from "./pages/AdminNotifications";
+import AdminAuditLog from "./pages/AdminAuditLog";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AdminReferrals from "./pages/AdminReferrals";
 import ReferrerPortal from "./pages/ReferrerPortal";
@@ -48,6 +49,7 @@ function Router() {
       <Route path={"/admin/duplicates"} component={AdminDuplicates} />
       <Route path={"/admin/assessment-report"} component={AdminAssessmentReport} />
       <Route path={"/admin/notifications"} component={AdminNotifications} />
+      <Route path={"/admin/audit-log"} component={AdminAuditLog} />
 
       {/* Referrer Portal */}
       <Route path={"/referrer"} component={ReferrerPortal} />

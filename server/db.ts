@@ -10,6 +10,7 @@ import {
   referralLinks, InsertReferralLink, ReferralLink,
   stageHistory, InsertStageHistory,
   notifications, InsertNotification, Notification,
+  auditLogs,
 } from "../drizzle/schema";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -904,3 +905,76 @@ export async function markAllNotificationsRead() {
 }
 
 export type { Notification };
+
+// ── Audit Log helpers ───────────────────────────────────────────────────────────────────────────────
+
+export interface LogAuditParams {
+  actorId?: number | null;
+  actorName?: string | null;
+  action: string;
+  clientId?: number | null;
+  clientName?: string | null;
+  details?: Record<string, unknown> | null;
+}
+
+/** Write an immutable audit log entry. Fire-and-forget: never throws. */
+export async function logAudit(params: LogAuditParams): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.insert(auditLogs).values({
+      actorId: params.actorId ?? null,
+      actorName: params.actorName ?? null,
+      action: params.action,
+      clientId: params.clientId ?? null,
+      clientName: params.clientName ?? null,
+      details: params.details ?? null,
+    });
+  } catch {
+    // Audit log failures must never break the main operation
+  }
+}
+
+export interface AuditLogRow {
+  id: number;
+  actorId: number | null;
+  actorName: string | null;
+  action: string;
+  clientId: number | null;
+  clientName: string | null;
+  details: unknown;
+  createdAt: Date;
+}
+
+export async function getAuditLogs(opts: {
+  limit?: number;
+  offset?: number;
+  action?: string;
+  actorId?: number;
+  clientId?: number;
+}): Promise<{ rows: AuditLogRow[]; total: number }> {
+  const db = await getDb();
+  if (!db) return { rows: [], total: 0 };
+
+  const { desc, eq: eqOp, and, count: countFn } = await import("drizzle-orm");
+  const conditions: ReturnType<typeof eqOp>[] = [];
+  if (opts.action) conditions.push(eqOp(auditLogs.action, opts.action));
+  if (opts.actorId) conditions.push(eqOp(auditLogs.actorId, opts.actorId));
+  if (opts.clientId) conditions.push(eqOp(auditLogs.clientId, opts.clientId));
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [rows, totalResult] = await Promise.all([
+    db.select().from(auditLogs)
+      .where(where)
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(opts.limit ?? 50)
+      .offset(opts.offset ?? 0),
+    db.select({ count: countFn() }).from(auditLogs).where(where),
+  ]);
+
+  return {
+    rows: rows as AuditLogRow[],
+    total: Number(totalResult[0]?.count ?? 0),
+  };
+}

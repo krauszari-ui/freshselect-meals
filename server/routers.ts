@@ -29,6 +29,7 @@ import {
   getSubmissionsByIds,
   createNotification, listNotifications, getUnreadNotificationCount,
   markNotificationRead, markAllNotificationsRead,
+  logAudit, getAuditLogs,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -516,6 +517,14 @@ export const appRouter = router({
         changedBy: ctx.user.id,
         changedByName: ctx.user.name ?? ctx.user.email ?? "Staff",
       });
+      // Audit log
+      await logAudit({
+        actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
+        action: "stage_changed",
+        clientId: input.id,
+        clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
+        details: { from: existing?.stage ?? null, to: input.stage },
+      });
       return { success: true };
     }),
 
@@ -675,8 +684,15 @@ export const appRouter = router({
       return { success: true };
     }),
 
-    deleteClient: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    deleteClient: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
+      const existing = await getSubmissionById(input.id);
       await deleteSubmission(input.id);
+      await logAudit({
+        actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin",
+        action: "client_deleted",
+        clientId: input.id,
+        clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
+      });
       return { success: true };
     }),
 
@@ -689,8 +705,15 @@ export const appRouter = router({
     updateAdminNotes: staffProcedure.input(z.object({
       id: z.number(),
       adminNotes: z.string(),
-    })).mutation(async ({ input }) => {
+    })).mutation(async ({ input, ctx }) => {
+      const existing = await getSubmissionById(input.id);
       await updateSubmissionFields(input.id, { adminNotes: input.adminNotes });
+      await logAudit({
+        actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
+        action: "notes_edited",
+        clientId: input.id,
+        clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
+      });
       return { success: true };
     }),
 
@@ -698,6 +721,7 @@ export const appRouter = router({
     approveClient: assessorProcedure.input(z.object({
       id: z.number(),
     })).mutation(async ({ input, ctx }) => {
+      const existing = await getSubmissionById(input.id);
       await updateSubmissionFields(input.id, {
         status: "approved",
         approvedBy: ctx.user.name || ctx.user.email || "Assessor",
@@ -706,6 +730,12 @@ export const appRouter = router({
         rejectedAt: null,
         rejectionReason: null,
       } as any);
+      await logAudit({
+        actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Assessor",
+        action: "client_approved",
+        clientId: input.id,
+        clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
+      });
       return { success: true };
     }),
 
@@ -713,6 +743,7 @@ export const appRouter = router({
       id: z.number(),
       reason: z.string().optional(),
     })).mutation(async ({ input, ctx }) => {
+      const existing = await getSubmissionById(input.id);
       await updateSubmissionFields(input.id, {
         status: "rejected",
         rejectedBy: ctx.user.name || ctx.user.email || "Assessor",
@@ -721,6 +752,13 @@ export const appRouter = router({
         approvedBy: null,
         approvedAt: null,
       } as any);
+      await logAudit({
+        actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Assessor",
+        action: "client_rejected",
+        clientId: input.id,
+        clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
+        details: input.reason ? { reason: input.reason } : undefined,
+      });
       return { success: true };
     }),
 
@@ -728,10 +766,17 @@ export const appRouter = router({
     updateAssessmentCompleted: staffProcedure.input(z.object({
       id: z.number(),
       completed: z.boolean(),
-    })).mutation(async ({ input }) => {
+    })).mutation(async ({ input, ctx }) => {
+      const existing = await getSubmissionById(input.id);
       await updateSubmissionFields(input.id, {
         assessmentCompletedAt: input.completed ? new Date() : null,
       } as any);
+      await logAudit({
+        actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
+        action: input.completed ? "assessment_completed" : "assessment_incomplete",
+        clientId: input.id,
+        clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
+      });
       return { success: true };
     }),
 
@@ -740,7 +785,7 @@ export const appRouter = router({
       // Full flat formData patch — top-level fields (screenerName, screeningDate, receivesSnap, etc.)
       // plus an optional nested 'screening' object that gets deep-merged
       formData: z.record(z.string(), z.unknown()),
-    })).mutation(async ({ input }) => {
+    })).mutation(async ({ input, ctx }) => {
       const existing = await getSubmissionById(input.id);
       if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       const existingFd = (existing.formData as Record<string, unknown>) || {};
@@ -758,6 +803,12 @@ export const appRouter = router({
         screening: mergedScreening, // keep legacy key in sync
       };
       await updateSubmissionFields(input.id, { formData: merged } as any);
+      await logAudit({
+        actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
+        action: "scn_edited",
+        clientId: input.id,
+        clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
+      });
       return { success: true };
     }),
 
@@ -1058,6 +1109,23 @@ export const appRouter = router({
       .mutation(async () => {
         await markAllNotificationsRead();
         return { success: true };
+      }),
+  }),
+
+  // ─── Audit Log ────────────────────────────────────────────────────────────
+  auditLog: router({
+    list: adminProcedure
+      .input(z.object({
+        action: z.string().optional(),
+        clientId: z.number().optional(),
+        actorId: z.number().optional(),
+        page: z.number().int().min(1).optional().default(1),
+        pageSize: z.number().int().min(1).max(100).optional().default(50),
+      }))
+      .query(async ({ input }) => {
+        const { page, pageSize, ...filters } = input;
+        const offset = (page - 1) * pageSize;
+        return getAuditLogs({ ...filters, limit: pageSize, offset });
       }),
   }),
 });

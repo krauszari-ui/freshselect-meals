@@ -138,6 +138,8 @@ vi.mock("./db", () => ({
   listClientEmails: vi.fn().mockResolvedValue([]),
   deleteClientEmailById: vi.fn().mockResolvedValue(undefined),
   getUserByEmail: vi.fn().mockResolvedValue(undefined),
+  logAudit: vi.fn().mockResolvedValue(undefined),
+  getAuditLogs: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
 }));
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
