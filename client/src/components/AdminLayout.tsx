@@ -3,7 +3,7 @@ import { getLoginUrl } from "@/const";
 import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Users, ClipboardList, FileText, Building2,
-  LogOut, Loader2, ShieldCheck, ChevronRight, Leaf, Link2, UserCog, AlertTriangle, BarChart3, Bell,
+  LogOut, Loader2, ShieldCheck, ChevronRight, Leaf, Link2, UserCog, AlertTriangle, BarChart3, Bell, ScrollText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { type ReactNode } from "react";
@@ -22,6 +22,7 @@ const ADMIN_ONLY_NAV_ITEMS = [
   { path: "/admin/workers", label: "Staff Management", icon: UserCog },
   { path: "/admin/duplicates", label: "Duplicate Scan", icon: AlertTriangle },
   { path: "/admin/assessment-report", label: "Assessment Report", icon: BarChart3 },
+  { path: "/admin/audit-log", label: "Audit Log", icon: ScrollText },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {

@@ -334,3 +334,23 @@ export const notifications = mysqlTable("notifications", {
 });
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
+
+/**
+ * Immutable audit trail of every admin action taken on client records.
+ */
+export const auditLogs = mysqlTable("auditLogs", {
+  id: int("id").primaryKey().autoincrement(),
+  /** ID of the staff member who performed the action */
+  actorId: int("actorId"),
+  /** Display name of the staff member */
+  actorName: varchar("actorName", { length: 256 }),
+  /** Machine-readable action key, e.g. 'stage_changed', 'assessment_completed' */
+  action: varchar("action", { length: 64 }).notNull(),
+  /** ID of the client record affected */
+  clientId: int("clientId"),
+  /** Display name of the client at time of action */
+  clientName: varchar("clientName", { length: 256 }),
+  /** JSON payload with action-specific details */
+  details: json("details"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
