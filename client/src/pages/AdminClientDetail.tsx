@@ -1382,6 +1382,38 @@ export default function AdminClientDetail() {
                     </div>
                   )}
 
+                  {/* Postpartum: infant sub-fields */}
+                  {healthCategories.some((c: string) => c.startsWith("Postpartum")) && (() => {
+                    const infantName = fd.infantName || "";
+                    const infantDob = fd.infantDateOfBirth || "";
+                    const infantMedicaidId = fd.infantMedicaidId || "";
+                    const allFilled = infantName && infantDob && infantMedicaidId;
+                    return (
+                      <div className={`mt-4 rounded-lg border p-4 ${allFilled ? "border-slate-200 bg-slate-50/40" : "border-amber-200 bg-amber-50/40"}`}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <p className="text-sm font-semibold text-amber-800">Postpartum — Infant Information</p>
+                          {!allFilled && <span className="text-xs text-amber-700 font-medium bg-amber-100 px-2 py-0.5 rounded">Incomplete</span>}
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-slate-600">Infant Name</span>
+                            <span className={`text-sm ${infantName ? "text-slate-900" : "text-slate-400 italic"}`}>{infantName || "Not provided"}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-slate-600">Infant Date of Birth</span>
+                            <span className={`text-sm ${infantDob ? "text-slate-900" : "text-slate-400 italic"}`}>
+                              {infantDob ? new Date(infantDob).toLocaleDateString() : "Not provided"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-slate-600">Infant Medicaid ID (CIN)</span>
+                            <span className={`text-sm font-mono ${infantMedicaidId ? "text-slate-900" : "text-slate-400 italic"}`}>{infantMedicaidId || "Not provided"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Other: required follow-up text */}
                   {hasOther && (() => {
                     const otherSaved = conditionDetails["Other"]?.clientName || otherDetails;
@@ -1689,7 +1721,7 @@ export default function AdminClientDetail() {
 
                   {/* Q7–8: Household counts */}
                   <NumberRow num={7} label="Household members" field="householdMemberCount" currentValue={screening.householdMembersCount || screening.householdMemberCount || fd.householdMembersCount || fd.householdMemberCount || String(householdMembers.length)} />
-                  <NumberRow num={8} label="Household members with Medicaid" field="householdMembersWithMedicaid" currentValue={screening.householdMembersWithMedicaid} />
+                  <NumberRow num={8} label="Household members with Medicaid" field="householdMembersWithMedicaid" currentValue={screening.householdMembersWithMedicaid || fd.householdMembersWithMedicaid} />
 
                   {/* Q9–11: Yes/No */}
                   <YesNoRow num={9} label="Needs work assistance" field="needsWorkAssistance" currentValue={screening.needsWorkAssistance} />
