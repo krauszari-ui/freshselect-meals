@@ -362,6 +362,8 @@ export interface ListTasksOptions {
   status?: "open" | "completed" | "verified" | "all";
   area?: "intake_rep" | "assigned_worker" | "all";
   assignedTo?: number;
+  completedFrom?: string;
+  completedTo?: string;
   page?: number;
   pageSize?: number;
 }
@@ -369,13 +371,15 @@ export interface ListTasksOptions {
 export async function listTasks(opts: ListTasksOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, area, assignedTo, page = 1, pageSize = 20 } = opts;
+  const { search, status, area, assignedTo, completedFrom, completedTo, page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
   if (search && search.trim()) conditions.push(like(tasks.description, `%${search.trim()}%`));
   if (status && status !== "all") conditions.push(eq(tasks.status, status));
   if (area && area !== "all") conditions.push(eq(tasks.area, area));
   if (assignedTo) conditions.push(eq(tasks.assignedTo, assignedTo));
+  if (completedFrom) conditions.push(gte(tasks.completedAt, new Date(completedFrom)));
+  if (completedTo) { const to = new Date(completedTo); to.setHours(23, 59, 59, 999); conditions.push(lte(tasks.completedAt, to)); }
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const [rows, countResult] = await Promise.all([
     db.select().from(tasks).where(where).orderBy(desc(tasks.createdAt)).limit(pageSize).offset(offset),

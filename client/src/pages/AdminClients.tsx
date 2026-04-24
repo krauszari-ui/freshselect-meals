@@ -132,13 +132,13 @@ function AddClientDialog({
       neighborhood: form.neighborhood,
       homePhone: "",
       aptUnit: "",
-      healthCategories: ["Chronic Condition"],
+      healthCategories: [],
       employed: "No",
       spouseEmployed: "No",
       hasWic: "No",
       hasSnap: "No",
       newApplicant: "Yes",
-      householdMembers: [{ name: "N/A", dateOfBirth: "2000-01-01", medicaidId: "AA00000A" }],
+      householdMembers: [],
       mealFocus: ["Lunch"],
       needsRefrigerator: "No",
       needsMicrowave: "No",
@@ -888,18 +888,6 @@ export default function AdminClients() {
                     </span>
                   </SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
-
-            {/* Zipcode Eligibility (placeholder) */}
-            <Select value="all">
-              <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
-                <SelectValue placeholder="Zipcode Eligibility" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Zipcode Eligibility</SelectItem>
-                <SelectItem value="eligible">Eligible</SelectItem>
-                <SelectItem value="ineligible">Ineligible</SelectItem>
               </SelectContent>
             </Select>
 

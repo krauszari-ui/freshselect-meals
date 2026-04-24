@@ -577,6 +577,8 @@ export const appRouter = router({
         status: z.enum(["all", "open", "completed", "verified"]).optional(),
         area: z.enum(["all", "intake_rep", "assigned_worker"]).optional(),
         assignedTo: z.number().optional(),
+        completedFrom: z.string().optional(),
+        completedTo: z.string().optional(),
         page: z.number().min(1).optional(), pageSize: z.number().min(1).max(100).optional(),
       })).query(async ({ input }) => listTasks(input)),
 
