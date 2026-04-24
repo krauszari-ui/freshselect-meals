@@ -588,3 +588,7 @@
 ## Assessment Bug Fixes (Round 3)
 - [x] Fix numeric SCN answers jumping to wrong value on save (e.g. 10 → 9)
 - [x] Fix Pregnant/health categories not showing in assessment tab when selected in intake form
+
+## Assessment & Overview Fixes (Round 4)
+- [x] Fix Q8 (members with Medicaid) to read from screeningQuestions first, not stale intake value
+- [x] Add Postpartum infant sub-fields (infant name, DOB, Medicaid ID) to admin Overview tab Health Categories section
