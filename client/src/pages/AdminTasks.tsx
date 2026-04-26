@@ -72,21 +72,21 @@ export default function AdminTasks() {
 
   return (
     <AdminLayout>
-      <div className="p-6 space-y-5">
+      <div className="p-3 sm:p-6 space-y-4 sm:space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Tasks & Action Items</h1>
             <p className="text-slate-500 text-sm mt-0.5">{taskStats.total} total tasks</p>
           </div>
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 h-9" onClick={() => setShowCreate(true)}>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 h-9 w-full sm:w-auto" onClick={() => setShowCreate(true)}>
             <Plus className="h-4 w-4" /> Create Task
           </Button>
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="bg-white rounded-lg border border-slate-200 p-3 sm:p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {/* Search */}
             <div className="relative col-span-2 sm:col-span-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />

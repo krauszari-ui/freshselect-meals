@@ -60,7 +60,7 @@ export default function AdminLogin() {
   // A Manus OAuth session with role 'user' should still see the login form, not Access Denied
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f0f7f0] via-background to-[#fdf6f0] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#f0f7f0] via-background to-[#fdf6f0] flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -79,7 +79,7 @@ export default function AdminLogin() {
         </div>
 
         <Card className="border-border/50 shadow-lg">
-          <CardContent className="p-8">
+          <CardContent className="p-5 sm:p-8">
             <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="text-center mb-2">
                   <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">

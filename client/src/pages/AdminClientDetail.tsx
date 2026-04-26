@@ -566,9 +566,9 @@ export default function AdminClientDetail() {
 
   return (
     <AdminLayout>
-      <div className="p-6 space-y-5">
+      <div className="p-3 sm:p-6 space-y-4 sm:space-y-5">
         {/* Header */}
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div className="flex items-start gap-3">
             <Link href="/admin/clients">
               <button className="mt-1.5 text-slate-400 hover:text-slate-600"><ArrowLeft className="h-5 w-5" /></button>
@@ -598,7 +598,7 @@ export default function AdminClientDetail() {
                   <span>Rejected by <strong>{(client as any).rejectedBy}</strong>{(client as any).rejectionReason ? ` — ${(client as any).rejectionReason}` : ""}</span>
                 </div>
               )}
-              <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
+              <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-slate-500">
                 <span>Intake Rep: <strong className="text-slate-700">{intakeRepName || "—"}</strong></span>
                 <span className="flex items-center gap-1.5">
                   Priority:
@@ -631,7 +631,7 @@ export default function AdminClientDetail() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Button variant="outline" size="sm" className="gap-1.5 text-slate-600 h-8" onClick={openEditDialog}>
               <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>

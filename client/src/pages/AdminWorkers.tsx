@@ -116,7 +116,7 @@ export default function AdminWorkers() {
     <div className="min-h-screen bg-[#faf8f5]">
       {/* Header */}
       <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link href="/admin/dashboard">
               <button className="p-2 hover:bg-stone-100 rounded-lg transition-colors">
@@ -138,9 +138,9 @@ export default function AdminWorkers() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+      <main className="max-w-6xl mx-auto px-4 py-4 sm:py-8 space-y-4 sm:space-y-6">
         {/* Role legend */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           {Object.entries(ROLE_LABELS).map(([role, { label, color, icon: Icon }]) => (
             <div key={role} className="bg-white border border-stone-200 rounded-xl p-4 flex items-center gap-3">
               <Icon className="w-5 h-5 text-stone-500 shrink-0" />

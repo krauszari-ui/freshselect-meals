@@ -47,7 +47,7 @@ export default function AdminNotifications() {
 
   return (
     <AdminLayout>
-      <div className="p-6 max-w-3xl mx-auto">
+      <div className="p-3 sm:p-6 max-w-3xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">

@@ -279,7 +279,7 @@ export default function AdminReferrals() {
 
   return (
     <AdminLayout>
-      <div className="p-6 space-y-5">
+      <div className="p-3 sm:p-6 space-y-4 sm:space-y-5">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -361,7 +361,7 @@ export default function AdminReferrals() {
             </Button>
           </div>
         ) : (
-          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden admin-table-wrap">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-200">
