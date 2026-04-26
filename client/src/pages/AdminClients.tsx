@@ -22,6 +22,7 @@ import {
 import * as XLSX from "xlsx";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { Link, useSearch, useLocation } from "wouter";
+import { formatLocalDate, formatLocalDateShort } from "@/lib/utils";
 import { toast } from "sonner";
 
 const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
@@ -600,7 +601,7 @@ export default function AdminClients() {
         // Personal Info
         y = drawSection(page, y, "Personal Information");
         const personalFields = [
-          ["Date of Birth", client.dateOfBirth ? new Date(client.dateOfBirth).toLocaleDateString() : "—"],
+          ["Date of Birth", formatLocalDateShort(client.dateOfBirth) ?? "—"],
           ["Cell Phone", client.cellPhone || "—"],
           ["Email", client.email || "—"],
           ["Address", `${fd.streetAddress || ""} ${fd.aptUnit || ""}, ${fd.city || ""}, ${fd.state || ""} ${fd.zipcode || ""}`],
@@ -1135,7 +1136,7 @@ export default function AdminClients() {
                     const avatarColor = getAvatarColor(`${client.firstName}${client.lastName}`);
                     const workerName = getWorkerName(client.assignedTo);
                     const stageInfo = STAGE_CONFIG[client.stage] || { label: client.stage, bg: "bg-slate-100", text: "text-slate-700" };
-                    const dob = fd.dateOfBirth ? new Date(fd.dateOfBirth).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "\u2014";
+                    const dob = formatLocalDate(fd.dateOfBirth) ?? "—";
                     const additionalCount = typeof client.additionalMembersCount === "number" ? client.additionalMembersCount : (fd.householdMembers?.length ?? 0);
                     const membersDisplay = additionalCount > 0 ? `1 + ${additionalCount}` : "1";
 
