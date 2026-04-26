@@ -690,7 +690,7 @@ export default function AdminClients() {
 
   return (
     <AdminLayout>
-      <div className="p-6 space-y-5">
+      <div className="p-3 sm:p-6 space-y-4 sm:space-y-5">
         {/* Assessor locked-view banner */}
         {isAssessor && (
           <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
@@ -700,12 +700,12 @@ export default function AdminClients() {
         )}
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Clients</h1>
             <p className="text-slate-500 text-sm mt-0.5">{totalCount} total clients</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <ExportDropdown filters={{
               stage: (stageFilter !== "all" && stageFilter !== "assessment_completed") ? stageFilter : undefined,
               supermarket: vendorFilter !== "all" ? vendorFilter : undefined,
@@ -1011,7 +1011,7 @@ export default function AdminClients() {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden admin-table-wrap">
           {listQuery.isLoading ? (
             <div className="flex justify-center py-20">
               <Loader2 className="h-8 w-8 animate-spin text-slate-400" />

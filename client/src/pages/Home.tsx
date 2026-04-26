@@ -489,22 +489,29 @@ function LandingPage({ onStart }: { onStart: () => void }) {
     <div className="min-h-screen bg-gradient-to-b from-stone-50 to-white">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-sm border-b border-stone-200 sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-700 rounded-xl flex items-center justify-center">
-              <Leaf className="w-6 h-6 text-white" />
+            <div className="w-9 h-9 bg-green-700 rounded-xl flex items-center justify-center shrink-0">
+              <Leaf className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-green-800 font-serif">FreshSelect Meals</h1>
-              <p className="text-xs text-stone-500">SCN Approved Vendor</p>
+              <h1 className="text-base font-bold text-green-800 font-serif leading-tight">FreshSelect Meals</h1>
+              <p className="text-xs text-stone-500 hidden sm:block">SCN Approved Vendor</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          {/* Desktop nav links */}
+          <div className="hidden sm:flex items-center gap-4">
             <a href="tel:7183074664" className="flex items-center gap-1.5 text-stone-600 hover:text-green-700 text-sm">
               <Phone className="w-4 h-4" /> (718) 307-4664
             </a>
             <a href="mailto:info@freshselectmeals.com" className="flex items-center gap-1.5 text-stone-600 hover:text-green-700 text-sm">
               <Mail className="w-4 h-4" /> info@freshselectmeals.com
+            </a>
+          </div>
+          {/* Mobile: phone icon only */}
+          <div className="flex sm:hidden items-center gap-2">
+            <a href="tel:7183074664" className="flex items-center justify-center w-10 h-10 rounded-lg bg-green-50 text-green-700">
+              <Phone className="w-5 h-5" />
             </a>
           </div>
         </div>
@@ -517,17 +524,17 @@ function LandingPage({ onStart }: { onStart: () => void }) {
           <div className="absolute top-10 left-10 w-64 h-64 bg-yellow-400 rounded-full blur-3xl" />
           <div className="absolute bottom-10 right-10 w-80 h-80 bg-green-400 rounded-full blur-3xl" />
         </div>
-        <div className="relative max-w-5xl mx-auto px-4 py-20 md:py-28 text-center">
-          <h2 className="text-3xl md:text-5xl font-bold text-white font-serif leading-tight mb-6">
+        <div className="relative max-w-5xl mx-auto px-4 py-12 md:py-28 text-center">
+          <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold text-white font-serif leading-tight mb-4 md:mb-6">
             Free Nutritious Meals and Food Support for Our Community
           </h2>
-          <p className="text-lg md:text-xl text-green-100 max-w-3xl mx-auto mb-8 leading-relaxed">
+          <p className="text-base md:text-xl text-green-100 max-w-3xl mx-auto mb-6 md:mb-8 leading-relaxed">
             If you are struggling to put healthy food on the table or have a medical condition that makes preparing meals difficult, we are here to help. Through the <strong className="text-white">New York Social Care Network (SCN)</strong> program, we provide free, home-delivered meals and grocery support to eligible Medicaid members.
           </p>
           <Button
             onClick={onStart}
             size="lg"
-            className="bg-amber-500 hover:bg-amber-600 text-white text-lg px-10 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all font-semibold"
+            className="bg-amber-500 hover:bg-amber-600 text-white text-base md:text-lg px-8 md:px-10 py-5 md:py-6 rounded-xl shadow-lg hover:shadow-xl transition-all font-semibold w-full sm:w-auto"
           >
             Start My Free Screening <ChevronRight className="w-5 h-5 ml-2" />
           </Button>
@@ -540,7 +547,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
       {/* How It Works */}
       <section className="max-w-5xl mx-auto px-4 py-16">
         <h3 className="text-2xl md:text-3xl font-bold text-green-800 font-serif text-center mb-12">How the Program Works</h3>
-        <div className="grid md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
           {[
             { step: "1", title: "Screening", desc: "Take a quick survey to identify your food needs.", icon: ClipboardList },
             { step: "2", title: "Eligibility Check", desc: "We verify your Medicaid status and clinical needs.", icon: ShieldCheck },
@@ -568,7 +575,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
           <p className="text-center text-stone-600 mb-10 max-w-3xl mx-auto">
             To receive Enhanced Nutrition Services, you must meet the following criteria:
           </p>
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
             {[
               { title: "Medicaid Status", desc: "Enrolled in Medicaid Managed Care (mainstream plans, HIV-SNPs, or HARP)." },
               { title: "Identified Need", desc: "Screen positive for an unmet need regarding food security." },
@@ -621,7 +628,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
           <Button
             onClick={onStart}
             size="lg"
-            className="bg-amber-500 hover:bg-amber-600 text-white text-lg px-10 py-6 rounded-xl shadow-lg"
+            className="bg-amber-500 hover:bg-amber-600 text-white text-base md:text-lg px-8 md:px-10 py-5 md:py-6 rounded-xl shadow-lg w-full sm:w-auto"
           >
             Start My Free Screening <ChevronRight className="w-5 h-5 ml-2" />
           </Button>
@@ -1894,12 +1901,12 @@ export default function Home() {
         </AnimatePresence>
 
         {/* Navigation Buttons */}
-        <div className="flex items-center justify-between mt-8 pb-8">
+        <div className="flex flex-col-reverse sm:flex-row items-center justify-between mt-8 pb-8 gap-3">
           <Button
             variant="outline"
             onClick={goBack}
             disabled={step === 1}
-            className="border-stone-300 text-stone-600"
+            className="border-stone-300 text-stone-600 w-full sm:w-auto"
           >
             <ChevronLeft className="w-4 h-4 mr-2" /> Previous
           </Button>
@@ -1911,7 +1918,7 @@ export default function Home() {
           <Button
             onClick={goNext}
             disabled={submitMutation.isPending}
-            className="bg-green-700 hover:bg-green-800 text-white"
+            className="bg-green-700 hover:bg-green-800 text-white w-full sm:w-auto"
           >
             {submitMutation.isPending ? (
               <>

@@ -131,4 +131,36 @@
       max-width: 1280px;
     }
   }
+
+  /* ── Global mobile safety ── */
+  html, body {
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Prevent tables from causing horizontal scroll on small screens */
+  .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Touch-friendly minimum tap target */
+  @media (max-width: 767px) {
+    button, a, [role="button"], input[type="submit"], input[type="button"] {
+      min-height: 44px;
+    }
+    /* Fluid base font */
+    html {
+      font-size: clamp(14px, 3.5vw, 16px);
+    }
+  }
+
+  /* Admin page tables: always scrollable on mobile */
+  .admin-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 0.5rem;
+  }
 }
