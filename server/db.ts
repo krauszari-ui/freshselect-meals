@@ -132,6 +132,7 @@ export interface ListSubmissionsOptions {
   referralSource?: string;
   assessmentCompleted?: boolean;
   zipcode?: string;
+  priority?: string;
   page?: number;
   pageSize?: number;
 }
@@ -139,7 +140,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, page = 1, pageSize = 20 } = opts;
+  const { search, status, stage, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -165,6 +166,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   if (assessmentCompleted === true) conditions.push(sql`${submissions.assessmentCompletedAt} IS NOT NULL`);
   else if (assessmentCompleted === false) conditions.push(sql`${submissions.assessmentCompletedAt} IS NULL`);
   if (zipcode && zipcode !== "all") conditions.push(eq(submissions.zipcode, zipcode));
+  if (priority && priority !== "all") conditions.push(eq(submissions.priority, priority as Submission["priority"]));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const [rows, countResult, membersResult] = await Promise.all([
@@ -179,6 +181,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
       createdAt: submissions.createdAt, updatedAt: submissions.updatedAt,
       assessmentCompletedAt: submissions.assessmentCompletedAt,
       transferAgencyName: submissions.transferAgencyName,
+      priority: submissions.priority,
     }).from(submissions).where(where).orderBy(desc(submissions.createdAt)).limit(pageSize).offset(offset),
     db.select({ count: sql<number>`count(*)` }).from(submissions).where(where),
     db.select({ totalAdditional: sql<number>`COALESCE(SUM(additionalMembersCount), 0)`, totalClients: sql<number>`count(*)` }).from(submissions).where(where),
@@ -561,6 +564,12 @@ export async function updateSubmissionFields(id: number, data: Partial<InsertSub
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(submissions).set(data).where(eq(submissions.id, id));
+}
+
+export async function updateSubmissionPriority(id: number, priority: Submission["priority"]): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(submissions).set({ priority }).where(eq(submissions.id, id));
 }
 
 export async function deleteSubmission(id: number): Promise<void> {

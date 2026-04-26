@@ -83,6 +83,8 @@ export const submissions = mysqlTable("submissions", {
   newApplicant: varchar("newApplicant", { length: 8 }),
   /** Name of the agency the client is transferring from (if transfer) */
   transferAgencyName: varchar("transferAgencyName", { length: 256 }),
+  /** Staff-assigned priority level for this client */
+  priority: mysqlEnum("priority", ["low", "normal", "high", "urgent"]).default("normal").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   /** When the SCN assessment was marked completed by staff */
   assessmentCompletedAt: timestamp("assessmentCompletedAt"),

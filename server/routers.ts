@@ -13,7 +13,7 @@ import {
   createCaseNote, getCaseNotesBySubmission,
   createDocument, getDocumentsBySubmission, getLibraryDocuments, deleteDocument,
   createService, getServicesBySubmission, updateServiceStatus,
-  updateSubmissionFields, deleteSubmission, bulkDeleteSubmissions,
+  updateSubmissionFields, updateSubmissionPriority, deleteSubmission, bulkDeleteSubmissions,
   createReferralLink, listReferralLinks, getReferralLinkByCode,
   updateReferralLink, deleteReferralLink, incrementReferralUsage, getReferralStats,
   getReferralLinkByEmail, getClientsByReferralCode, getUserByEmail,
@@ -342,9 +342,19 @@ export const appRouter = router({
       referralSource: z.string().optional(),
       assessmentCompleted: z.boolean().optional(),
       zipcode: z.string().optional(),
+      priority: z.string().optional(),
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional(),
     })).query(async ({ input }) => listSubmissions(input)),
+
+    updatePriority: staffProcedure.input(z.object({
+      id: z.number(),
+      priority: z.enum(["low", "normal", "high", "urgent"]),
+    })).mutation(async ({ input, ctx }) => {
+      await updateSubmissionPriority(input.id, input.priority);
+      await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email, action: "priority_changed", clientId: input.id, details: { priority: input.priority } });
+      return { success: true };
+    }),
 
     filterCounts: staffProcedure.query(async () => getFilterCounts()),
     getDuplicates: staffProcedure.query(async () => {
