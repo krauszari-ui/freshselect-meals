@@ -21,7 +21,8 @@ import {
 import {
   ArrowLeft, Loader2, FileText, Plus, ChevronDown, ChevronUp,
   Pencil, Trash2, Upload, ExternalLink, Link2, Save, MessageSquare, Send, Mail, Paperclip,
-  MailOpen, Reply, Clock, RefreshCw, CheckCircle2, XCircle, X,
+  MailOpen, Reply, Clock, RefreshCw, CheckCircle2, XCircle, X, Activity, User, Tag, Layers,
+  FileUp, StickyNote, CheckSquare, AlertTriangle, ShieldCheck,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Link, useParams, useLocation } from "wouter";
@@ -46,6 +47,62 @@ const DOCUMENT_TYPES = [
   { value: "medicaid_card", label: "Medicaid Card" },
   { value: "birth_certificate", label: "Birth Certificate" },
 ];
+
+// ─── Activity Tab Helpers ─────────────────────────────────────────────────
+function getActivityIcon(action: string) {
+  if (action.includes("stage")) return Layers;
+  if (action.includes("priority")) return Tag;
+  if (action.includes("note")) return StickyNote;
+  if (action.includes("document") || action.includes("upload")) return FileUp;
+  if (action.includes("task")) return CheckSquare;
+  if (action.includes("assessment")) return ShieldCheck;
+  if (action.includes("email")) return Mail;
+  if (action.includes("flag") || action.includes("duplicate")) return AlertTriangle;
+  if (action.includes("assign")) return User;
+  return Activity;
+}
+
+function getActivityMeta(action: string): { label: string; color: string } {
+  const map: Record<string, { label: string; color: string }> = {
+    stage_changed: { label: "Stage changed", color: "bg-blue-50 text-blue-500" },
+    priority_changed: { label: "Priority changed", color: "bg-orange-50 text-orange-500" },
+    note_added: { label: "Note added", color: "bg-yellow-50 text-yellow-600" },
+    document_uploaded: { label: "Document uploaded", color: "bg-violet-50 text-violet-500" },
+    task_created: { label: "Task created", color: "bg-teal-50 text-teal-600" },
+    task_completed: { label: "Task completed", color: "bg-emerald-50 text-emerald-600" },
+    assessment_completed: { label: "Assessment completed", color: "bg-emerald-50 text-emerald-600" },
+    email_sent: { label: "Email sent", color: "bg-sky-50 text-sky-500" },
+    email_received: { label: "Email received", color: "bg-sky-50 text-sky-500" },
+    flagged: { label: "Client flagged", color: "bg-red-50 text-red-500" },
+    unflagged: { label: "Flag removed", color: "bg-slate-50 text-slate-500" },
+    duplicate_merged: { label: "Duplicate merged", color: "bg-rose-50 text-rose-500" },
+    assigned: { label: "Staff assigned", color: "bg-indigo-50 text-indigo-500" },
+    client_created: { label: "Client created", color: "bg-emerald-50 text-emerald-600" },
+    client_updated: { label: "Client updated", color: "bg-slate-50 text-slate-500" },
+    client_deleted: { label: "Client deleted", color: "bg-red-50 text-red-500" },
+  };
+  return map[action] ?? { label: action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), color: "bg-slate-50 text-slate-400" };
+}
+
+function ActivityDetails({ action, details }: { action: string; details: any }) {
+  if (!details || typeof details !== "object") return null;
+  const parts: string[] = [];
+  if (action === "stage_changed" && details.from && details.to) {
+    parts.push(`${details.from} → ${details.to}`);
+  } else if (action === "priority_changed" && details.from && details.to) {
+    parts.push(`${details.from} → ${details.to}`);
+  } else if (action === "assigned" && details.assignedTo) {
+    parts.push(`Assigned to ${details.assignedTo}`);
+  } else if (details.subject) {
+    parts.push(details.subject);
+  } else if (details.name) {
+    parts.push(details.name);
+  } else if (details.type) {
+    parts.push(details.type);
+  }
+  if (parts.length === 0) return null;
+  return <p className="text-xs text-slate-500 mt-0.5">{parts.join(" • ")}</p>;
+}
 
 function InfoLine({ label, value }: { label: string; value: string | null | undefined }) {
   return (
@@ -118,7 +175,14 @@ export default function AdminClientDetail() {
   const staffQuery = trpc.admin.staffList.useQuery();
   const { data: stageHistoryData } = trpc.admin.stageHistory.useQuery({ id }, { enabled: id > 0 });
 
-  const [activeTab, setActiveTab] = useState<"overview" | "assessment" | "services">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "assessment" | "services" | "activity">("overview");
+  const [activityPage, setActivityPage] = useState(1);
+
+  const activityPageSize = 25;
+  const { data: activityData, isLoading: activityLoading } = trpc.auditLog.list.useQuery(
+    { clientId: id, page: activityPage, pageSize: activityPageSize },
+    { enabled: id > 0 && activeTab === "activity" }
+  );
   const [noteText, setNoteText] = useState("");
   const [docType, setDocType] = useState("provider_attestation");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -668,10 +732,17 @@ export default function AdminClientDetail() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-slate-200">
-          {(["overview", "assessment", "services"] as const).map((tab) => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
-              {tab === "overview" ? "Overview" : tab === "assessment" ? "Assessment" : "Services"}
+        <div className="flex gap-1 border-b border-slate-200 overflow-x-auto">
+          {(["overview", "assessment", "services", "activity"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex items-center gap-1.5 ${
+                activeTab === tab ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {tab === "activity" && <Activity className="h-3.5 w-3.5" />}
+              {tab === "overview" ? "Overview" : tab === "assessment" ? "Assessment" : tab === "services" ? "Services" : "Activity"}
             </button>
           ))}
         </div>
@@ -1754,6 +1825,95 @@ export default function AdminClientDetail() {
                 <p className="text-sm text-slate-400">No services yet. Add one to get started.</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Activity Tab */}
+        {activeTab === "activity" && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-lg border border-slate-200">
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
+                <Activity className="h-5 w-5 text-slate-400" />
+                <div>
+                  <h2 className="text-base font-semibold text-slate-900">Activity Log</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">All recorded actions for this client</p>
+                </div>
+                {activityData && (
+                  <span className="ml-auto text-xs text-slate-400">{activityData.total} event{activityData.total !== 1 ? "s" : ""}</span>
+                )}
+              </div>
+
+              {activityLoading ? (
+                <div className="flex justify-center py-16">
+                  <Loader2 className="h-7 w-7 animate-spin text-slate-300" />
+                </div>
+              ) : !activityData || activityData.rows.length === 0 ? (
+                <div className="text-center py-16">
+                  <Activity className="h-10 w-10 text-slate-200 mx-auto mb-3" />
+                  <p className="text-sm text-slate-400">No activity recorded for this client yet.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-50">
+                  {activityData.rows.map((entry: any) => {
+                    const Icon = getActivityIcon(entry.action);
+                    const { label, color } = getActivityMeta(entry.action);
+                    return (
+                      <div key={entry.id} className="flex gap-4 px-5 py-4 hover:bg-slate-50/60 transition-colors">
+                        {/* Icon column */}
+                        <div className={`mt-0.5 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${color}`}>
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        {/* Content column */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="text-sm font-medium text-slate-800">{label}</span>
+                              {entry.details && (
+                                <ActivityDetails action={entry.action} details={entry.details} />
+                              )}
+                            </div>
+                            <time className="text-xs text-slate-400 whitespace-nowrap shrink-0 mt-0.5">
+                              {new Date(entry.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                            </time>
+                          </div>
+                          {entry.actorName && (
+                            <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              {entry.actorName}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Pagination */}
+              {activityData && activityData.total > activityPageSize && (
+                <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100">
+                  <span className="text-xs text-slate-400">
+                    Page {activityPage} of {Math.ceil(activityData.total / activityPageSize)}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      disabled={activityPage <= 1}
+                      onClick={() => setActivityPage((p) => p - 1)}
+                      className="px-3 py-1.5 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      disabled={activityPage >= Math.ceil(activityData.total / activityPageSize)}
+                      onClick={() => setActivityPage((p) => p + 1)}
+                      className="px-3 py-1.5 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
