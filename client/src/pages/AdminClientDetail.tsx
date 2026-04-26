@@ -25,6 +25,7 @@ import {
   FileUp, StickyNote, CheckSquare, AlertTriangle, ShieldCheck,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { formatLocalDate, formatLocalDateShort } from "@/lib/utils";
 import { Link, useParams, useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -753,7 +754,7 @@ export default function AdminClientDetail() {
             <div className="space-y-5">
               <SectionCard title="Client Information">
                 <InfoLine label="CIN ID" value={client.medicaidId} />
-                <InfoLine label="Date of Birth" value={fd.dateOfBirth ? new Date(fd.dateOfBirth).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : null} />
+                <InfoLine label="Date of Birth" value={formatLocalDate(fd.dateOfBirth)} />
                 <InfoLine label="Phone" value={client.cellPhone} />
                 <InfoLine label="Address" value={[fd.streetAddress, fd.aptUnit, fd.city || "Brooklyn", fd.state || "NY", fd.zipcode].filter(Boolean).join(" ")} />
                 <InfoLine label="Language" value={(client as any).language || "English"} />
@@ -1377,7 +1378,7 @@ export default function AdminClientDetail() {
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-slate-600">Due date</span>
                         <span className={`text-sm ${fd.dueDate || screening.dueDate ? "text-slate-900" : "text-red-500 italic"}`}>
-                          {fd.dueDate || screening.dueDate ? new Date(fd.dueDate || screening.dueDate).toLocaleDateString() : "Not entered — required (edit in SCN section below)"}
+                          {fd.dueDate || screening.dueDate ? formatLocalDateShort(fd.dueDate || screening.dueDate) : "Not entered — required (edit in SCN section below)"}
                         </span>
                       </div>
                     </div>
@@ -1403,7 +1404,7 @@ export default function AdminClientDetail() {
                           <div className="flex items-center justify-between">
                             <span className="text-sm text-slate-600">Infant Date of Birth</span>
                             <span className={`text-sm ${infantDob ? "text-slate-900" : "text-slate-400 italic"}`}>
-                              {infantDob ? new Date(infantDob).toLocaleDateString() : "Not provided"}
+                              {infantDob ? formatLocalDateShort(infantDob) : "Not provided"}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
@@ -1733,7 +1734,7 @@ export default function AdminClientDetail() {
                       ) : (
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-slate-500 italic pl-4">Due date</span>
-                          <span className="text-sm text-slate-900">{fd.dueDate || screening.dueDate ? new Date(fd.dueDate || screening.dueDate).toLocaleDateString() : "—"}</span>
+                          <span className="text-sm text-slate-900">{fd.dueDate || screening.dueDate ? formatLocalDateShort(fd.dueDate || screening.dueDate) : "—"}</span>
                         </div>
                       )}
                     </div>
@@ -1813,7 +1814,7 @@ export default function AdminClientDetail() {
                     <div>
                       <p className="text-sm font-medium text-slate-900">{s.name}</p>
                       {s.description && <p className="text-xs text-slate-500 mt-0.5">{s.description}</p>}
-                      {s.startDate && <p className="text-xs text-slate-400 mt-0.5">Started: {new Date(s.startDate).toLocaleDateString()}</p>}
+                      {s.startDate && <p className="text-xs text-slate-400 mt-0.5">Started: {formatLocalDateShort(s.startDate)}</p>}
                     </div>
                     <Badge className={`text-xs ${s.status === "active" ? "bg-emerald-100 text-emerald-700" : s.status === "completed" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}>{s.status}</Badge>
                   </div>
