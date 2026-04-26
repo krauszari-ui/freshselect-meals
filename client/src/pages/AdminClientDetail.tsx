@@ -168,6 +168,9 @@ export default function AdminClientDetail() {
   const updateAssignmentMutation = trpc.admin.updateAssignment.useMutation({
     onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Assignment updated"); },
   });
+  const updatePriorityMutation = trpc.admin.updatePriority.useMutation({
+    onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Priority updated"); },
+  });
   const addNoteMutation = trpc.admin.notes.create.useMutation({
     onSuccess: () => { utils.admin.notes.byClient.invalidate({ submissionId: id }); setNoteText(""); toast.success("Note added"); },
   });
@@ -597,6 +600,21 @@ export default function AdminClientDetail() {
               )}
               <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
                 <span>Intake Rep: <strong className="text-slate-700">{intakeRepName || "—"}</strong></span>
+                <span className="flex items-center gap-1.5">
+                  Priority:
+                  <Select
+                    value={(client as any).priority || "normal"}
+                    onValueChange={(v) => updatePriorityMutation.mutate({ id, priority: v as any })}
+                  >
+                    <SelectTrigger className="h-7 w-[110px] text-xs border-slate-300"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="urgent">🔴 Urgent</SelectItem>
+                      <SelectItem value="high">🟠 High</SelectItem>
+                      <SelectItem value="normal">🟢 Normal</SelectItem>
+                      <SelectItem value="low">⚪ Low</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </span>
                 <span className="flex items-center gap-1.5">
                   Assigned Worker:
                   <Select

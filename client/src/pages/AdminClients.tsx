@@ -427,6 +427,7 @@ export default function AdminClients() {
   const [applicantTypeFilter, setApplicantTypeFilter] = useState("all");
   const [assessmentCompletedFilter, setAssessmentCompletedFilter] = useState("all");
   const [zipcodeFilter, setZipcodeFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -465,6 +466,7 @@ export default function AdminClients() {
     referralSource: referralFilter !== "all" ? referralFilter : undefined,
       assessmentCompleted: dbAssessmentCompleted,
       zipcode: zipcodeFilter !== "all" ? zipcodeFilter : undefined,
+      priority: priorityFilter !== "all" ? priorityFilter : undefined,
       page,
       pageSize: 25,
     });
@@ -929,6 +931,19 @@ export default function AdminClients() {
                 ))}
               </SelectContent>
             </Select>
+
+            <Select value={priorityFilter} onValueChange={(v) => { setPriorityFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[130px] h-9 text-sm bg-white border-slate-200">
+                <SelectValue placeholder="Priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                <SelectItem value="urgent">🔴 Urgent</SelectItem>
+                <SelectItem value="high">🟠 High</SelectItem>
+                <SelectItem value="normal">🟢 Normal</SelectItem>
+                <SelectItem value="low">⚪ Low</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         )}
 
@@ -1035,6 +1050,7 @@ export default function AdminClients() {
                         {sortDir === "desc" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
                       </span>
                     </th>
+                    <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Priority</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Type</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Stage</th>
                   </tr>
@@ -1101,6 +1117,19 @@ export default function AdminClients() {
                           ) : (
                             <span className="text-xs text-slate-400">—</span>
                           )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {(() => {
+                            const p = client.priority || "normal";
+                            const cfg: Record<string, { label: string; cls: string }> = {
+                              urgent: { label: "Urgent", cls: "bg-red-100 text-red-700" },
+                              high:   { label: "High",   cls: "bg-orange-100 text-orange-700" },
+                              normal: { label: "Normal", cls: "bg-slate-100 text-slate-600" },
+                              low:    { label: "Low",    cls: "bg-slate-50 text-slate-400" },
+                            };
+                            const { label, cls } = cfg[p] ?? cfg.normal;
+                            return <Badge className={`${cls} text-[11px] font-medium border-0`}>{label}</Badge>;
+                          })()}
                         </td>
                         <td className="px-4 py-3">
                           <Badge className={`${stageInfo.bg} ${stageInfo.text} text-[11px] font-medium border-0`}>
