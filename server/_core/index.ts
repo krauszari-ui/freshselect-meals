@@ -201,6 +201,68 @@ async function startServer() {
     res.json({ status: "ok", ts: Date.now() });
   });
 
+  // ─── Scheduled QA health check endpoint ──────────────────────────────────
+  // Called daily by the Manus scheduled task agent via:
+  //   curl -X POST $SCHEDULED_TASK_ENDPOINT_BASE/api/scheduled/qa-health \
+  //     -H "Cookie: app_session_id=$SCHEDULED_TASK_COOKIE"
+  // The endpoint checks DB connectivity, counts submissions, and sends an
+  // owner notification with the daily health summary.
+  app.post("/api/scheduled/qa-health", async (_req, res) => {
+    try {
+      const { getSubmissionStats, getTaskStats } = await import("../db");
+      const { notifyOwner } = await import("./notification");
+
+      // Run checks
+      const [stats, taskStats] = await Promise.all([
+        getSubmissionStats().catch(() => null),
+        getTaskStats().catch(() => null),
+      ]);
+
+      const now = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
+      const s = stats as any;
+      const lines: string[] = [
+        `Daily QA Health Check \u2014 ${now} (ET)`,
+        "",
+        "## Database",
+        s ? `\u2705 Connected \u2014 ${s.total ?? 0} total clients` : "\u274c DB query failed",
+        "",
+        "## Clients by Stage",
+      ];
+
+      if (s) {
+        const stages = s.stages ?? {};
+        for (const [stage, count] of Object.entries(stages)) {
+          lines.push(`  ${stage}: ${count}`);
+        }
+      }
+
+      lines.push("", "## Tasks");
+      if (taskStats) {
+        const ts = taskStats as any;
+        lines.push(`  Open: ${ts.open ?? 0}`);
+        lines.push(`  Completed: ${ts.completed ?? 0}`);
+      } else {
+        lines.push("  (task stats unavailable)");
+      }
+
+      lines.push("", "## Status", "\u2705 Server is up and responding");
+
+      const content = lines.join("\n");
+
+      try {
+        await notifyOwner({ title: "FreshSelect Daily QA Report", content });
+      } catch {
+        // Notification failure is non-fatal
+      }
+
+      console.log("[QA Health] Daily check completed successfully");
+      res.json({ ok: true, summary: content });
+    } catch (err: any) {
+      console.error("[QA Health] Error:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
   // Per-route rate limiters (applied before tRPC handler)
   app.use("/api/trpc/submission.submit", submissionLimiter);
   app.use("/api/trpc/auth.adminLogin", loginLimiter);

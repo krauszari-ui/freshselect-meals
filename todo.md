@@ -614,3 +614,4 @@
 - [ ] Add exportAssessments tRPC procedure returning all completed assessments with full client data
 - [ ] Add Export CSV button to assessment reports page
 - [ ] Run tests and save checkpoint
+- [x] Fix daily QA scheduled task: add /api/scheduled/qa-health endpoint to deployed site, update scheduled task to use API instead of local files
