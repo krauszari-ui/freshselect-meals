@@ -1025,7 +1025,7 @@ export default function AdminClientDetail() {
                     {/* Compose area */}
                     <div className="border-t border-slate-200 bg-white px-4 py-3 space-y-2">
                       <Input
-                        placeholder="Subject"
+                        placeholder="Subject (optional)"
                         value={emailSubject}
                         onChange={(e) => setEmailSubject(e.target.value)}
                         className="text-sm h-8 border-slate-200 focus:border-blue-400 bg-slate-50"
@@ -1063,9 +1063,9 @@ export default function AdminClientDetail() {
                         <Button
                           size="sm"
                           className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 h-7 text-xs px-3 ml-auto"
-                          disabled={!emailSubject.trim() || !emailBody.trim() || sendClientEmailMutation.isPending}
+                          disabled={!emailBody.trim() || sendClientEmailMutation.isPending}
                           onClick={() => {
-                            if (!emailSubject.trim() || !emailBody.trim()) return;
+                            if (!emailBody.trim()) return;
                             sendClientEmailMutation.mutate({
                               submissionId: id,
                               subject: emailSubject.trim(),

@@ -617,3 +617,5 @@
 - [x] Fix daily QA scheduled task: add /api/scheduled/qa-health endpoint to deployed site, update scheduled task to use API instead of local files
 - [x] Add priority tag (Low/Normal/High/Urgent) to clients list with filter and editable from client detail
 - [x] Full responsive design audit and fixes (mobile hamburger nav, fluid padding, scrollable tables, responsive headers on all pages)
+- [x] Email conversation subject made optional (server + UI)
+- [x] Admin client list filters persisted in URL query string (browser back restores filters)
