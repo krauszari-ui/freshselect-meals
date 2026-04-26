@@ -12,7 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText, Trash2, Users, FileDown,
+  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText, Trash2, Users, FileDown, FilterX,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -720,7 +720,12 @@ export default function AdminClients() {
   const totalPages = listData?.totalPages ?? 1;
   const totalCount = listData?.total ?? 0;
   const totalMembers = listData?.totalMembers ?? 0;
-  const hasActiveFilter = stageFilter !== "all" || neighborhoodFilter !== "all" || vendorFilter !== "all" || programFilter !== "all" || applicantTypeFilter !== "all" || languageFilter !== "all" || boroughFilter !== "all" || workerFilter !== "all" || repFilter !== "all" || referralFilter !== "all" || assessmentCompletedFilter !== "all" || zipcodeFilter !== "all" || debouncedSearch.trim() !== "";
+  const hasActiveFilter = stageFilter !== "all" || neighborhoodFilter !== "all" || vendorFilter !== "all" || programFilter !== "all" || applicantTypeFilter !== "all" || languageFilter !== "all" || boroughFilter !== "all" || workerFilter !== "all" || repFilter !== "all" || referralFilter !== "all" || assessmentCompletedFilter !== "all" || zipcodeFilter !== "all" || priorityFilter !== "all" || debouncedSearch.trim() !== "";
+
+  const clearAllFilters = () => {
+    setSearchInput("");
+    navigate("/admin/clients", { replace: true });
+  };
 
   // Sort is still done client-side on the current page (DB returns desc by default)
   const sortedRows = useMemo(() => {
@@ -1001,6 +1006,17 @@ export default function AdminClients() {
                 <SelectItem value="low">⚪ Low</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* Clear All Filters — only visible when at least one filter is active */}
+            {hasActiveFilter && (
+              <button
+                onClick={clearAllFilters}
+                className="ml-auto flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
+              >
+                <FilterX className="h-4 w-4" />
+                Clear filters
+              </button>
+            )}
           </div>
         )}
 

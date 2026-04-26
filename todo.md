@@ -619,3 +619,5 @@
 - [x] Full responsive design audit and fixes (mobile hamburger nav, fluid padding, scrollable tables, responsive headers on all pages)
 - [x] Email conversation subject made optional (server + UI)
 - [x] Admin client list filters persisted in URL query string (browser back restores filters)
+- [x] Per-client Activity tab on Client Detail page (full audit log with icons, pagination)
+- [x] Clear All Filters button on Admin Clients list (appears when any filter is active)
