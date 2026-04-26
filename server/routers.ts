@@ -459,7 +459,7 @@ export const appRouter = router({
     // ─── Client Email Thread ──────────────────────────────────────────────
     sendClientEmail: staffProcedure.input(z.object({
       submissionId: z.number(),
-      subject: z.string().min(1).max(512),
+      subject: z.string().max(512).optional(),
       body: z.string().min(1),
       attachmentUrls: z.array(z.string()).optional(),
     })).mutation(async ({ ctx, input }) => {
@@ -472,9 +472,10 @@ export const appRouter = router({
       const INBOUND_DOMAIN = process.env.RESEND_INBOUND_DOMAIN ?? "inbound.freshselectmeals.com";
       const replyTo = `reply-${input.submissionId}@${INBOUND_DOMAIN}`;
       const fromEmail = process.env.RESEND_FROM_EMAIL ?? `FreshSelect Meals <admin@freshselectmeals.com>`;
+      const resolvedSubject = input.subject?.trim() || "Message from FreshSelect Meals";
       const success = await sendEmail({
         to: submission.email,
-        subject: input.subject,
+        subject: resolvedSubject,
         replyTo,
         html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
           <p style="color:#2d5a27;font-weight:bold;">FreshSelect Meals</p>
@@ -487,7 +488,7 @@ export const appRouter = router({
       const id = await createClientEmail({
         submissionId: input.submissionId,
         direction: "outbound",
-        subject: input.subject,
+        subject: resolvedSubject,
         body: input.body,
         fromEmail: fromEmail,
         toEmail: submission.email,

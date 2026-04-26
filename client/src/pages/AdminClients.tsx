@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import * as XLSX from "xlsx";
 import { useEffect, useState, useMemo, useRef } from "react";
-import { Link, useSearch } from "wouter";
+import { Link, useSearch, useLocation } from "wouter";
 import { toast } from "sonner";
 
 const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
@@ -410,35 +410,92 @@ export default function AdminClients() {
   const { user } = useAuth();
   const isAssessor = user?.role === "assessor";
   const searchParams = useSearch();
-  const urlParams = new URLSearchParams(searchParams);
-  const initialStage = urlParams.get("stage") || "all";
+  const [, navigate] = useLocation();
 
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [stageFilter, setStageFilter] = useState(initialStage);
-  const [languageFilter, setLanguageFilter] = useState("all");
-  const [boroughFilter, setBoroughFilter] = useState("all");
-  const [neighborhoodFilter, setNeighborhoodFilter] = useState("all");
-  const [vendorFilter, setVendorFilter] = useState("all");
-  const [programFilter, setProgramFilter] = useState("all");
-  const [workerFilter, setWorkerFilter] = useState("all");
-  const [repFilter, setRepFilter] = useState("all");
-  const [referralFilter, setReferralFilter] = useState("all");
-  const [applicantTypeFilter, setApplicantTypeFilter] = useState("all");
-  const [assessmentCompletedFilter, setAssessmentCompletedFilter] = useState("all");
-  const [zipcodeFilter, setZipcodeFilter] = useState("all");
-  const [priorityFilter, setPriorityFilter] = useState("all");
-  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
-  const [page, setPage] = useState(1);
+  // ─── URL-backed filter helpers ────────────────────────────────────────────
+  // All filter state lives in the URL query string so the browser back button
+  // naturally restores the exact filter state when returning from a client page.
+  const up = useMemo(() => new URLSearchParams(searchParams), [searchParams]);
+
+  const getParam = (key: string, fallback = "all") => up.get(key) || fallback;
+
+  const setParam = (key: string, value: string, resetPage = true) => {
+    const next = new URLSearchParams(searchParams);
+    if (value === "all" || value === "") {
+      next.delete(key);
+    } else {
+      next.set(key, value);
+    }
+    if (resetPage) next.delete("page");
+    const qs = next.toString();
+    navigate("/admin/clients" + (qs ? "?" + qs : ""), { replace: true });
+  };
+
+  const search = getParam("q", "");
+  const stageFilter = getParam("stage");
+  const languageFilter = getParam("lang");
+  const boroughFilter = getParam("borough");
+  const neighborhoodFilter = getParam("neighborhood");
+  const vendorFilter = getParam("vendor");
+  const programFilter = getParam("program");
+  const workerFilter = getParam("worker");
+  const repFilter = getParam("rep");
+  const referralFilter = getParam("referral");
+  const applicantTypeFilter = getParam("applicantType");
+  const assessmentCompletedFilter = getParam("assessmentCompleted");
+  const zipcodeFilter = getParam("zipcode");
+  const priorityFilter = getParam("priority");
+  const sortDir = (up.get("sort") as "desc" | "asc") || "desc";
+  const page = parseInt(up.get("page") || "1", 10);
+
+  const setSearch = (v: string) => setParam("q", v);
+  const setStageFilter = (v: string) => setParam("stage", v);
+  const setLanguageFilter = (v: string) => setParam("lang", v);
+  const setBoroughFilter = (v: string) => setParam("borough", v);
+  const setNeighborhoodFilter = (v: string, resetVendor = false) => {
+    const next = new URLSearchParams(searchParams);
+    if (v === "all" || v === "") next.delete("neighborhood"); else next.set("neighborhood", v);
+    if (resetVendor) next.delete("vendor");
+    next.delete("page");
+    const qs = next.toString();
+    navigate("/admin/clients" + (qs ? "?" + qs : ""), { replace: true });
+  };
+  const setVendorFilter = (v: string) => setParam("vendor", v);
+  const setProgramFilter = (v: string) => setParam("program", v);
+  const setWorkerFilter = (v: string) => setParam("worker", v);
+  const setRepFilter = (v: string) => setParam("rep", v);
+  const setReferralFilter = (v: string) => setParam("referral", v);
+  const setApplicantTypeFilter = (v: string) => setParam("applicantType", v);
+  const setAssessmentCompletedFilter = (v: string) => setParam("assessmentCompleted", v);
+  const setZipcodeFilter = (v: string) => setParam("zipcode", v);
+  const setPriorityFilter = (v: string) => setParam("priority", v);
+  const setSortDir = (v: "desc" | "asc") => setParam("sort", v, false);
+  const setPage = (p: number) => {
+    const next = new URLSearchParams(searchParams);
+    if (p <= 1) next.delete("page"); else next.set("page", String(p));
+    navigate("/admin/clients" + (next.toString() ? "?" + next.toString() : ""), { replace: true });
+  };
+
+  // Local input state for the search box — debounced write to URL
+  const [searchInput, setSearchInput] = useState(search);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
 
+  // Keep local input in sync when URL changes externally (e.g. browser back)
   useEffect(() => {
-    const t = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 400);
-    return () => clearTimeout(t);
+    setSearchInput(search);
   }, [search]);
+
+  // Debounce: write search to URL 400ms after typing stops
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 400);
+    return () => clearTimeout(t);
+  }, [searchInput]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // debouncedSearch = URL-persisted value (already debounced via URL write)
+  const debouncedSearch = search;
 
   const utils = trpc.useUtils();
 
@@ -736,8 +793,8 @@ export default function AdminClients() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
             placeholder="Search by name or CIN..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="pl-9 h-10 text-sm bg-white border-slate-200"
           />
         </div>
@@ -746,7 +803,7 @@ export default function AdminClients() {
         {!isAssessor && (
           <div className="flex flex-wrap gap-2">
             {/* Stage */}
-            <Select value={stageFilter} onValueChange={(v) => { setStageFilter(v); setPage(1); }}>
+            <Select value={stageFilter} onValueChange={(v) => { setStageFilter(v); }}>
               <SelectTrigger className="w-[180px] h-9 text-sm bg-white border-slate-200">
                 <SelectValue placeholder="Stage" />
               </SelectTrigger>
@@ -765,7 +822,7 @@ export default function AdminClients() {
             </Select>
 
             {/* Language */}
-            <Select value={languageFilter} onValueChange={(v) => { setLanguageFilter(v); setPage(1); }}>
+            <Select value={languageFilter} onValueChange={(v) => { setLanguageFilter(v); }}>
               <SelectTrigger className="w-[130px] h-9 text-sm bg-white border-slate-200">
                 <SelectValue placeholder="Language" />
               </SelectTrigger>
@@ -783,7 +840,7 @@ export default function AdminClients() {
             </Select>
 
             {/* Borough */}
-            <Select value={boroughFilter} onValueChange={(v) => { setBoroughFilter(v); setPage(1); }}>
+            <Select value={boroughFilter} onValueChange={(v) => { setBoroughFilter(v); }}>
               <SelectTrigger className="w-[130px] h-9 text-sm bg-white border-slate-200">
                 <SelectValue placeholder="Borough" />
               </SelectTrigger>
@@ -801,7 +858,7 @@ export default function AdminClients() {
             </Select>
 
             {/* Neighborhood */}
-            <Select value={neighborhoodFilter} onValueChange={(v) => { setNeighborhoodFilter(v); setVendorFilter("all"); setPage(1); }}>
+            <Select value={neighborhoodFilter} onValueChange={(v) => setNeighborhoodFilter(v, true)}>
               <SelectTrigger className="w-[150px] h-9 text-sm bg-white border-slate-200">
                 <SelectValue placeholder="Neighborhood" />
               </SelectTrigger>
@@ -819,7 +876,7 @@ export default function AdminClients() {
             </Select>
 
             {/* Zipcode */}
-            <Select value={zipcodeFilter} onValueChange={(v) => { setZipcodeFilter(v); setPage(1); }}>
+            <Select value={zipcodeFilter} onValueChange={(v) => { setZipcodeFilter(v); }}>
               <SelectTrigger className="w-[120px] h-9 text-sm bg-white border-slate-200">
                 <SelectValue placeholder="Zipcode" />
               </SelectTrigger>
@@ -836,7 +893,7 @@ export default function AdminClients() {
               </SelectContent>
             </Select>
             {/* Vendor */}
-            <Select value={vendorFilter} onValueChange={(v) => { setVendorFilter(v); setPage(1); }}>
+            <Select value={vendorFilter} onValueChange={(v) => { setVendorFilter(v); }}>
               <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
                 <SelectValue placeholder="Vendor" />
               </SelectTrigger>
@@ -854,7 +911,7 @@ export default function AdminClients() {
             </Select>
 
             {/* Applicant Type */}
-            <Select value={applicantTypeFilter} onValueChange={(v) => { setApplicantTypeFilter(v); setPage(1); }}>
+            <Select value={applicantTypeFilter} onValueChange={(v) => { setApplicantTypeFilter(v); }}>
               <SelectTrigger className="w-[140px] h-9 text-sm bg-white border-slate-200">
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
@@ -876,7 +933,7 @@ export default function AdminClients() {
             </Select>
 
             {/* Program */}
-            <Select value={programFilter} onValueChange={(v) => { setProgramFilter(v); setPage(1); }}>
+            <Select value={programFilter} onValueChange={(v) => { setProgramFilter(v); }}>
               <SelectTrigger className="w-[130px] h-9 text-sm bg-white border-slate-200">
                 <SelectValue placeholder="Program" />
               </SelectTrigger>
@@ -894,7 +951,7 @@ export default function AdminClients() {
             </Select>
 
             {/* Assigned Worker */}
-            <Select value={workerFilter} onValueChange={(v) => { setWorkerFilter(v); setPage(1); }}>
+            <Select value={workerFilter} onValueChange={(v) => { setWorkerFilter(v); }}>
               <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
                 <SelectValue placeholder="Assigned Worker" />
               </SelectTrigger>
@@ -907,7 +964,7 @@ export default function AdminClients() {
             </Select>
 
             {/* Intake Rep */}
-            <Select value={repFilter} onValueChange={(v) => { setRepFilter(v); setPage(1); }}>
+            <Select value={repFilter} onValueChange={(v) => { setRepFilter(v); }}>
               <SelectTrigger className="w-[170px] h-9 text-sm bg-white border-slate-200">
                 <SelectValue placeholder="Intake Representative" />
               </SelectTrigger>
@@ -920,7 +977,7 @@ export default function AdminClients() {
             </Select>
 
             {/* Referral Source */}
-            <Select value={referralFilter} onValueChange={(v) => { setReferralFilter(v); setPage(1); }}>
+            <Select value={referralFilter} onValueChange={(v) => { setReferralFilter(v); }}>
               <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-slate-200">
                 <SelectValue placeholder="Referral Source" />
               </SelectTrigger>
@@ -932,7 +989,7 @@ export default function AdminClients() {
               </SelectContent>
             </Select>
 
-            <Select value={priorityFilter} onValueChange={(v) => { setPriorityFilter(v); setPage(1); }}>
+            <Select value={priorityFilter} onValueChange={(v) => { setPriorityFilter(v); }}>
               <SelectTrigger className="w-[130px] h-9 text-sm bg-white border-slate-200">
                 <SelectValue placeholder="Priority" />
               </SelectTrigger>
