@@ -630,3 +630,4 @@
 - [x] Security: rate-limit assessor portal login endpoint
 - [x] Security: tighten login rate limits (10 attempts = 1hr lockout, 15 = permanent block until manual reset)
 - [x] Security: failed login audit logging for admin, referrer, and assessor portals
+- [x] Per-user notification read state: notificationReads join table, per-user markRead/markAllRead/unreadCount

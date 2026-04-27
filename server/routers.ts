@@ -1155,25 +1155,25 @@ export const appRouter = router({
   notifications: router({
     list: protectedProcedure
       .input(z.object({ limit: z.number().int().min(1).max(200).optional().default(50) }))
-      .query(async ({ input }) => {
-        return listNotifications(input.limit);
+      .query(async ({ ctx, input }) => {
+        return listNotifications(ctx.user.id, input.limit);
       }),
 
     unreadCount: protectedProcedure
-      .query(async () => {
-        return { count: await getUnreadNotificationCount() };
+      .query(async ({ ctx }) => {
+        return { count: await getUnreadNotificationCount(ctx.user.id) };
       }),
 
     markRead: protectedProcedure
       .input(z.object({ id: z.number().int() }))
-      .mutation(async ({ input }) => {
-        await markNotificationRead(input.id);
+      .mutation(async ({ ctx, input }) => {
+        await markNotificationRead(input.id, ctx.user.id);
         return { success: true };
       }),
 
     markAllRead: protectedProcedure
-      .mutation(async () => {
-        await markAllNotificationsRead();
+      .mutation(async ({ ctx }) => {
+        await markAllNotificationsRead(ctx.user.id);
         return { success: true };
       }),
   }),
