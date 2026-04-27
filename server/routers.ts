@@ -119,9 +119,13 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
+    logout: publicProcedure.mutation(async ({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      if (ctx.user) {
+        const ip = (ctx.req as any).ip ?? ctx.req.socket?.remoteAddress ?? "unknown";
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "logout", details: { ip } });
+      }
       return { success: true } as const;
     }),
     dbStatus: publicProcedure.query(async () => {
@@ -426,9 +430,11 @@ export const appRouter = router({
         records: String(g.ids).split(',').map(Number).map(id => rowMap.get(id)).filter(Boolean),
       }));
     }),
-    deleteDuplicate: staffProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    deleteDuplicate: staffProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
       const { deleteSubmission } = await import('./db');
+      const existing = await getSubmissionById(input.id);
       await deleteSubmission(input.id);
+      await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "duplicate_deleted", clientId: input.id, clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined });
       return { success: true };
     }),
 
@@ -508,7 +514,7 @@ export const appRouter = router({
           <hr/><p style="font-size:12px;color:#999;">FreshSelect Meals &mdash; (718) 307-4664 | admin@freshselectmeals.com<br/>To reply, simply reply to this email.</p>
         </div>`,
       });
-      if (!success) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to send email" });
+       if (!success) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to send email" });
       const id = await createClientEmail({
         submissionId: input.submissionId,
         direction: "outbound",
@@ -519,6 +525,7 @@ export const appRouter = router({
         attachmentUrls: input.attachmentUrls ? JSON.stringify(input.attachmentUrls) : null,
         sentBy: ctx.user.id,
       });
+      await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "email_sent", clientId: input.submissionId, clientName: submission ? `${submission.firstName} ${submission.lastName}` : undefined, details: { subject: resolvedSubject, to: submission.email } });
       return { success: true, id };
     }),
     listClientEmails: staffProcedure.input(z.object({
@@ -528,8 +535,9 @@ export const appRouter = router({
     }),
     deleteClientEmail: staffProcedure.input(z.object({
       id: z.number(),
-    })).mutation(async ({ input }) => {
+    })).mutation(async ({ input, ctx }) => {
       await deleteClientEmailById(input.id);
+      await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "email_deleted", details: { emailId: input.id } });
       return { success: true };
     }),
 
@@ -537,7 +545,12 @@ export const appRouter = router({
       id: z.number(),
       status: z.enum(["new", "in_review", "approved", "rejected", "on_hold"]),
       adminNotes: z.string().optional(),
-    })).mutation(async ({ input }) => { await updateSubmissionStatus(input.id, input.status, input.adminNotes); return { success: true }; }),
+    })).mutation(async ({ input, ctx }) => {
+      const existing = await getSubmissionById(input.id);
+      await updateSubmissionStatus(input.id, input.status, input.adminNotes);
+      await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "status_changed", clientId: input.id, clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined, details: { from: existing?.status ?? null, to: input.status } });
+      return { success: true };
+    }),
 
     updateStage: staffProcedure.input(z.object({
       id: z.number(),
@@ -571,7 +584,12 @@ export const appRouter = router({
 
     updateAssignment: adminProcedure.input(z.object({
       id: z.number(), assignedTo: z.number().nullable(), intakeRep: z.number().nullable().optional(),
-    })).mutation(async ({ input }) => { await updateSubmissionAssignment(input.id, input.assignedTo, input.intakeRep); return { success: true }; }),
+    })).mutation(async ({ input, ctx }) => {
+      const existing = await getSubmissionById(input.id);
+      await updateSubmissionAssignment(input.id, input.assignedTo, input.intakeRep);
+      await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "assignment_changed", clientId: input.id, clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined, details: { assignedTo: input.assignedTo, intakeRep: input.intakeRep } });
+      return { success: true };
+    }),
 
     // CSV Export
     exportCsv: staffProcedure.input(z.object({
@@ -629,19 +647,30 @@ export const appRouter = router({
         assignedTo: z.number().optional(),
       })).mutation(async ({ ctx, input }) => {
         const id = await createTask({ ...input, createdBy: ctx.user.id });
+        const client = await getSubmissionById(input.submissionId);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "task_created", clientId: input.submissionId, clientName: client ? `${client.firstName} ${client.lastName}` : undefined, details: { description: input.description, area: input.area } });
         return { success: true, id };
       }),
 
       updateStatus: staffProcedure.input(z.object({
         id: z.number(), status: z.enum(["open", "completed", "verified"]),
-      })).mutation(async ({ input }) => { await updateTaskStatus(input.id, input.status); return { success: true }; }),
+      })).mutation(async ({ input, ctx }) => {
+        await updateTaskStatus(input.id, input.status);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "task_status_changed", details: { taskId: input.id, status: input.status } });
+        return { success: true };
+      }),
     }),
 
     // ─── Case Notes ───────────────────────────────────────────────────────
     notes: router({
       byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input }) => getCaseNotesBySubmission(input.submissionId)),
       create: staffProcedure.input(z.object({ submissionId: z.number(), content: z.string().min(1) }))
-        .mutation(async ({ ctx, input }) => { const id = await createCaseNote({ ...input, createdBy: ctx.user.id }); return { success: true, id }; }),
+        .mutation(async ({ ctx, input }) => {
+          const id = await createCaseNote({ ...input, createdBy: ctx.user.id });
+          const client = await getSubmissionById(input.submissionId);
+          await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "case_note_added", clientId: input.submissionId, clientName: client ? `${client.firstName} ${client.lastName}` : undefined, details: { preview: input.content.substring(0, 120) } });
+          return { success: true, id };
+        }),
     }),
 
     // ─── Documents ────────────────────────────────────────────────────────
@@ -678,9 +707,14 @@ export const appRouter = router({
           url, fileKey: key, mimeType: input.contentType, fileSize: buffer.length,
           uploadedBy: ctx.user.id,
         });
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "document_uploaded", clientId: input.submissionId ?? undefined, details: { name: input.name, category: input.category, mimeType: input.contentType } });
         return { success: true, id, url };
       }),
-      delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => { await deleteDocument(input.id); return { success: true }; }),
+      delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
+        await deleteDocument(input.id);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "document_deleted", details: { documentId: input.id } });
+        return { success: true };
+      }),
     }),
 
     // ─── Services ─────────────────────────────────────────────────────────
@@ -695,11 +729,17 @@ export const appRouter = router({
           startDate: input.startDate ? new Date(input.startDate) : new Date(),
           createdBy: ctx.user.id,
         });
+        const client = await getSubmissionById(input.submissionId);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "service_created", clientId: input.submissionId, clientName: client ? `${client.firstName} ${client.lastName}` : undefined, details: { name: input.name } });
         return { success: true, id };
       }),
       updateStatus: staffProcedure.input(z.object({
         id: z.number(), status: z.enum(["active", "completed", "cancelled"]),
-      })).mutation(async ({ input }) => { await updateServiceStatus(input.id, input.status); return { success: true }; }),
+      })).mutation(async ({ input, ctx }) => {
+        await updateServiceStatus(input.id, input.status);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "service_status_changed", details: { serviceId: input.id, status: input.status } });
+        return { success: true };
+      }),
     }),
 
     // ─── Client edit/delete ────────────────────────────────────────────────
@@ -720,12 +760,19 @@ export const appRouter = router({
       additionalMembersCount: z.number().optional(),
       // formData fields (merged into existing JSON)
       formData: z.record(z.string(), z.unknown()).optional(),
-    })).mutation(async ({ input }) => {
+    })).mutation(async ({ input, ctx }) => {
       const { id, formData, ...fields } = input;
+      const existing = await getSubmissionById(id);
       const updateData: Record<string, unknown> = {};
-      Object.entries(fields).forEach(([k, v]) => { if (v !== undefined) updateData[k] = v; });
+      // Build before/after diff for top-level fields
+      const changedFields: Record<string, { from: unknown; to: unknown }> = {};
+      Object.entries(fields).forEach(([k, v]) => {
+        if (v !== undefined) {
+          updateData[k] = v;
+          if (existing && (existing as any)[k] !== v) changedFields[k] = { from: (existing as any)[k], to: v };
+        }
+      });
       if (formData) {
-        const existing = await getSubmissionById(id);
         if (existing) {
           const merged = { ...(existing.formData as Record<string, unknown>), ...formData };
           updateData.formData = merged;
@@ -733,9 +780,21 @@ export const appRouter = router({
           if (Array.isArray(merged.householdMembers) && fields.additionalMembersCount === undefined) {
             updateData.additionalMembersCount = (merged.householdMembers as unknown[]).length;
           }
+          // Track formData field changes
+          const existingFd = (existing.formData as Record<string, unknown>) || {};
+          Object.entries(formData).forEach(([k, v]) => {
+            if (existingFd[k] !== v) changedFields[`formData.${k}`] = { from: existingFd[k], to: v };
+          });
         }
       }
       await updateSubmissionFields(id, updateData as any);
+      await logAudit({
+        actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
+        action: "client_edited",
+        clientId: id,
+        clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
+        details: { changedFields },
+      });
       return { success: true };
     }),
 
@@ -751,8 +810,9 @@ export const appRouter = router({
       return { success: true };
     }),
 
-    bulkDeleteClients: adminProcedure.input(z.object({ ids: z.array(z.number()).min(1).max(100) })).mutation(async ({ input }) => {
+    bulkDeleteClients: adminProcedure.input(z.object({ ids: z.array(z.number()).min(1).max(100) })).mutation(async ({ input, ctx }) => {
       await bulkDeleteSubmissions(input.ids);
+      await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "bulk_deleted", details: { count: input.ids.length, ids: input.ids } });
       return { success: true, deleted: input.ids.length };
     }),
 
@@ -887,6 +947,7 @@ export const appRouter = router({
         if (input.email) data.email = input.email;
         if (password) data.passwordHash = await bcrypt.hash(password, 10);
         const id = await createReferralLink(data);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "referral_link_created", details: { code: input.code, referrerName: input.referrerName } });
         return { success: true, id };
       }),
       update: adminProcedure.input(z.object({
@@ -896,15 +957,17 @@ export const appRouter = router({
         isActive: z.number().optional(),
         email: z.string().email().optional(),
         password: z.string().min(6).optional(),
-      })).mutation(async ({ input }) => {
+      })).mutation(async ({ input, ctx }) => {
         const { id, password, ...data } = input;
         const updateData: any = { ...data };
         if (password) updateData.passwordHash = await bcrypt.hash(password, 10);
         await updateReferralLink(id, updateData);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "referral_link_updated", details: { id, changes: Object.keys(data) } });
         return { success: true };
       }),
-      delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
         await deleteReferralLink(input.id);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "referral_link_deleted", details: { id: input.id } });
         return { success: true };
       }),
       // ─── Referrer Messages ───────────────────────────────────────────
@@ -1050,14 +1113,31 @@ export const appRouter = router({
       allUsers: adminProcedure.query(async () => listAllUsers()),
       promote: adminProcedure.input(z.object({
         userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean().default(false), showReferralLinks: z.boolean().default(true) }),
-      })).mutation(async ({ input }) => { await setUserRole(input.userId, "worker"); await updateWorkerPermissions(input.userId, input.permissions); return { success: true }; }),
+      })).mutation(async ({ input, ctx }) => {
+        await setUserRole(input.userId, "worker");
+        await updateWorkerPermissions(input.userId, input.permissions);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "worker_promoted", details: { userId: input.userId, permissions: input.permissions } });
+        return { success: true };
+      }),
       updatePermissions: adminProcedure.input(z.object({
         userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean().default(false), showReferralLinks: z.boolean().default(true) }),
-      })).mutation(async ({ input }) => { await updateWorkerPermissions(input.userId, input.permissions); return { success: true }; }),
+      })).mutation(async ({ input, ctx }) => {
+        await updateWorkerPermissions(input.userId, input.permissions);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "worker_permissions_updated", details: { userId: input.userId, permissions: input.permissions } });
+        return { success: true };
+      }),
       toggleActive: adminProcedure.input(z.object({ userId: z.number(), isActive: z.boolean() }))
-        .mutation(async ({ input }) => { await toggleWorkerActive(input.userId, input.isActive); return { success: true }; }),
+        .mutation(async ({ input, ctx }) => {
+          await toggleWorkerActive(input.userId, input.isActive);
+          await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: input.isActive ? "worker_activated" : "worker_deactivated", details: { userId: input.userId } });
+          return { success: true };
+        }),
       demote: adminProcedure.input(z.object({ userId: z.number() }))
-        .mutation(async ({ input }) => { await setUserRole(input.userId, "user"); return { success: true }; }),
+        .mutation(async ({ input, ctx }) => {
+          await setUserRole(input.userId, "user");
+          await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "worker_demoted", details: { userId: input.userId } });
+          return { success: true };
+        }),
       // Create a new staff account directly (no OAuth needed)
       createStaff: superAdminProcedure.input(z.object({
         email: z.string().email(),
@@ -1142,6 +1222,7 @@ export const appRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "This reset link has expired. Please request a new one." });
       const passwordHash = await bcrypt.hash(input.newPassword, 12);
       await clearPasswordResetToken(user.id, passwordHash);
+      await logAudit({ actorId: user.id, actorName: user.email ?? "Staff", action: "password_reset", details: { method: "reset_link" } });
       return { success: true };
     }),
     validateToken: publicProcedure.input(z.object({ token: z.string() })).query(async ({ input }) => {
