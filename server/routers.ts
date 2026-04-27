@@ -21,7 +21,7 @@ import {
   getSubmissionByMedicaidId,
   createStaffUser, setPasswordResetToken, getUserByResetToken, clearPasswordResetToken,
   createReferrerMessage, listReferrerMessages, listReferrerMessagesBySubmission, markReferrerMessageRead, getUnreadCountByReferrer,
-  deleteReferrerMessage, markAllReferrerMessagesRead,
+  deleteReferrerMessage, deleteReferrerMessageById, markAllReferrerMessagesRead,
   createClientEmail, listClientEmails, deleteClientEmailById,
   createStageHistoryEntry, getStageHistoryBySubmission,
   getFilterCounts,
@@ -452,7 +452,7 @@ export const appRouter = router({
     deleteReferrerNote: staffProcedure.input(z.object({
       messageId: z.number(),
     })).mutation(async ({ input }) => {
-      await deleteReferrerMessage(input.messageId);
+      await deleteReferrerMessageById(input.messageId);
       return { success: true };
     }),
 
@@ -987,8 +987,8 @@ export const appRouter = router({
       })).mutation(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
-        // Only allow deleting messages belonging to this referrer
-        await deleteReferrerMessage(input.messageId);
+        // Pass referralLinkId so the DB helper verifies ownership before deleting
+        await deleteReferrerMessage(input.messageId, link.id);
         return { success: true };
       }),
     }),

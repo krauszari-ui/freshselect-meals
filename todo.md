@@ -622,3 +622,5 @@
 - [x] Per-client Activity tab on Client Detail page (full audit log with icons, pagination)
 - [x] Clear All Filters button on Admin Clients list (appears when any filter is active)
 - [x] Fix timezone off-by-one date bug: added parseLocalDate/formatLocalDate helpers in utils.ts, replaced all new Date(userDateStr).toLocaleDateString() calls in AdminClientDetail and AdminClients with timezone-safe formatLocalDate/formatLocalDateShort
+- [x] Security fix: referrer message deletion ownership check (deleteReferrerMessage now verifies referralLinkId)
+- [x] Security fix: qa-health endpoint now requires valid session cookie (was unauthenticated)

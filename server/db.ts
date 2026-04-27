@@ -700,10 +700,21 @@ export async function listReferrerMessages(referralLinkId: number) {
     .where(eq(referrerMessages.referralLinkId, referralLinkId))
     .orderBy(asc(referrerMessages.createdAt));
 }
-export async function deleteReferrerMessage(messageId: number): Promise<void> {
+/** Staff-only: delete any referrer message by ID (no ownership check — caller must be staff). */
+export async function deleteReferrerMessageById(messageId: number): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(referrerMessages).where(eq(referrerMessages.id, messageId));
+}
+/** Referrer portal: delete a message only if it belongs to the given referral link. */
+export async function deleteReferrerMessage(messageId: number, referralLinkId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Enforce ownership: only delete if the message belongs to the given referral link.
+  // Without this check, any referrer with a valid code could delete another referrer's messages.
+  await db.delete(referrerMessages).where(
+    and(eq(referrerMessages.id, messageId), eq(referrerMessages.referralLinkId, referralLinkId))
+  );
 }
 export async function markAllReferrerMessagesRead(referralLinkId: number): Promise<void> {
   const db = await getDb();
