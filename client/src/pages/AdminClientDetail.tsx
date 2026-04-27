@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -301,6 +302,10 @@ export default function AdminClientDetail() {
   const [scnEditMode, setScnEditMode] = useState(false);
   const [scnEdits, setScnEdits] = useState<Record<string, string>>({});
 
+  // Health category editing state
+  const [hcEditMode, setHcEditMode] = useState(false);
+  const [hcEdits, setHcEdits] = useState<string[]>([]);
+
   // Health condition details editing state
   // conditionEdits: { [conditionKey]: { clientName: string; docUrls: string[] } }
   const [conditionEditMode, setConditionEditMode] = useState(false);
@@ -335,7 +340,7 @@ export default function AdminClientDetail() {
     finally { setUploadingConditionDoc(null); e.target.value = ""; }
   };
   const updateScreeningMutation = trpc.admin.updateScreeningAnswers.useMutation({
-    onSuccess: () => { utils.admin.getById.invalidate({ id }); setScnEditMode(false); setScnEdits({}); toast.success("SCN answers saved"); },
+    onSuccess: () => { utils.admin.getById.invalidate({ id }); setScnEditMode(false); setScnEdits({}); setHcEditMode(false); setHcEdits([]); toast.success("Saved"); },
     onError: (err) => toast.error(err.message),
   });
 
@@ -1310,30 +1315,70 @@ export default function AdminClientDetail() {
 
 
 
-            {/* Health Categories — read-only display of what the client submitted */}
-            {healthCategories.length > 0 && (() => {
+            {/* Health Categories — editable */}
+            {(() => {
+              const ALL_HEALTH_CATEGORIES = [
+                "Pregnant", "Had a Miscarriage", "Postpartum (Within the last 12 months)",
+                "Substance Use Disorder", "HIV / AIDS", "Diabetes", "Hypertension",
+                "Serious Mental Illness (SMI)", "Chronic Condition", "Other",
+              ];
               const MEDICAL_CONDITIONS = [
                 "HIV / AIDS", "Hypertension", "Chronic Condition",
                 "Substance Use Disorder", "Diabetes", "Serious Mental Illness (SMI)",
               ];
               const conditionDetails: Record<string, { clientName?: string; docUrl?: string; docUrls?: string[] }> = (fd as any).conditionDetails || {};
-              const selectedMedical = healthCategories.filter((c: string) => MEDICAL_CONDITIONS.includes(c));
-              const hasPregnant = healthCategories.includes("Pregnant");
-              const hasOther = healthCategories.includes("Other");
+              const activeCategories = hcEditMode ? hcEdits : healthCategories;
+              const selectedMedical = activeCategories.filter((c: string) => MEDICAL_CONDITIONS.includes(c));
+              const hasPregnant = activeCategories.includes("Pregnant");
+              const hasOther = activeCategories.includes("Other");
               const otherDetails = (fd as any).otherHealthCategoryDetails || "";
 
               return (
                 <div className="bg-white rounded-lg border border-slate-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-semibold text-slate-900">Health Categories</h2>
+                    <div className="flex items-center gap-2">
+                      {!hcEditMode ? (
+                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-slate-300" onClick={() => { setHcEdits([...healthCategories]); setHcEditMode(true); }}>
+                          <Pencil className="h-3 w-3" /> Edit
+                        </Button>
+                      ) : (
+                        <>
+                          <Button size="sm" variant="outline" className="h-7 text-xs border-slate-300" onClick={() => { setHcEditMode(false); setHcEdits([]); }}>Cancel</Button>
+                          <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1" disabled={updateScreeningMutation.isPending}
+                            onClick={() => updateScreeningMutation.mutate({ id, formData: { healthCategories: hcEdits } }, { onSuccess: () => { setHcEditMode(false); setHcEdits([]); } })}>
+                            {updateScreeningMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Selected categories as badges */}
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {healthCategories.map((cat: string) => (
-                      <span key={cat} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">{cat}</span>
-                    ))}
-                  </div>
+                  {/* Edit mode: checkbox list */}
+                  {hcEditMode ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+                      {ALL_HEALTH_CATEGORIES.map((cat) => (
+                        <label key={cat} className="flex items-center gap-2.5 cursor-pointer select-none p-2 rounded hover:bg-slate-50">
+                          <Checkbox
+                            checked={hcEdits.includes(cat)}
+                            onCheckedChange={(checked) => {
+                              setHcEdits((prev) =>
+                                checked ? [...prev, cat] : prev.filter((c) => c !== cat)
+                              );
+                            }}
+                          />
+                          <span className="text-sm text-slate-700">{cat}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    /* View mode: badges */
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {healthCategories.length > 0 ? healthCategories.map((cat: string) => (
+                        <span key={cat} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">{cat}</span>
+                      )) : <span className="text-sm text-slate-400 italic">No health categories selected</span>}
+                    </div>
+                  )}
 
                   {/* Medical condition sub-sections — read-only, submitted by client */}
                   {selectedMedical.length > 0 && (
@@ -1484,6 +1529,10 @@ export default function AdminClientDetail() {
                       foodAllergies: String(fd2.foodAllergies || ""),
                       foodAllergiesDetails: String(fd2.foodAllergiesDetails || ""),
                       dietaryRestrictions: String(fd2.dietaryRestrictions || ""),
+                      // Household appliance / cooking needs (top-level formData fields)
+                      needsRefrigerator: String(fd2.needsRefrigerator || ""),
+                      needsMicrowave: String(fd2.needsMicrowave || ""),
+                      needsCookingUtensils: String(fd2.needsCookingUtensils || ""),
                     });
                     setScnEditMode(true);
                   }}>
@@ -1503,7 +1552,8 @@ export default function AdminClientDetail() {
                       if (screeningFields.householdMemberCount !== undefined) {
                         screeningFields.householdMembersCount = screeningFields.householdMemberCount;
                       }
-                      updateScreeningMutation.mutate({ id, formData: { screenerName, screeningDate, dueDate, foodAllergies, foodAllergiesDetails, dietaryRestrictions, screeningQuestions: screeningFields } });
+                      const { needsRefrigerator, needsMicrowave, needsCookingUtensils, ...remainingScreeningFields } = screeningFields;
+                      updateScreeningMutation.mutate({ id, formData: { screenerName, screeningDate, dueDate, foodAllergies, foodAllergiesDetails, dietaryRestrictions, needsRefrigerator, needsMicrowave, needsCookingUtensils, screeningQuestions: remainingScreeningFields } });
                     }}>
                       {updateScreeningMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
                     </Button>
@@ -1790,9 +1840,35 @@ export default function AdminClientDetail() {
             </div>
             <div className="mt-6 pt-4 border-t border-slate-200">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Household Appliance / Cooking Needs</h3>
-              <InfoLine label="Needs refrigerator" value={fd.needsRefrigerator || "—"} />
-              <InfoLine label="Needs microwave" value={fd.needsMicrowave || "—"} />
-              <InfoLine label="Needs cooking utensils/supplies" value={fd.needsCookingUtensils || "—"} />
+              {scnEditMode ? (
+                <div className="space-y-3">
+                  {([
+                    { key: "needsRefrigerator", label: "Needs refrigerator" },
+                    { key: "needsMicrowave", label: "Needs microwave" },
+                    { key: "needsCookingUtensils", label: "Needs cooking utensils/supplies" },
+                  ] as const).map(({ key, label }) => (
+                    <div key={key} className="flex items-center justify-between py-2 border-b border-slate-100">
+                      <span className="text-sm text-slate-600">{label}</span>
+                      <Select
+                        value={scnEdits[key] || ""}
+                        onValueChange={(v) => setScnEdits((prev) => ({ ...prev, [key]: v }))}
+                      >
+                        <SelectTrigger className="h-7 text-sm w-28 border-slate-300"><SelectValue placeholder="Select..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Yes">Yes</SelectItem>
+                          <SelectItem value="No">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <InfoLine label="Needs refrigerator" value={fd.needsRefrigerator || "—"} />
+                  <InfoLine label="Needs microwave" value={fd.needsMicrowave || "—"} />
+                  <InfoLine label="Needs cooking utensils/supplies" value={fd.needsCookingUtensils || "—"} />
+                </>
+              )}
             </div>
             </div>
           </div>
