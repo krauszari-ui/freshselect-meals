@@ -53,13 +53,30 @@ export const submissionLimiter = rateLimit({
   message: { error: "Too many form submissions. Please wait before submitting again." },
 });
 
-/** Login brute-force limiter: 10 attempts / 15 min per IP */
+/**
+ * Login brute-force protection — two-tier system:
+ *
+ * Tier 1 (loginLimiter):  10 attempts per IP per 60 minutes → 1-hour lockout
+ * Tier 2 (loginHardLimiter): 15 attempts per IP per 24 hours → 24-hour lockout
+ *                             (requires waiting out the window — effectively a manual reset)
+ *
+ * Both limiters are applied together on each login route.
+ */
 export const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 60 * 60 * 1000, // 1 hour
   max: 10,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  message: { error: "Too many login attempts. Please wait 15 minutes before trying again." },
+  message: { error: "Too many login attempts. Your IP has been locked out for 1 hour. Please try again later." },
+});
+
+/** Hard cap: 15 total attempts per IP per 24 hours — locks out for the rest of the day */
+export const loginHardLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  max: 15,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Your IP has been blocked due to repeated failed login attempts. Please contact support or try again tomorrow." },
 });
 
 /** Upload limiter: 20 uploads / 15 min per IP */
@@ -71,13 +88,22 @@ export const uploadLimiter = rateLimit({
   message: { error: "Too many file uploads. Please wait before uploading again." },
 });
 
-/** Referrer portal login limiter: 10 attempts / 15 min per IP (mirrors admin loginLimiter) */
+/** Referrer portal login — Tier 1: 10 attempts / 1 hour per IP */
 export const referrerLoginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 60 * 60 * 1000, // 1 hour
   max: 10,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  message: { error: "Too many login attempts. Please wait 15 minutes before trying again." },
+  message: { error: "Too many login attempts. Your IP has been locked out for 1 hour. Please try again later." },
+});
+
+/** Referrer portal login — Tier 2: 15 attempts / 24 hours per IP (hard block) */
+export const referrerLoginHardLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  max: 15,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Your IP has been blocked due to repeated failed login attempts. Please contact support or try again tomorrow." },
 });
 
 // ---------------------------------------------------------------------------

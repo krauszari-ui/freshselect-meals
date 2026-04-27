@@ -143,17 +143,25 @@ export const appRouter = router({
     adminLogin: publicProcedure
       .input(z.object({ email: z.string().email(), password: z.string().min(1) }))
       .mutation(async ({ ctx, input }) => {
+        const ip = (ctx.req as any).ip ?? ctx.req.socket?.remoteAddress ?? "unknown";
         const user = await getUserByEmail(input.email);
         if (!user || !user.passwordHash) {
+          // Log failed attempt: unknown email
+          await logAudit({ action: "login_failed", actorName: input.email, details: { reason: "unknown_email", ip } });
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
         }
         const valid = await bcrypt.compare(input.password, user.passwordHash);
         if (!valid) {
+          // Log failed attempt: wrong password
+          await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_failed", details: { reason: "wrong_password", ip } });
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
         }
         if (user.role !== "admin" && user.role !== "worker" && user.role !== "super_admin" && user.role !== "viewer" && user.role !== "assessor") {
+          await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_failed", details: { reason: "insufficient_role", role: user.role, ip } });
           throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: staff role required" });
         }
+        // Log successful login
+        await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_success", details: { role: user.role, ip } });
         const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || "" });
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
@@ -934,12 +942,23 @@ export const appRouter = router({
       login: publicProcedure.input(z.object({
         email: z.string().email(),
         password: z.string(),
-      })).mutation(async ({ input }) => {
+      })).mutation(async ({ ctx, input }) => {
+        const ip = (ctx.req as any).ip ?? ctx.req.socket?.remoteAddress ?? "unknown";
         const link = await getReferralLinkByEmail(input.email);
-        if (!link || !link.passwordHash) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
-        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This account has been deactivated" });
+        if (!link || !link.passwordHash) {
+          await logAudit({ action: "login_failed", actorName: input.email, details: { reason: "unknown_referrer_email", ip, portal: "referrer" } });
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+        }
+        if (!link.isActive) {
+          await logAudit({ action: "login_failed", actorName: input.email, details: { reason: "account_deactivated", ip, portal: "referrer" } });
+          throw new TRPCError({ code: "FORBIDDEN", message: "This account has been deactivated" });
+        }
         const valid = await bcrypt.compare(input.password, link.passwordHash);
-        if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+        if (!valid) {
+          await logAudit({ action: "login_failed", actorName: input.email, details: { reason: "wrong_password", ip, portal: "referrer" } });
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+        }
+        await logAudit({ action: "login_success", actorName: input.email, details: { referrerId: link.id, ip, portal: "referrer" } });
         return { success: true, referrerId: link.id, referrerName: link.referrerName, code: link.code };
       }),
       myClients: publicProcedure.input(z.object({
