@@ -628,3 +628,5 @@
 - [x] Security: MIME type whitelist on file uploads (PDF, JPG, PNG, DOCX only)
 - [x] Security: Content Security Policy header in Express security middleware
 - [x] Security: rate-limit assessor portal login endpoint
+- [x] Security: tighten login rate limits (10 attempts = 1hr lockout, 15 = permanent block until manual reset)
+- [x] Security: failed login audit logging for admin, referrer, and assessor portals

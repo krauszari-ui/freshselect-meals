@@ -7,7 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { applySecurityMiddleware, submissionLimiter, loginLimiter, uploadLimiter, referrerLoginLimiter } from "./security";
+import { applySecurityMiddleware, submissionLimiter, loginLimiter, loginHardLimiter, uploadLimiter, referrerLoginLimiter, referrerLoginHardLimiter } from "./security";
 import { requestLogger } from "./logger";
 import { createClientEmail, getSubmissionById, createNotification } from "../db";
 import { sdk } from "./sdk";
@@ -279,9 +279,15 @@ async function startServer() {
 
   // Per-route rate limiters (applied before tRPC handler)
   app.use("/api/trpc/submission.submit", submissionLimiter);
+
+  // Admin login: Tier 1 (10/hr) then Tier 2 (15/24hr hard block)
   app.use("/api/trpc/auth.adminLogin", loginLimiter);
-  app.use("/api/trpc/referrer.login", referrerLoginLimiter);
-  app.use("/api/trpc/assessor.login", loginLimiter);
+  app.use("/api/trpc/auth.adminLogin", loginHardLimiter);
+
+  // Referrer portal login: same two-tier protection (nested under admin router)
+  app.use("/api/trpc/admin.referrerPortal.login", referrerLoginLimiter);
+  app.use("/api/trpc/admin.referrerPortal.login", referrerLoginHardLimiter);
+
   app.use("/api/trpc/upload.document", uploadLimiter);
 
   // tRPC API
