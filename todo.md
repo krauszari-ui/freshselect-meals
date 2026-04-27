@@ -627,3 +627,4 @@
 - [x] Security: rate-limit referrer portal login endpoint
 - [x] Security: MIME type whitelist on file uploads (PDF, JPG, PNG, DOCX only)
 - [x] Security: Content Security Policy header in Express security middleware
+- [x] Security: rate-limit assessor portal login endpoint

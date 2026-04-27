@@ -281,6 +281,7 @@ async function startServer() {
   app.use("/api/trpc/submission.submit", submissionLimiter);
   app.use("/api/trpc/auth.adminLogin", loginLimiter);
   app.use("/api/trpc/referrer.login", referrerLoginLimiter);
+  app.use("/api/trpc/assessor.login", loginLimiter);
   app.use("/api/trpc/upload.document", uploadLimiter);
 
   // tRPC API
