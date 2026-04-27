@@ -141,6 +141,13 @@
       "when": 1777170797297,
       "tag": "0019_military_moon_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1777299701361,
+      "tag": "0020_yielding_captain_stacy",
+      "breakpoints": true
     }
   ]
 }

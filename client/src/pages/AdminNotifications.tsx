@@ -36,10 +36,10 @@ export default function AdminNotifications() {
     },
   });
 
-  const unreadCount = notifications?.filter((n) => !n.isRead).length ?? 0;
+  const unreadCount = notifications?.filter((n) => !n.isReadByUser).length ?? 0;
 
-  function handleClick(n: { id: number; isRead: boolean; link?: string | null }) {
-    if (!n.isRead) {
+  function handleClick(n: { id: number; isReadByUser: boolean; link?: string | null }) {
+    if (!n.isReadByUser) {
       markRead.mutate({ id: n.id });
     }
     if (n.link) navigate(n.link);
@@ -98,7 +98,7 @@ export default function AdminNotifications() {
                   key={n.id}
                   onClick={() => handleClick(n)}
                   className={`w-full text-left flex items-start gap-4 p-4 rounded-xl border transition-all hover:shadow-sm ${
-                    n.isRead
+                    n.isReadByUser
                       ? "bg-white border-slate-100 opacity-70 hover:opacity-100"
                       : "bg-white border-green-200 shadow-sm"
                   }`}
@@ -111,14 +111,14 @@ export default function AdminNotifications() {
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span className={`text-[10px] font-semibold uppercase tracking-wide ${n.isRead ? "text-slate-400" : "text-green-600"}`}>
+                      <span className={`text-[10px] font-semibold uppercase tracking-wide ${n.isReadByUser ? "text-slate-400" : "text-green-600"}`}>
                         {cfg.label}
                       </span>
-                      {!n.isRead && (
+                      {!n.isReadByUser && (
                         <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
                       )}
                     </div>
-                    <p className={`text-sm font-medium truncate ${n.isRead ? "text-slate-500" : "text-slate-900"}`}>
+                    <p className={`text-sm font-medium truncate ${n.isReadByUser ? "text-slate-500" : "text-slate-900"}`}>
                       {n.title}
                     </p>
                     {n.body && (

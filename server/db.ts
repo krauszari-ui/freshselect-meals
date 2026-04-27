@@ -10,6 +10,7 @@ import {
   referralLinks, InsertReferralLink, ReferralLink,
   stageHistory, InsertStageHistory,
   notifications, InsertNotification, Notification,
+  notificationReads,
   auditLogs,
 } from "../drizzle/schema";
 
@@ -909,35 +910,61 @@ export async function getSubmissionsByIds(ids: number[]) {
 export async function createNotification(payload: Omit<InsertNotification, "id" | "createdAt" | "isRead">) {
   const db = await getDb();
   if (!db) return null;
+  // Keep isRead=false on the row for backwards compat; per-user state is in notificationReads
   const result = await db.insert(notifications).values({ ...payload, isRead: false });
   return (result[0] as any).insertId as number;
 }
 
-export async function listNotifications(limit = 50): Promise<Notification[]> {
+/** List notifications, annotating each with whether the given user has read it. */
+export async function listNotifications(userId: number, limit = 50): Promise<(Notification & { isReadByUser: boolean })[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(notifications)
+  const rows = await db.select().from(notifications)
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
+  if (rows.length === 0) return [];
+  // Fetch which of these notifications the user has already read
+  const notifIds = rows.map((r) => r.id);
+  const readRows = await db.select({ notificationId: notificationReads.notificationId })
+    .from(notificationReads)
+    .where(and(eq(notificationReads.userId, userId), inArray(notificationReads.notificationId, notifIds)));
+  const readSet = new Set(readRows.map((r) => r.notificationId));
+  return rows.map((r) => ({ ...r, isReadByUser: readSet.has(r.id) }));
 }
 
-export async function getUnreadNotificationCount(): Promise<number> {
+/** Count unread notifications for a specific user. */
+export async function getUnreadNotificationCount(userId: number): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
-  const rows = await db.select({ count: count() }).from(notifications).where(eq(notifications.isRead, false));
-  return Number(rows[0]?.count ?? 0);
+  // Total notifications minus those the user has read
+  const [totalRow] = await db.select({ count: count() }).from(notifications);
+  const total = Number(totalRow?.count ?? 0);
+  if (total === 0) return 0;
+  const [readRow] = await db.select({ count: count() }).from(notificationReads)
+    .where(eq(notificationReads.userId, userId));
+  const readCount = Number(readRow?.count ?? 0);
+  return Math.max(0, total - readCount);
 }
 
-export async function markNotificationRead(id: number) {
+/** Mark a single notification as read for a specific user (upsert — safe to call multiple times). */
+export async function markNotificationRead(notificationId: number, userId: number) {
   const db = await getDb();
   if (!db) return;
-  await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+  await db.insert(notificationReads)
+    .values({ notificationId, userId })
+    .onDuplicateKeyUpdate({ set: { readAt: new Date() } });
 }
 
-export async function markAllNotificationsRead() {
+/** Mark all current notifications as read for a specific user. */
+export async function markAllNotificationsRead(userId: number) {
   const db = await getDb();
   if (!db) return;
-  await db.update(notifications).set({ isRead: true }).where(eq(notifications.isRead, false));
+  const allNotifs = await db.select({ id: notifications.id }).from(notifications);
+  if (allNotifs.length === 0) return;
+  // Upsert a read receipt for every notification for this user
+  await db.insert(notificationReads)
+    .values(allNotifs.map((n) => ({ notificationId: n.id, userId })))
+    .onDuplicateKeyUpdate({ set: { readAt: new Date() } });
 }
 
 export type { Notification };

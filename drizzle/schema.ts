@@ -338,6 +338,18 @@ export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
 
 /**
+ * Per-user read receipts for notifications.
+ * A row here means the given user has read the given notification.
+ */
+export const notificationReads = mysqlTable("notificationReads", {
+  id: int("id").primaryKey().autoincrement(),
+  notificationId: int("notificationId").notNull(),
+  userId: int("userId").notNull(),
+  readAt: timestamp("readAt").defaultNow().notNull(),
+});
+export type NotificationRead = typeof notificationReads.$inferSelect;
+
+/**
  * Immutable audit trail of every admin action taken on client records.
  */
 export const auditLogs = mysqlTable("auditLogs", {
