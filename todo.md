@@ -624,3 +624,6 @@
 - [x] Fix timezone off-by-one date bug: added parseLocalDate/formatLocalDate helpers in utils.ts, replaced all new Date(userDateStr).toLocaleDateString() calls in AdminClientDetail and AdminClients with timezone-safe formatLocalDate/formatLocalDateShort
 - [x] Security fix: referrer message deletion ownership check (deleteReferrerMessage now verifies referralLinkId)
 - [x] Security fix: qa-health endpoint now requires valid session cookie (was unauthenticated)
+- [x] Security: rate-limit referrer portal login endpoint
+- [x] Security: MIME type whitelist on file uploads (PDF, JPG, PNG, DOCX only)
+- [x] Security: Content Security Policy header in Express security middleware

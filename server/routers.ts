@@ -166,6 +166,22 @@ export const appRouter = router({
     document: publicProcedure
       .input(z.object({ fileName: z.string(), fileData: z.string(), contentType: z.string(), category: z.string() }))
       .mutation(async ({ input }) => {
+        // MIME type whitelist — reject anything that isn't a known safe document/image type
+        const ALLOWED_MIME_TYPES = new Set([
+          "application/pdf",
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "image/gif",
+          "application/msword",                                                    // .doc
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
+        ]);
+        if (!ALLOWED_MIME_TYPES.has(input.contentType)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `File type '${input.contentType}' is not allowed. Accepted types: PDF, JPG, PNG, WEBP, GIF, DOC, DOCX.`,
+          });
+        }
         const buffer = Buffer.from(input.fileData, "base64");
         const suffix = Math.random().toString(36).substring(2, 8);
         const ext = input.fileName.split(".").pop() || "file";
@@ -628,6 +644,22 @@ export const appRouter = router({
         submissionId: z.number().nullable(), name: z.string(), category: z.enum(["provider_attestation", "consent", "supporting_documentation", "id_document", "medicaid_card", "birth_certificate", "marriage_license", "forms", "uncategorized"]),
         fileData: z.string(), contentType: z.string(),
       })).mutation(async ({ ctx, input }) => {
+        // MIME type whitelist — same allowed set as the public upload endpoint
+        const ALLOWED_MIME_TYPES = new Set([
+          "application/pdf",
+          "image/jpeg",
+          "image/png",
+          "image/webp",
+          "image/gif",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ]);
+        if (!ALLOWED_MIME_TYPES.has(input.contentType)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `File type '${input.contentType}' is not allowed. Accepted types: PDF, JPG, PNG, WEBP, GIF, DOC, DOCX.`,
+          });
+        }
         const buffer = Buffer.from(input.fileData, "base64");
         const suffix = Math.random().toString(36).substring(2, 8);
         const ext = input.name.split(".").pop() || "file";

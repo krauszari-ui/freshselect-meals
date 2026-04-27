@@ -7,7 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { applySecurityMiddleware, submissionLimiter, loginLimiter, uploadLimiter } from "./security";
+import { applySecurityMiddleware, submissionLimiter, loginLimiter, uploadLimiter, referrerLoginLimiter } from "./security";
 import { requestLogger } from "./logger";
 import { createClientEmail, getSubmissionById, createNotification } from "../db";
 import { sdk } from "./sdk";
@@ -280,6 +280,7 @@ async function startServer() {
   // Per-route rate limiters (applied before tRPC handler)
   app.use("/api/trpc/submission.submit", submissionLimiter);
   app.use("/api/trpc/auth.adminLogin", loginLimiter);
+  app.use("/api/trpc/referrer.login", referrerLoginLimiter);
   app.use("/api/trpc/upload.document", uploadLimiter);
 
   // tRPC API

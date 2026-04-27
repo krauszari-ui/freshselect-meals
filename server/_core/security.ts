@@ -71,6 +71,15 @@ export const uploadLimiter = rateLimit({
   message: { error: "Too many file uploads. Please wait before uploading again." },
 });
 
+/** Referrer portal login limiter: 10 attempts / 15 min per IP (mirrors admin loginLimiter) */
+export const referrerLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Please wait 15 minutes before trying again." },
+});
+
 // ---------------------------------------------------------------------------
 // Request ID middleware
 // ---------------------------------------------------------------------------
@@ -84,19 +93,23 @@ export function requestId(req: Request, res: Response, next: NextFunction) {
 // ---------------------------------------------------------------------------
 // Security headers via Helmet
 // ---------------------------------------------------------------------------
+const isDev = process.env.NODE_ENV !== "production";
+
 export const helmetMiddleware = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: [
         "'self'",
-        "'unsafe-inline'", // Required for Vite HMR in dev; tighten in prod if using nonce
+        // 'unsafe-inline' is only permitted in dev (Vite HMR requires it).
+        // In production, inline scripts are blocked — use external script files.
+        ...(isDev ? ["'unsafe-inline'"] : []),
         "https://maps.googleapis.com",
         "https://maps.gstatic.com",
       ],
       styleSrc: [
         "'self'",
-        "'unsafe-inline'", // Required for Tailwind CSS-in-JS
+        "'unsafe-inline'", // Required for Tailwind CSS-in-JS injected styles
         "https://fonts.googleapis.com",
       ],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
@@ -107,14 +120,15 @@ export const helmetMiddleware = helmet({
         "https:",
         "https://maps.googleapis.com",
         "https://maps.gstatic.com",
-        "https://*.r2.dev",           // Cloudflare R2 public bucket URLs
-        "https://*.cloudflarestorage.com", // Cloudflare R2 presigned URLs
+        "https://*.r2.dev",                  // Cloudflare R2 public bucket URLs
+        "https://*.cloudflarestorage.com",   // Cloudflare R2 presigned URLs
       ],
       connectSrc: [
         "'self'",
         "https://api.resend.com",
         "https://maps.googleapis.com",
-        "wss:", // WebSocket for Vite HMR
+        "https://api.manus.im",              // Manus OAuth / notification APIs
+        "wss:",                              // WebSocket for Vite HMR
       ],
       mediaSrc: ["'self'", "blob:"],
       objectSrc: ["'none'"],
@@ -137,6 +151,27 @@ export const helmetMiddleware = helmet({
   dnsPrefetchControl: { allow: false },
   permittedCrossDomainPolicies: false,
 });
+
+/**
+ * Permissions-Policy header: disable browser features this app never uses.
+ * Prevents malicious scripts from activating camera, microphone, geolocation, etc.
+ */
+export function permissionsPolicy(_req: Request, res: Response, next: NextFunction) {
+  res.setHeader(
+    "Permissions-Policy",
+    [
+      "camera=()",
+      "microphone=()",
+      "geolocation=()",
+      "payment=()",
+      "usb=()",
+      "magnetometer=()",
+      "gyroscope=()",
+      "accelerometer=()",
+    ].join(", ")
+  );
+  next();
+}
 
 // ---------------------------------------------------------------------------
 // CORS
@@ -169,6 +204,7 @@ export function applySecurityMiddleware(app: Express) {
 
   app.use(requestId);
   app.use(helmetMiddleware);
+  app.use(permissionsPolicy);
   app.use(corsMiddleware);
   app.use(globalLimiter);
 }
