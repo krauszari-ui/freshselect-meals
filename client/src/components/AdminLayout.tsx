@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { type ReactNode, useState, useEffect } from "react";
+import InactivityGuard from "@/components/InactivityGuard";
 import { trpc } from "@/lib/trpc";
 
 const NAV_ITEMS = [
@@ -247,6 +248,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </div>
 
         {children}
+        <InactivityGuard />
       </main>
     </div>
   );

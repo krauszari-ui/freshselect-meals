@@ -633,3 +633,4 @@
 - [x] Per-user notification read state: notificationReads join table, per-user markRead/markAllRead/unreadCount
 - [x] Comprehensive audit logging: added logAudit to all unlogged mutations (logout, client_edited with field diffs, assignment_changed, status_changed, task_created, task_status_changed, case_note_added, document_uploaded, document_deleted, service_created, service_status_changed, email_sent, email_deleted, bulk_deleted, duplicate_deleted, referral_link_created/updated/deleted, worker_promoted/demoted/activated/deactivated/permissions_updated, password_reset)
 - [x] Enhanced Audit Log page: rich detail rendering with before/after diffs, icons, grouped action filter, expandable raw JSON rows
+- [x] 1-hour inactivity auto-logout for staff: warning at 55min, logout at 60min
