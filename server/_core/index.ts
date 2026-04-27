@@ -10,6 +10,7 @@ import { serveStatic, setupVite } from "./vite";
 import { applySecurityMiddleware, submissionLimiter, loginLimiter, uploadLimiter } from "./security";
 import { requestLogger } from "./logger";
 import { createClientEmail, getSubmissionById, createNotification } from "../db";
+import { sdk } from "./sdk";
 import { Webhook } from "svix";
 import { Resend } from "resend";
 
@@ -207,7 +208,20 @@ async function startServer() {
   //     -H "Cookie: app_session_id=$SCHEDULED_TASK_COOKIE"
   // The endpoint checks DB connectivity, counts submissions, and sends an
   // owner notification with the daily health summary.
-  app.post("/api/scheduled/qa-health", async (_req, res) => {
+  app.post("/api/scheduled/qa-health", async (req, res) => {
+    // Require a valid session cookie (the Manus scheduled task injects
+    // $SCHEDULED_TASK_COOKIE automatically). This prevents unauthenticated
+    // callers from triggering DB queries and owner notifications.
+    try {
+      const user = await sdk.authenticateRequest(req).catch(() => null);
+      if (!user) {
+        res.status(401).json({ ok: false, error: "Unauthorized" });
+        return;
+      }
+    } catch {
+      res.status(401).json({ ok: false, error: "Unauthorized" });
+      return;
+    }
     try {
       const { getSubmissionStats, getTaskStats } = await import("../db");
       const { notifyOwner } = await import("./notification");
