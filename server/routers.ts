@@ -164,6 +164,11 @@ export const appRouter = router({
           await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_failed", details: { reason: "insufficient_role", role: user.role, ip } });
           throw new TRPCError({ code: "FORBIDDEN", message: "Access denied: staff role required" });
         }
+        // Reject deactivated accounts
+        if (!user.isActive) {
+          await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_failed", details: { reason: "account_deactivated", ip } });
+          throw new TRPCError({ code: "FORBIDDEN", message: "Your account has been deactivated. Please contact your administrator." });
+        }
         // Log successful login
         await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_success", details: { role: user.role, ip } });
         const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || "" });
@@ -503,13 +508,16 @@ export const appRouter = router({
       const replyTo = `reply-${input.submissionId}@${INBOUND_DOMAIN}`;
       const fromEmail = process.env.RESEND_FROM_EMAIL ?? `FreshSelect Meals <admin@freshselectmeals.com>`;
       const resolvedSubject = input.subject?.trim() || "Message from FreshSelect Meals";
+      // HTML-escape the body so staff cannot accidentally or maliciously inject HTML/scripts
+      const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+      const safeBody = escapeHtml(input.body).replace(/\n/g, "<br/>");
       const success = await sendEmail({
         to: submission.email,
         subject: resolvedSubject,
         replyTo,
         html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
           <p style="color:#2d5a27;font-weight:bold;">FreshSelect Meals</p>
-          ${input.body.replace(/\n/g, "<br/>")}
+          ${safeBody}
           ${input.attachmentUrls && input.attachmentUrls.length > 0 ? `<hr/><p style="font-size:13px;color:#666;">Attachments: ${input.attachmentUrls.map((u, i) => `<a href="${u}">Attachment ${i + 1}</a>`).join(", ")}</p>` : ""}
           <hr/><p style="font-size:12px;color:#999;">FreshSelect Meals &mdash; (718) 307-4664 | admin@freshselectmeals.com<br/>To reply, simply reply to this email.</p>
         </div>`,
