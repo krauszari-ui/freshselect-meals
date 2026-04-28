@@ -1,4 +1,4 @@
-import { and, count, desc, eq, like, ne, or, sql, isNull, isNotNull, asc, gte, lte, inArray } from "drizzle-orm";
+import { and, count, desc, eq, like, ne, notInArray, or, sql, isNull, isNotNull, asc, gte, lte, inArray } from "drizzle-orm";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import {
@@ -123,6 +123,7 @@ export interface ListSubmissionsOptions {
   status?: Submission["status"] | "all";
   stage?: string;
   excludeStage?: string;
+  excludeStages?: string[];
   supermarket?: string;
   neighborhood?: string;
   program?: string;
@@ -142,7 +143,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, excludeStage, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, page = 1, pageSize = 20 } = opts;
+  const { search, status, stage, excludeStage, excludeStages, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -157,6 +158,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   if (status && status !== "all") conditions.push(eq(submissions.status, status));
   if (stage && stage !== "all") conditions.push(eq(submissions.stage, stage as Submission["stage"]));
   if (excludeStage && excludeStage !== "all") conditions.push(ne(submissions.stage, excludeStage as Submission["stage"]));
+  if (excludeStages && excludeStages.length > 0) conditions.push(notInArray(submissions.stage, excludeStages as Submission["stage"][]));
   if (supermarket && supermarket !== "all") conditions.push(eq(submissions.supermarket, supermarket));
   if (neighborhood && neighborhood !== "all") conditions.push(eq(submissions.neighborhood, neighborhood));
   if (program && program !== "all") conditions.push(eq(submissions.program, program));
@@ -185,6 +187,10 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
       assessmentCompletedAt: submissions.assessmentCompletedAt,
       transferAgencyName: submissions.transferAgencyName,
       priority: submissions.priority,
+      approvedBy: submissions.approvedBy,
+      rejectedBy: submissions.rejectedBy,
+      missingInfoNote: submissions.missingInfoNote,
+      notEligibleReason: submissions.notEligibleReason,
     }).from(submissions).where(where).orderBy(desc(submissions.createdAt)).limit(pageSize).offset(offset),
     db.select({ count: sql<number>`count(*)` }).from(submissions).where(where),
     db.select({ totalAdditional: sql<number>`COALESCE(SUM(additionalMembersCount), 0)`, totalClients: sql<number>`count(*)` }).from(submissions).where(where),

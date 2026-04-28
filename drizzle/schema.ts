@@ -49,6 +49,8 @@ export const submissions = mysqlTable("submissions", {
     "referral",
     "assessment",
     "assessment_recorded",
+    "missing_information",
+    "not_eligible",
     "level_one_only",
     "level_one_household",
     "level_2_active",
@@ -99,6 +101,10 @@ export const submissions = mysqlTable("submissions", {
   rejectedAt: timestamp("rejectedAt"),
   /** Reason for rejection provided by assessor */
   rejectionReason: text("rejectionReason"),
+  /** Note from assessor about what information is missing */
+  missingInfoNote: text("missingInfoNote"),
+  /** Reason from assessor why client is not eligible */
+  notEligibleReason: text("notEligibleReason"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({
   idx_submissions_medicaidId: uniqueIndex("idx_submissions_medicaidId").on(t.medicaidId),
