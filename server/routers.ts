@@ -562,7 +562,7 @@ export const appRouter = router({
 
     updateStage: staffProcedure.input(z.object({
       id: z.number(),
-      stage: z.enum(["referral", "assessment", "level_one_only", "level_one_household", "level_2_active", "ineligible", "provider_attestation_required", "flagged"]),
+      stage: z.enum(["referral", "assessment", "assessment_recorded", "level_one_only", "level_one_household", "level_2_active", "ineligible", "provider_attestation_required", "flagged"]),
     })).mutation(async ({ input, ctx }) => {
       // Fetch current stage for history
       const existing = await getSubmissionById(input.id);

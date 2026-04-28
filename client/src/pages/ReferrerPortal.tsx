@@ -15,6 +15,7 @@ import { toast } from "sonner";
 const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
   referral: { label: "Referral", bg: "bg-emerald-100", text: "text-emerald-700" },
   assessment: { label: "Assessment", bg: "bg-blue-100", text: "text-blue-700" },
+  assessment_recorded: { label: "Assessment Recorded", bg: "bg-sky-100", text: "text-sky-700" },
   level_one_only: { label: "Level One Only", bg: "bg-violet-100", text: "text-violet-700" },
   level_one_household: { label: "Level One (Household)", bg: "bg-purple-100", text: "text-purple-700" },
   level_2_active: { label: "Level 2 Active", bg: "bg-teal-100", text: "text-teal-700" },

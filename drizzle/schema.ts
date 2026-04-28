@@ -48,6 +48,7 @@ export const submissions = mysqlTable("submissions", {
   stage: mysqlEnum("stage", [
     "referral",
     "assessment",
+    "assessment_recorded",
     "level_one_only",
     "level_one_household",
     "level_2_active",
