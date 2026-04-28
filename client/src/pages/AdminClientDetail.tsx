@@ -1557,12 +1557,7 @@ export default function AdminClientDetail() {
                         screeningFields.householdMembersCount = screeningFields.householdMemberCount;
                       }
                       const { needsRefrigerator, needsMicrowave, needsCookingUtensils, ...remainingScreeningFields } = screeningFields;
-                      // housingProblems is stored as array in screeningQuestions
-                      if (remainingScreeningFields.housingProblems !== undefined) {
-                        (remainingScreeningFields as any).housingProblems = remainingScreeningFields.housingProblems
-                          ? remainingScreeningFields.housingProblems.split(",").map((s: string) => s.trim()).filter(Boolean)
-                          : [];
-                      }
+                      // housingProblems is now a single string value (dropdown selection)
                       updateScreeningMutation.mutate({ id, formData: { screenerName, screeningDate, dueDate, foodAllergies, foodAllergiesDetails, dietaryRestrictions, needsRefrigerator, needsMicrowave, needsCookingUtensils, screeningQuestions: remainingScreeningFields } });
                     }}>
                       {updateScreeningMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
@@ -1806,9 +1801,10 @@ export default function AdminClientDetail() {
                   {/* Q17: Housing payment struggle */}
                   <YesNoRow num={17} label="Struggles with paying for housing / falling behind on payments" field="housingPaymentStruggle" currentValue={screening.housingPaymentStruggle} />
 
-                  {/* Q18: Housing problems — multi-select */}
+                  {/* Q18: Housing problems — single dropdown */}
                   {(() => {
                     const HOUSING_PROBLEM_OPTIONS = [
+                      "No",
                       "Pests such as bugs, ants, or mice",
                       "Mold",
                       "Lead paint or pipes",
@@ -1817,46 +1813,38 @@ export default function AdminClientDetail() {
                       "Smoke detectors missing or not working",
                       "Water leaks",
                     ];
-                    const savedProblems: string[] = Array.isArray(screening.housingProblems)
-                      ? screening.housingProblems
-                      : (screening.housingProblems ? String(screening.housingProblems).split(",").map((s: string) => s.trim()).filter(Boolean) : []);
-                    const editProblems: string[] = scnEdits.housingProblems
-                      ? scnEdits.housingProblems.split(",").map((s) => s.trim()).filter(Boolean)
-                      : savedProblems;
+                    // Stored value is a string (single selection)
+                    const savedVal: string = Array.isArray(screening.housingProblems)
+                      ? (screening.housingProblems[0] || "")
+                      : String(screening.housingProblems || "");
+                    const editVal: string = scnEdits.housingProblems !== undefined
+                      ? scnEdits.housingProblems
+                      : savedVal;
 
                     if (!scnEditMode) {
                       return (
-                        <div className="flex items-start justify-between py-2 border-b border-slate-100">
+                        <div className="flex items-center justify-between py-2 border-b border-slate-100">
                           <span className="text-sm text-slate-500">18. Housing problems</span>
-                          <div className="text-right max-w-xs">
-                            {savedProblems.length > 0
-                              ? savedProblems.map((p) => (
-                                  <span key={p} className="inline-block text-xs bg-amber-100 text-amber-800 border border-amber-200 rounded px-1.5 py-0.5 mr-1 mb-1">{p}</span>
-                                ))
-                              : <span className="text-sm text-slate-400">—</span>}
-                          </div>
+                          <span className="text-sm text-slate-900">{savedVal || "—"}</span>
                         </div>
                       );
                     }
                     return (
-                      <div className="py-2 border-b border-slate-100">
-                        <span className="text-sm text-slate-600 block mb-2">18. Do you have problems with any of the following?</span>
-                        <div className="grid grid-cols-1 gap-1.5 pl-2">
-                          {HOUSING_PROBLEM_OPTIONS.map((opt) => (
-                            <label key={opt} className="flex items-center gap-2 cursor-pointer select-none hover:bg-slate-50 rounded px-1 py-0.5">
-                              <Checkbox
-                                checked={editProblems.includes(opt)}
-                                onCheckedChange={(checked) => {
-                                  const updated = checked
-                                    ? [...editProblems, opt]
-                                    : editProblems.filter((p) => p !== opt);
-                                  setScnEdits((prev) => ({ ...prev, housingProblems: updated.join(",") }));
-                                }}
-                              />
-                              <span className="text-sm text-slate-700">{opt}</span>
-                            </label>
-                          ))}
-                        </div>
+                      <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                        <span className="text-sm text-slate-600">18. Do you have problems with any of the following?</span>
+                        <Select
+                          value={editVal}
+                          onValueChange={(v) => setScnEdits((prev) => ({ ...prev, housingProblems: v }))}
+                        >
+                          <SelectTrigger className="h-7 text-sm w-64 border-slate-300">
+                            <SelectValue placeholder="Select..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {HOUSING_PROBLEM_OPTIONS.map((opt) => (
+                              <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     );
                   })()}
