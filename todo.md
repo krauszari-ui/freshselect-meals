@@ -638,3 +638,5 @@
 - [x] Add Q: "Do you struggle with paying for housing or find yourself falling behind on payments?" (Yes/No) to SCN assessment admin view
 - [x] Add Q: "Do you have problems with any of the following?" (multi-select checkboxes: Pests, Mold, Lead paint or pipes, Lack of heat, Oven or stove not working, Smoke detectors missing or not working, Water leaks) to SCN assessment admin view
 - [x] Add Q: "Does the member have difficulty climbing stairs or bathing?" (Yes/No) to SCN assessment admin view
+- [x] Add "None / I live alone" (value 0) option to household members count dropdown on intake form
+- [x] Make household member name required — block form submission if any member row has an empty name

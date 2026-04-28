@@ -330,8 +330,11 @@ function validateStep2(form: FormData, uploads?: Record<string, { url: string; f
 
 function validateStep3(form: FormData): FormErrors {
   const e: FormErrors = {};
-  // Household members required
-  if (!form.additionalMembersCount) e.householdMembers = "Please select the number of household members";
+  // Household members required — "0" (None) is a valid selection
+  if (form.additionalMembersCount === "") e.householdMembers = "Please select the number of household members";
+  // Each member must have a name
+  const missingName = form.householdMembers.some((m) => !m.name.trim());
+  if (missingName) e.householdMembers = "Please enter the full name for every household member";
   if (form.mealFocus.length === 0) e.mealFocus = "Select at least one meal type";
   if (!form.needsRefrigerator) e.needsRefrigerator = "Required";
   if (!form.needsMicrowave) e.needsMicrowave = "Required";
@@ -1473,13 +1476,12 @@ export default function Home() {
                           <SelectValue placeholder="Please select..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {Array.from({ length: 10 }, (_, i) =>
-                            i === 0 ? null : (
-                              <SelectItem key={i} value={String(i)}>
-                                {`${i} member${i > 1 ? "s" : ""}`}
-                              </SelectItem>
-                            )
-                          )}
+                          <SelectItem value="0">None — I live alone</SelectItem>
+                          {Array.from({ length: 9 }, (_, i) => (
+                            <SelectItem key={i + 1} value={String(i + 1)}>
+                              {`${i + 1} member${i + 1 > 1 ? "s" : ""}`}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1513,7 +1515,7 @@ export default function Home() {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
-                            <Label className="text-stone-600 text-xs">Full Name</Label>
+                            <Label className="text-stone-600 text-xs">Full Name *</Label>
                             <Input
                               value={member.name}
                               onChange={(e) => {
@@ -1522,7 +1524,11 @@ export default function Home() {
                                 update("householdMembers", members);
                               }}
                               placeholder="Full Name"
+                              className={!member.name.trim() && errors.householdMembers ? "border-red-400" : ""}
                             />
+                            {!member.name.trim() && errors.householdMembers && (
+                              <p className="text-red-500 text-xs mt-0.5">Name is required</p>
+                            )}
                           </div>
                           <div>
                             <Label className="text-stone-600 text-xs">Date of Birth</Label>
