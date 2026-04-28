@@ -644,3 +644,4 @@
 - [x] Security: enforce isActive check on admin login so deactivated staff cannot log in
 - [x] Security: HTML-escape email body in sendClientEmail to prevent HTML injection
 - [x] Security: add rate limiter on password reset (forgotPassword) endpoint
+- [x] Add "Assessment Recorded" stage option to all admin stage dropdowns

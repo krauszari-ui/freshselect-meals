@@ -17,6 +17,7 @@ const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string }> 
   level_one_only: { label: "Level One Only", bg: "bg-violet-100", text: "text-violet-700" },
   referral: { label: "Referral", bg: "bg-emerald-100", text: "text-emerald-700" },
   assessment: { label: "Assessment", bg: "bg-blue-100", text: "text-blue-700" },
+  assessment_recorded: { label: "Assessment Recorded", bg: "bg-sky-100", text: "text-sky-700" },
   provider_attestation_required: { label: "Provider Attestation Required", bg: "bg-orange-100", text: "text-orange-700" },
   flagged: { label: "Flagged-Needs Attention", bg: "bg-rose-100", text: "text-rose-700" },
 };

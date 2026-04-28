@@ -10,6 +10,7 @@ import { Link } from "wouter";
 const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
   referral: { label: "Referral", color: "text-emerald-600" },
   assessment: { label: "Assessment", color: "text-blue-600" },
+  assessment_recorded: { label: "Assessment Recorded", color: "text-sky-600" },
   level_one_only: { label: "Level One Only", color: "text-teal-600" },
   level_one_household: { label: "Level One (household)", color: "text-purple-600" },
   level_2_active: { label: "Level 2 Active", color: "text-violet-600" },
@@ -21,6 +22,7 @@ const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
 const STAGE_BADGE_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
   referral: { label: "Referral", bg: "bg-emerald-100", text: "text-emerald-700" },
   assessment: { label: "Assessment", bg: "bg-blue-100", text: "text-blue-700" },
+  assessment_recorded: { label: "Assessment Recorded", bg: "bg-sky-100", text: "text-sky-700" },
   level_one_only: { label: "Level One Only", bg: "bg-violet-100", text: "text-violet-700" },
   level_one_household: { label: "Level One (household)", bg: "bg-purple-100", text: "text-purple-700" },
   level_2_active: { label: "Level 2 Active", bg: "bg-teal-100", text: "text-teal-700" },
@@ -53,7 +55,7 @@ export default function AdminDashboard() {
   const totalMembers = (stats as any)?.totalMembers ?? 0;
 
   const PIPELINE_STAGES = [
-    "referral", "assessment", "level_one_only", "level_one_household", "level_2_active",
+    "referral", "assessment", "assessment_recorded", "level_one_only", "level_one_household", "level_2_active",
     "ineligible", "provider_attestation_required", "flagged",
   ];
 
