@@ -640,3 +640,4 @@
 - [x] Add Q: "Does the member have difficulty climbing stairs or bathing?" (Yes/No) to SCN assessment admin view
 - [x] Add "None / I live alone" (value 0) option to household members count dropdown on intake form
 - [x] Make household member name required — block form submission if any member row has an empty name
+- [x] Make Medicaid ID and Date of Birth required for every household member row on intake form
