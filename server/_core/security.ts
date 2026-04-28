@@ -88,6 +88,15 @@ export const uploadLimiter = rateLimit({
   message: { error: "Too many file uploads. Please wait before uploading again." },
 });
 
+/** Password reset limiter: 5 requests / 15 min per IP — prevents inbox flooding */
+export const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many password reset requests. Please wait 15 minutes before trying again." },
+});
+
 /** Referrer portal login — Tier 1: 10 attempts / 1 hour per IP */
 export const referrerLoginLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour

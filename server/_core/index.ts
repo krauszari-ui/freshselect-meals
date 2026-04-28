@@ -7,7 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { applySecurityMiddleware, submissionLimiter, loginLimiter, loginHardLimiter, uploadLimiter, referrerLoginLimiter, referrerLoginHardLimiter } from "./security";
+import { applySecurityMiddleware, submissionLimiter, loginLimiter, loginHardLimiter, uploadLimiter, referrerLoginLimiter, referrerLoginHardLimiter, passwordResetLimiter } from "./security";
 import { requestLogger } from "./logger";
 import { createClientEmail, getSubmissionById, createNotification } from "../db";
 import { sdk } from "./sdk";
@@ -289,8 +289,9 @@ async function startServer() {
   app.use("/api/trpc/admin.referrerPortal.login", referrerLoginHardLimiter);
 
   app.use("/api/trpc/upload.document", uploadLimiter);
-
-  // tRPC API
+  // Password reset: 5 requests / 15 min per IP — prevents inbox flooding
+  app.use("/api/trpc/passwordReset.forgotPassword", passwordResetLimiter);
+  // tRPC APII
   app.use(
     "/api/trpc",
     createExpressMiddleware({
