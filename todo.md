@@ -635,3 +635,6 @@
 - [x] Enhanced Audit Log page: rich detail rendering with before/after diffs, icons, grouped action filter, expandable raw JSON rows
 - [x] 1-hour inactivity auto-logout for staff: warning at 55min, logout at 60min
 - [x] Fix non-editable HOUSEHOLD APPLIANCE / COOKING NEEDS and health category sections on assessment/client detail page
+- [x] Add Q: "Do you struggle with paying for housing or find yourself falling behind on payments?" (Yes/No) to SCN assessment admin view
+- [x] Add Q: "Do you have problems with any of the following?" (multi-select checkboxes: Pests, Mold, Lead paint or pipes, Lack of heat, Oven or stove not working, Smoke detectors missing or not working, Water leaks) to SCN assessment admin view
+- [x] Add Q: "Does the member have difficulty climbing stairs or bathing?" (Yes/No) to SCN assessment admin view
