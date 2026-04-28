@@ -332,9 +332,13 @@ function validateStep3(form: FormData): FormErrors {
   const e: FormErrors = {};
   // Household members required — "0" (None) is a valid selection
   if (form.additionalMembersCount === "") e.householdMembers = "Please select the number of household members";
-  // Each member must have a name
+  // Each member must have a name, DOB, and Medicaid ID
   const missingName = form.householdMembers.some((m) => !m.name.trim());
   if (missingName) e.householdMembers = "Please enter the full name for every household member";
+  const missingDob = form.householdMembers.some((m) => !m.dateOfBirth);
+  if (!missingName && missingDob) e.householdMembers = "Please enter the date of birth for every household member";
+  const missingMedicaid = form.householdMembers.some((m) => !m.medicaidId.trim());
+  if (!missingName && !missingDob && missingMedicaid) e.householdMembers = "Please enter the Medicaid ID for every household member";
   if (form.mealFocus.length === 0) e.mealFocus = "Select at least one meal type";
   if (!form.needsRefrigerator) e.needsRefrigerator = "Required";
   if (!form.needsMicrowave) e.needsMicrowave = "Required";
@@ -1531,7 +1535,7 @@ export default function Home() {
                             )}
                           </div>
                           <div>
-                            <Label className="text-stone-600 text-xs">Date of Birth</Label>
+                            <Label className="text-stone-600 text-xs">Date of Birth *</Label>
                             <Input
                               type="date"
                               value={member.dateOfBirth}
@@ -1540,10 +1544,14 @@ export default function Home() {
                                 members[idx] = { ...members[idx], dateOfBirth: e.target.value };
                                 update("householdMembers", members);
                               }}
+                              className={!member.dateOfBirth && errors.householdMembers ? "border-red-400" : ""}
                             />
+                            {!member.dateOfBirth && errors.householdMembers && (
+                              <p className="text-red-500 text-xs mt-0.5">Date of birth is required</p>
+                            )}
                           </div>
                           <div>
-                            <Label className="text-stone-600 text-xs">Medicaid ID</Label>
+                            <Label className="text-stone-600 text-xs">Medicaid ID *</Label>
                             <Input
                               value={member.medicaidId}
                               onChange={(e) => {
@@ -1553,7 +1561,11 @@ export default function Home() {
                               }}
                               placeholder="AB12345C"
                               maxLength={8}
+                              className={!member.medicaidId.trim() && errors.householdMembers ? "border-red-400" : ""}
                             />
+                            {!member.medicaidId.trim() && errors.householdMembers && (
+                              <p className="text-red-500 text-xs mt-0.5">Medicaid ID is required</p>
+                            )}
                           </div>
                         </div>
 
