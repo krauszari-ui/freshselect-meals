@@ -645,3 +645,4 @@
 - [x] Security: HTML-escape email body in sendClientEmail to prevent HTML injection
 - [x] Security: add rate limiter on password reset (forgotPassword) endpoint
 - [x] Add "Assessment Recorded" stage option to all admin stage dropdowns
+- [x] Auto-update stage to "assessment_recorded" when marking assessment complete
