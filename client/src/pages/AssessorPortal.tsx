@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, CheckCircle2, XCircle, Search, LogOut, ClipboardList } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Search, LogOut, ClipboardList, Clock, FolderCheck } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
@@ -17,10 +17,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 
+type Tab = "pending" | "recorded";
+
 export default function AssessorPortal() {
   const { user, loading, logout } = useAuth();
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState<Tab>("pending");
 
   // Approve state
   const [confirmApproveId, setConfirmApproveId] = useState<number | null>(null);
@@ -32,9 +35,21 @@ export default function AssessorPortal() {
   const [rejectReason, setRejectReason] = useState("");
 
   const { data: clients, isLoading, refetch } = trpc.admin.assessorList.useQuery(
-    { search: search || undefined },
+    { search: search || undefined, tab: activeTab },
     { enabled: !!user }
   );
+
+  // Count for badge on each tab
+  const { data: pendingClients } = trpc.admin.assessorList.useQuery(
+    { tab: "pending" },
+    { enabled: !!user }
+  );
+  const { data: recordedClients } = trpc.admin.assessorList.useQuery(
+    { tab: "recorded" },
+    { enabled: !!user }
+  );
+  const pendingCount = (pendingClients as any[] | undefined)?.length ?? 0;
+  const recordedCount = (recordedClients as any[] | undefined)?.length ?? 0;
 
   const approveClientMutation = trpc.admin.approveClient.useMutation({
     onSuccess: () => {
@@ -99,11 +114,51 @@ export default function AssessorPortal() {
 
       {/* Content */}
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold text-slate-900 mb-1">Clients Pending Approval</h2>
+        <div className="mb-5">
+          <h2 className="text-xl font-semibold text-slate-900 mb-1">Client Assessments</h2>
           <p className="text-sm text-slate-500">
-            These clients have completed their SCN assessment and are awaiting your review.
+            Review clients who have completed their SCN assessment.
           </p>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 mb-5 bg-slate-100 p-1 rounded-lg w-fit">
+          <button
+            onClick={() => { setActiveTab("pending"); setSearch(""); }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === "pending"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <Clock className="h-4 w-4" />
+            Pending Assessment
+            {pendingCount > 0 && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                activeTab === "pending" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"
+              }`}>
+                {pendingCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => { setActiveTab("recorded"); setSearch(""); }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === "recorded"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <FolderCheck className="h-4 w-4" />
+            Assessment Recorded
+            {recordedCount > 0 && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                activeTab === "recorded" ? "bg-sky-100 text-sky-700" : "bg-slate-200 text-slate-600"
+              }`}>
+                {recordedCount}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Search */}
@@ -124,9 +179,19 @@ export default function AssessorPortal() {
           </div>
         ) : rows.length === 0 ? (
           <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-            <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto mb-3" />
-            <p className="text-slate-600 font-medium">No clients pending approval</p>
-            <p className="text-sm text-slate-400 mt-1">All assessment-completed clients have been reviewed.</p>
+            {activeTab === "pending" ? (
+              <>
+                <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto mb-3" />
+                <p className="text-slate-600 font-medium">No clients pending assessment</p>
+                <p className="text-sm text-slate-400 mt-1">All assessment-completed clients have been reviewed.</p>
+              </>
+            ) : (
+              <>
+                <FolderCheck className="h-10 w-10 text-sky-400 mx-auto mb-3" />
+                <p className="text-slate-600 font-medium">No recorded assessments yet</p>
+                <p className="text-sm text-slate-400 mt-1">Clients will appear here once their stage is set to Assessment Recorded.</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden admin-table-wrap">
@@ -137,12 +202,14 @@ export default function AssessorPortal() {
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">CIN / Medicaid ID</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Assessment Date</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                  {activeTab === "pending" && (
+                    <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {rows.map((client: any) => (
-                  <tr key={client.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={client.id} className={`hover:bg-slate-50 transition-colors ${activeTab === "recorded" ? "opacity-80" : ""}`}>
                     <td className="px-5 py-3.5">
                       <Link href={`/admin/clients/${client.id}`}>
                         <span className="font-medium text-slate-900 hover:text-emerald-600 cursor-pointer">
@@ -164,7 +231,9 @@ export default function AssessorPortal() {
                         : "—"}
                     </td>
                     <td className="px-5 py-3.5">
-                      {client.status === "approved" ? (
+                      {activeTab === "recorded" ? (
+                        <Badge className="bg-sky-100 text-sky-700 text-xs">Assessment Recorded</Badge>
+                      ) : client.status === "approved" ? (
                         <div>
                           <Badge className="bg-emerald-100 text-emerald-700 text-xs">Approved</Badge>
                           {client.approvedBy && (
@@ -182,42 +251,44 @@ export default function AssessorPortal() {
                         <Badge className="bg-amber-100 text-amber-700 text-xs">Pending Review</Badge>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 text-right">
-                      {client.status === "approved" ? (
-                        <span className="text-xs text-emerald-600 flex items-center justify-end gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Approved
-                        </span>
-                      ) : client.status === "rejected" ? (
-                        <span className="text-xs text-red-500 flex items-center justify-end gap-1">
-                          <XCircle className="h-3.5 w-3.5" /> Rejected
-                        </span>
-                      ) : (
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-red-200 text-red-600 hover:bg-red-50 text-xs h-7 px-3"
-                            onClick={() => {
-                              setRejectId(client.id);
-                              setRejectName(`${client.firstName} ${client.lastName}`);
-                              setRejectReason("");
-                            }}
-                          >
-                            <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 px-3"
-                            onClick={() => {
-                              setConfirmApproveId(client.id);
-                              setConfirmApproveName(`${client.firstName} ${client.lastName}`);
-                            }}
-                          >
-                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
-                          </Button>
-                        </div>
-                      )}
-                    </td>
+                    {activeTab === "pending" && (
+                      <td className="px-5 py-3.5 text-right">
+                        {client.status === "approved" ? (
+                          <span className="text-xs text-emerald-600 flex items-center justify-end gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Approved
+                          </span>
+                        ) : client.status === "rejected" ? (
+                          <span className="text-xs text-red-500 flex items-center justify-end gap-1">
+                            <XCircle className="h-3.5 w-3.5" /> Rejected
+                          </span>
+                        ) : (
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-red-200 text-red-600 hover:bg-red-50 text-xs h-7 px-3"
+                              onClick={() => {
+                                setRejectId(client.id);
+                                setRejectName(`${client.firstName} ${client.lastName}`);
+                                setRejectReason("");
+                              }}
+                            >
+                              <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 px-3"
+                              onClick={() => {
+                                setConfirmApproveId(client.id);
+                                setConfirmApproveName(`${client.firstName} ${client.lastName}`);
+                              }}
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -226,7 +297,8 @@ export default function AssessorPortal() {
         )}
 
         <p className="text-xs text-slate-400 mt-4 text-center">
-          Showing {rows.length} client{rows.length !== 1 ? "s" : ""} with completed assessments
+          Showing {rows.length} client{rows.length !== 1 ? "s" : ""}
+          {activeTab === "pending" ? " pending assessment review" : " with recorded assessments"}
         </p>
       </main>
 

@@ -122,6 +122,7 @@ export interface ListSubmissionsOptions {
   search?: string;
   status?: Submission["status"] | "all";
   stage?: string;
+  excludeStage?: string;
   supermarket?: string;
   neighborhood?: string;
   program?: string;
@@ -141,7 +142,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, page = 1, pageSize = 20 } = opts;
+  const { search, status, stage, excludeStage, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -155,6 +156,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   }
   if (status && status !== "all") conditions.push(eq(submissions.status, status));
   if (stage && stage !== "all") conditions.push(eq(submissions.stage, stage as Submission["stage"]));
+  if (excludeStage && excludeStage !== "all") conditions.push(ne(submissions.stage, excludeStage as Submission["stage"]));
   if (supermarket && supermarket !== "all") conditions.push(eq(submissions.supermarket, supermarket));
   if (neighborhood && neighborhood !== "all") conditions.push(eq(submissions.neighborhood, neighborhood));
   if (program && program !== "all") conditions.push(eq(submissions.program, program));

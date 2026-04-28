@@ -348,13 +348,18 @@ export const appRouter = router({
       search: z.string().optional(),
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(200).optional(),
+      tab: z.enum(["pending", "recorded"]).optional(),
     })).query(async ({ input }) => {
-      // Filter at DB level so pagination doesn't hide assessment-completed clients
+      const tab = input.tab ?? "pending";
+      // "pending" tab: assessment completed but stage is NOT yet assessment_recorded
+      // "recorded" tab: stage is assessment_recorded
       const result = await listSubmissions({
         search: input.search,
         page: input.page,
         pageSize: input.pageSize ?? 200,
         assessmentCompleted: true,
+        stage: tab === "recorded" ? "assessment_recorded" : undefined,
+        excludeStage: tab === "pending" ? "assessment_recorded" : undefined,
       });
       return Array.isArray(result) ? result : (result as any).rows ?? [];
     }),
