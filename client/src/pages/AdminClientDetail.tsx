@@ -1527,7 +1527,20 @@ export default function AdminClientDetail() {
                       breastmilkRefrigeration: String(sc.breastmilkRefrigeration || ""),
                       // Housing & accessibility questions
                       housingPaymentStruggle: String(sc.housingPaymentStruggle || ""),
-                      housingProblems: Array.isArray(sc.housingProblems) ? sc.housingProblems.join(",") : String(sc.housingProblems || ""),
+                      // housingProblems: stored as a single string (dropdown) since Q18 was changed from multi-select.
+                      // Legacy data may be an array of comma-split fragments (e.g. ["Pests such as bugs","ants","or mice"]).
+                      // Reconstruct by joining and then matching against the known option list.
+                      housingProblems: (() => {
+                        const HOUSING_OPTIONS = ["No","Pests such as bugs, ants, or mice","Mold","Lead paint or pipes","Lack of heat","Oven or stove not working","Smoke detectors missing or not working","Water leaks"];
+                        if (Array.isArray(sc.housingProblems)) {
+                          // Try to find a matching option by joining fragments back
+                          const joined = sc.housingProblems.join(", ");
+                          const match = HOUSING_OPTIONS.find((opt) => joined.includes(opt));
+                          return match || "";
+                        }
+                        const s = String(sc.housingProblems || "");
+                        return HOUSING_OPTIONS.includes(s) ? s : "";
+                      })(),
                       difficultyClimbingStairs: String(sc.difficultyClimbingStairs || ""),
                       // Food allergies / dietary restrictions (top-level formData fields)
                       foodAllergies: String(fd2.foodAllergies || ""),
@@ -1813,10 +1826,17 @@ export default function AdminClientDetail() {
                       "Smoke detectors missing or not working",
                       "Water leaks",
                     ];
-                    // Stored value is a string (single selection)
-                    const savedVal: string = Array.isArray(screening.housingProblems)
-                      ? (screening.housingProblems[0] || "")
-                      : String(screening.housingProblems || "");
+                    // Stored value is a string (single selection).
+                    // Legacy data may be an array of comma-split fragments — reconstruct by joining and matching.
+                    const savedVal: string = (() => {
+                      if (Array.isArray(screening.housingProblems)) {
+                        const joined = (screening.housingProblems as string[]).join(", ");
+                        const match = HOUSING_PROBLEM_OPTIONS.find((opt) => joined.includes(opt));
+                        return match || "";
+                      }
+                      const s = String(screening.housingProblems || "");
+                      return HOUSING_PROBLEM_OPTIONS.includes(s) ? s : "";
+                    })();
                     const editVal: string = scnEdits.housingProblems !== undefined
                       ? scnEdits.housingProblems
                       : savedVal;
