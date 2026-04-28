@@ -11,6 +11,8 @@ const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
   referral: { label: "Referral", color: "text-emerald-600" },
   assessment: { label: "Assessment", color: "text-blue-600" },
   assessment_recorded: { label: "Assessment Recorded", color: "text-sky-600" },
+  missing_information: { label: "Missing Information", color: "text-orange-600" },
+  not_eligible: { label: "Not Eligible", color: "text-rose-600" },
   level_one_only: { label: "Level One Only", color: "text-teal-600" },
   level_one_household: { label: "Level One (household)", color: "text-purple-600" },
   level_2_active: { label: "Level 2 Active", color: "text-violet-600" },
@@ -23,6 +25,8 @@ const STAGE_BADGE_CONFIG: Record<string, { label: string; bg: string; text: stri
   referral: { label: "Referral", bg: "bg-emerald-100", text: "text-emerald-700" },
   assessment: { label: "Assessment", bg: "bg-blue-100", text: "text-blue-700" },
   assessment_recorded: { label: "Assessment Recorded", bg: "bg-sky-100", text: "text-sky-700" },
+  missing_information: { label: "Missing Information", bg: "bg-orange-100", text: "text-orange-700" },
+  not_eligible: { label: "Not Eligible", bg: "bg-rose-100", text: "text-rose-700" },
   level_one_only: { label: "Level One Only", bg: "bg-violet-100", text: "text-violet-700" },
   level_one_household: { label: "Level One (household)", bg: "bg-purple-100", text: "text-purple-700" },
   level_2_active: { label: "Level 2 Active", bg: "bg-teal-100", text: "text-teal-700" },
@@ -55,7 +59,7 @@ export default function AdminDashboard() {
   const totalMembers = (stats as any)?.totalMembers ?? 0;
 
   const PIPELINE_STAGES = [
-    "referral", "assessment", "assessment_recorded", "level_one_only", "level_one_household", "level_2_active",
+    "referral", "assessment", "assessment_recorded", "missing_information", "not_eligible", "level_one_only", "level_one_household", "level_2_active",
     "ineligible", "provider_attestation_required", "flagged",
   ];
 

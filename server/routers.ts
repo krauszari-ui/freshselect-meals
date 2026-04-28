@@ -348,18 +348,27 @@ export const appRouter = router({
       search: z.string().optional(),
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(200).optional(),
-      tab: z.enum(["pending", "recorded"]).optional(),
+      tab: z.enum(["pending", "recorded", "missing_information", "not_eligible"]).optional(),
     })).query(async ({ input }) => {
       const tab = input.tab ?? "pending";
-      // "pending" tab: assessment completed but stage is NOT yet assessment_recorded
-      // "recorded" tab: stage is assessment_recorded
+      // "pending": assessment completed, not yet categorised into a terminal assessor stage
+      // "recorded": stage = assessment_recorded
+      // "missing_information": stage = missing_information
+      // "not_eligible": stage = not_eligible
+      const terminalStages = ["assessment_recorded", "missing_information", "not_eligible"];
+      const stageFilter =
+        tab === "pending" ? undefined :
+        tab === "recorded" ? "assessment_recorded" :
+        tab === "missing_information" ? "missing_information" :
+        "not_eligible";
       const result = await listSubmissions({
         search: input.search,
         page: input.page,
         pageSize: input.pageSize ?? 200,
         assessmentCompleted: true,
-        stage: tab === "recorded" ? "assessment_recorded" : undefined,
-        excludeStage: tab === "pending" ? "assessment_recorded" : undefined,
+        stage: stageFilter,
+        // For pending: exclude all terminal assessor stages so completed ones don't show
+        ...(tab === "pending" ? { excludeStages: terminalStages } : {}),
       });
       return Array.isArray(result) ? result : (result as any).rows ?? [];
     }),
@@ -567,7 +576,7 @@ export const appRouter = router({
 
     updateStage: staffProcedure.input(z.object({
       id: z.number(),
-      stage: z.enum(["referral", "assessment", "assessment_recorded", "level_one_only", "level_one_household", "level_2_active", "ineligible", "provider_attestation_required", "flagged"]),
+      stage: z.enum(["referral", "assessment", "assessment_recorded", "missing_information", "not_eligible", "level_one_only", "level_one_household", "level_2_active", "ineligible", "provider_attestation_required", "flagged"]),
     })).mutation(async ({ input, ctx }) => {
       // Fetch current stage for history
       const existing = await getSubmissionById(input.id);
@@ -886,6 +895,40 @@ export const appRouter = router({
         clientId: input.id,
         clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
         details: input.reason ? { reason: input.reason } : undefined,
+      });
+      return { success: true };
+    }),
+
+    markMissingInfo: assessorProcedure.input(z.object({
+      id: z.number(),
+      note: z.string().min(1),
+    })).mutation(async ({ input, ctx }) => {
+      const existing = await getSubmissionById(input.id);
+      await updateSubmissionStage(input.id, "missing_information");
+      await updateSubmissionFields(input.id, { missingInfoNote: input.note } as any);
+      await logAudit({
+        actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Assessor",
+        action: "stage_changed",
+        clientId: input.id,
+        clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
+        details: { stage: "missing_information", note: input.note },
+      });
+      return { success: true };
+    }),
+
+    markNotEligible: assessorProcedure.input(z.object({
+      id: z.number(),
+      reason: z.string().min(1),
+    })).mutation(async ({ input, ctx }) => {
+      const existing = await getSubmissionById(input.id);
+      await updateSubmissionStage(input.id, "not_eligible");
+      await updateSubmissionFields(input.id, { notEligibleReason: input.reason } as any);
+      await logAudit({
+        actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Assessor",
+        action: "stage_changed",
+        clientId: input.id,
+        clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
+        details: { stage: "not_eligible", reason: input.reason },
       });
       return { success: true };
     }),

@@ -155,6 +155,20 @@
       "when": 1777399770674,
       "tag": "0021_whole_hairball",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1777417549654,
+      "tag": "0022_true_captain_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1777417717552,
+      "tag": "0023_giant_killraven",
+      "breakpoints": true
     }
   ]
 }

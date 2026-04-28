@@ -18,6 +18,8 @@ const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string }> 
   referral: { label: "Referral", bg: "bg-emerald-100", text: "text-emerald-700" },
   assessment: { label: "Assessment", bg: "bg-blue-100", text: "text-blue-700" },
   assessment_recorded: { label: "Assessment Recorded", bg: "bg-sky-100", text: "text-sky-700" },
+  missing_information: { label: "Missing Information", bg: "bg-orange-100", text: "text-orange-700" },
+  not_eligible: { label: "Not Eligible", bg: "bg-rose-100", text: "text-rose-700" },
   provider_attestation_required: { label: "Provider Attestation Required", bg: "bg-orange-100", text: "text-orange-700" },
   flagged: { label: "Flagged-Needs Attention", bg: "bg-rose-100", text: "text-rose-700" },
 };

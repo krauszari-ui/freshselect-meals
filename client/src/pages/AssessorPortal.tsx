@@ -5,7 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, CheckCircle2, XCircle, Search, LogOut, ClipboardList, Clock, FolderCheck } from "lucide-react";
+import {
+  Loader2, CheckCircle2, XCircle, Search, LogOut, ClipboardList,
+  Clock, FolderCheck, AlertCircle, Ban,
+} from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
@@ -17,7 +20,38 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 
-type Tab = "pending" | "recorded";
+type Tab = "pending" | "recorded" | "missing_information" | "not_eligible";
+
+const TAB_CONFIG: Record<Tab, { label: string; icon: React.ReactNode; emptyTitle: string; emptyDesc: string; badgeClass: string }> = {
+  pending: {
+    label: "Pending Assessment",
+    icon: <Clock className="h-4 w-4" />,
+    emptyTitle: "No clients pending assessment",
+    emptyDesc: "All assessment-completed clients have been reviewed.",
+    badgeClass: "bg-amber-100 text-amber-700",
+  },
+  recorded: {
+    label: "Assessment Recorded",
+    icon: <FolderCheck className="h-4 w-4" />,
+    emptyTitle: "No recorded assessments yet",
+    emptyDesc: "Clients will appear here once their stage is set to Assessment Recorded.",
+    badgeClass: "bg-sky-100 text-sky-700",
+  },
+  missing_information: {
+    label: "Missing Information",
+    icon: <AlertCircle className="h-4 w-4" />,
+    emptyTitle: "No clients flagged for missing information",
+    emptyDesc: "Clients you flag for missing information will appear here.",
+    badgeClass: "bg-orange-100 text-orange-700",
+  },
+  not_eligible: {
+    label: "Not Eligible",
+    icon: <Ban className="h-4 w-4" />,
+    emptyTitle: "No clients marked not eligible",
+    emptyDesc: "Clients you mark as not eligible will appear here.",
+    badgeClass: "bg-rose-100 text-rose-700",
+  },
+};
 
 export default function AssessorPortal() {
   const { user, loading, logout } = useAuth();
@@ -34,39 +68,57 @@ export default function AssessorPortal() {
   const [rejectName, setRejectName] = useState("");
   const [rejectReason, setRejectReason] = useState("");
 
+  // Missing info state
+  const [missingId, setMissingId] = useState<number | null>(null);
+  const [missingName, setMissingName] = useState("");
+  const [missingNote, setMissingNote] = useState("");
+
+  // Not eligible state
+  const [notEligibleId, setNotEligibleId] = useState<number | null>(null);
+  const [notEligibleName, setNotEligibleName] = useState("");
+  const [notEligibleReason, setNotEligibleReason] = useState("");
+
+  const utils = trpc.useUtils();
+
   const { data: clients, isLoading, refetch } = trpc.admin.assessorList.useQuery(
     { search: search || undefined, tab: activeTab },
     { enabled: !!user }
   );
 
-  // Count for badge on each tab
-  const { data: pendingClients } = trpc.admin.assessorList.useQuery(
-    { tab: "pending" },
-    { enabled: !!user }
-  );
-  const { data: recordedClients } = trpc.admin.assessorList.useQuery(
-    { tab: "recorded" },
-    { enabled: !!user }
-  );
-  const pendingCount = (pendingClients as any[] | undefined)?.length ?? 0;
-  const recordedCount = (recordedClients as any[] | undefined)?.length ?? 0;
+  // Count badges for each tab
+  const { data: pendingData } = trpc.admin.assessorList.useQuery({ tab: "pending" }, { enabled: !!user });
+  const { data: recordedData } = trpc.admin.assessorList.useQuery({ tab: "recorded" }, { enabled: !!user });
+  const { data: missingData } = trpc.admin.assessorList.useQuery({ tab: "missing_information" }, { enabled: !!user });
+  const { data: notEligibleData } = trpc.admin.assessorList.useQuery({ tab: "not_eligible" }, { enabled: !!user });
+
+  const counts: Record<Tab, number> = {
+    pending: (pendingData as any[] | undefined)?.length ?? 0,
+    recorded: (recordedData as any[] | undefined)?.length ?? 0,
+    missing_information: (missingData as any[] | undefined)?.length ?? 0,
+    not_eligible: (notEligibleData as any[] | undefined)?.length ?? 0,
+  };
+
+  const invalidateAll = () => {
+    utils.admin.assessorList.invalidate();
+  };
 
   const approveClientMutation = trpc.admin.approveClient.useMutation({
-    onSuccess: () => {
-      toast.success("Client approved successfully");
-      refetch();
-      setConfirmApproveId(null);
-    },
+    onSuccess: () => { toast.success("Client approved successfully"); invalidateAll(); setConfirmApproveId(null); },
     onError: (err) => toast.error(err.message),
   });
 
   const rejectClientMutation = trpc.admin.rejectClient.useMutation({
-    onSuccess: () => {
-      toast.success("Client rejected");
-      refetch();
-      setRejectId(null);
-      setRejectReason("");
-    },
+    onSuccess: () => { toast.success("Client rejected"); invalidateAll(); setRejectId(null); setRejectReason(""); },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const markMissingInfoMutation = trpc.admin.markMissingInfo.useMutation({
+    onSuccess: () => { toast.success("Client flagged for missing information"); invalidateAll(); setMissingId(null); setMissingNote(""); },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const markNotEligibleMutation = trpc.admin.markNotEligible.useMutation({
+    onSuccess: () => { toast.success("Client marked as not eligible"); invalidateAll(); setNotEligibleId(null); setNotEligibleReason(""); },
     onError: (err) => toast.error(err.message),
   });
 
@@ -90,6 +142,7 @@ export default function AssessorPortal() {
   }
 
   const rows = (clients as any[]) || [];
+  const tabCfg = TAB_CONFIG[activeTab];
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -116,49 +169,32 @@ export default function AssessorPortal() {
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         <div className="mb-5">
           <h2 className="text-xl font-semibold text-slate-900 mb-1">Client Assessments</h2>
-          <p className="text-sm text-slate-500">
-            Review clients who have completed their SCN assessment.
-          </p>
+          <p className="text-sm text-slate-500">Review clients who have completed their SCN assessment.</p>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-5 bg-slate-100 p-1 rounded-lg w-fit">
-          <button
-            onClick={() => { setActiveTab("pending"); setSearch(""); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === "pending"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            <Clock className="h-4 w-4" />
-            Pending Assessment
-            {pendingCount > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                activeTab === "pending" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"
-              }`}>
-                {pendingCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => { setActiveTab("recorded"); setSearch(""); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === "recorded"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            <FolderCheck className="h-4 w-4" />
-            Assessment Recorded
-            {recordedCount > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                activeTab === "recorded" ? "bg-sky-100 text-sky-700" : "bg-slate-200 text-slate-600"
-              }`}>
-                {recordedCount}
-              </span>
-            )}
-          </button>
+        <div className="flex flex-wrap gap-1 mb-5 bg-slate-100 p-1 rounded-lg w-fit">
+          {(Object.entries(TAB_CONFIG) as [Tab, typeof TAB_CONFIG[Tab]][]).map(([key, cfg]) => (
+            <button
+              key={key}
+              onClick={() => { setActiveTab(key); setSearch(""); }}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === key
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {cfg.icon}
+              <span className="hidden sm:inline">{cfg.label}</span>
+              {counts[key] > 0 && (
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                  activeTab === key ? cfg.badgeClass : "bg-slate-200 text-slate-600"
+                }`}>
+                  {counts[key]}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
 
         {/* Search */}
@@ -179,19 +215,9 @@ export default function AssessorPortal() {
           </div>
         ) : rows.length === 0 ? (
           <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-            {activeTab === "pending" ? (
-              <>
-                <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto mb-3" />
-                <p className="text-slate-600 font-medium">No clients pending assessment</p>
-                <p className="text-sm text-slate-400 mt-1">All assessment-completed clients have been reviewed.</p>
-              </>
-            ) : (
-              <>
-                <FolderCheck className="h-10 w-10 text-sky-400 mx-auto mb-3" />
-                <p className="text-slate-600 font-medium">No recorded assessments yet</p>
-                <p className="text-sm text-slate-400 mt-1">Clients will appear here once their stage is set to Assessment Recorded.</p>
-              </>
-            )}
+            <div className="flex justify-center mb-3">{tabCfg.icon}</div>
+            <p className="text-slate-600 font-medium">{tabCfg.emptyTitle}</p>
+            <p className="text-sm text-slate-400 mt-1">{tabCfg.emptyDesc}</p>
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden admin-table-wrap">
@@ -201,7 +227,9 @@ export default function AssessorPortal() {
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Client</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">CIN / Medicaid ID</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Assessment Date</th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    {activeTab === "missing_information" ? "Missing Info Note" : activeTab === "not_eligible" ? "Reason" : "Status"}
+                  </th>
                   {activeTab === "pending" && (
                     <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
                   )}
@@ -209,7 +237,7 @@ export default function AssessorPortal() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {rows.map((client: any) => (
-                  <tr key={client.id} className={`hover:bg-slate-50 transition-colors ${activeTab === "recorded" ? "opacity-80" : ""}`}>
+                  <tr key={client.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-5 py-3.5">
                       <Link href={`/admin/clients/${client.id}`}>
                         <span className="font-medium text-slate-900 hover:text-emerald-600 cursor-pointer">
@@ -220,32 +248,28 @@ export default function AssessorPortal() {
                         <p className="text-xs text-slate-400 mt-0.5">{client.cellPhone}</p>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 text-slate-600">
-                      {client.medicaidId || "—"}
-                    </td>
+                    <td className="px-5 py-3.5 text-slate-600">{client.medicaidId || "—"}</td>
                     <td className="px-5 py-3.5 text-slate-500 text-xs">
                       {client.assessmentCompletedAt
-                        ? new Date(client.assessmentCompletedAt).toLocaleDateString("en-US", {
-                            month: "short", day: "numeric", year: "numeric",
-                          })
+                        ? new Date(client.assessmentCompletedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                         : "—"}
                     </td>
                     <td className="px-5 py-3.5">
-                      {activeTab === "recorded" ? (
+                      {activeTab === "missing_information" ? (
+                        <p className="text-sm text-orange-700 max-w-xs">{client.missingInfoNote || "—"}</p>
+                      ) : activeTab === "not_eligible" ? (
+                        <p className="text-sm text-rose-700 max-w-xs">{client.notEligibleReason || "—"}</p>
+                      ) : activeTab === "recorded" ? (
                         <Badge className="bg-sky-100 text-sky-700 text-xs">Assessment Recorded</Badge>
                       ) : client.status === "approved" ? (
                         <div>
                           <Badge className="bg-emerald-100 text-emerald-700 text-xs">Approved</Badge>
-                          {client.approvedBy && (
-                            <p className="text-xs text-slate-400 mt-0.5">by {client.approvedBy}</p>
-                          )}
+                          {client.approvedBy && <p className="text-xs text-slate-400 mt-0.5">by {client.approvedBy}</p>}
                         </div>
                       ) : client.status === "rejected" ? (
                         <div>
                           <Badge className="bg-red-100 text-red-700 text-xs">Rejected</Badge>
-                          {client.rejectedBy && (
-                            <p className="text-xs text-slate-400 mt-0.5">by {client.rejectedBy}</p>
-                          )}
+                          {client.rejectedBy && <p className="text-xs text-slate-400 mt-0.5">by {client.rejectedBy}</p>}
                         </div>
                       ) : (
                         <Badge className="bg-amber-100 text-amber-700 text-xs">Pending Review</Badge>
@@ -262,26 +286,35 @@ export default function AssessorPortal() {
                             <XCircle className="h-3.5 w-3.5" /> Rejected
                           </span>
                         ) : (
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
                             <Button
                               size="sm"
                               variant="outline"
-                              className="border-red-200 text-red-600 hover:bg-red-50 text-xs h-7 px-3"
-                              onClick={() => {
-                                setRejectId(client.id);
-                                setRejectName(`${client.firstName} ${client.lastName}`);
-                                setRejectReason("");
-                              }}
+                              className="border-orange-200 text-orange-600 hover:bg-orange-50 text-xs h-7 px-2.5"
+                              onClick={() => { setMissingId(client.id); setMissingName(`${client.firstName} ${client.lastName}`); setMissingNote(""); }}
+                            >
+                              <AlertCircle className="h-3.5 w-3.5 mr-1" /> Missing Info
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-rose-200 text-rose-600 hover:bg-rose-50 text-xs h-7 px-2.5"
+                              onClick={() => { setNotEligibleId(client.id); setNotEligibleName(`${client.firstName} ${client.lastName}`); setNotEligibleReason(""); }}
+                            >
+                              <Ban className="h-3.5 w-3.5 mr-1" /> Not Eligible
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-red-200 text-red-600 hover:bg-red-50 text-xs h-7 px-2.5"
+                              onClick={() => { setRejectId(client.id); setRejectName(`${client.firstName} ${client.lastName}`); setRejectReason(""); }}
                             >
                               <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
                             </Button>
                             <Button
                               size="sm"
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 px-3"
-                              onClick={() => {
-                                setConfirmApproveId(client.id);
-                                setConfirmApproveName(`${client.firstName} ${client.lastName}`);
-                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 px-2.5"
+                              onClick={() => { setConfirmApproveId(client.id); setConfirmApproveName(`${client.firstName} ${client.lastName}`); }}
                             >
                               <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
                             </Button>
@@ -297,8 +330,7 @@ export default function AssessorPortal() {
         )}
 
         <p className="text-xs text-slate-400 mt-4 text-center">
-          Showing {rows.length} client{rows.length !== 1 ? "s" : ""}
-          {activeTab === "pending" ? " pending assessment review" : " with recorded assessments"}
+          Showing {rows.length} client{rows.length !== 1 ? "s" : ""} — {tabCfg.label}
         </p>
       </main>
 
@@ -308,7 +340,7 @@ export default function AssessorPortal() {
           <AlertDialogHeader>
             <AlertDialogTitle>Approve Client</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to approve <strong>{confirmApproveName}</strong>? This will mark their status as Approved in the system.
+              Are you sure you want to approve <strong>{confirmApproveName}</strong>? This will mark their status as Approved.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -327,35 +359,75 @@ export default function AssessorPortal() {
       {/* Reject Dialog */}
       <Dialog open={rejectId !== null} onOpenChange={(open) => { if (!open) { setRejectId(null); setRejectReason(""); } }}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Client</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Reject Client</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-sm text-slate-600">
               You are about to reject <strong>{rejectName}</strong>. Please provide a reason (optional).
             </p>
             <div className="space-y-1.5">
               <Label htmlFor="reject-reason">Reason for Rejection</Label>
-              <Textarea
-                id="reject-reason"
-                placeholder="e.g. Incomplete documentation, ineligible based on criteria..."
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                rows={3}
-              />
+              <Textarea id="reject-reason" placeholder="e.g. Incomplete documentation, ineligible based on criteria..." value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={3} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setRejectId(null); setRejectReason(""); }}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => rejectId !== null && rejectClientMutation.mutate({ id: rejectId, reason: rejectReason || undefined })}
-              disabled={rejectClientMutation.isPending}
-            >
+            <Button variant="outline" onClick={() => { setRejectId(null); setRejectReason(""); }}>Cancel</Button>
+            <Button variant="destructive" onClick={() => rejectId !== null && rejectClientMutation.mutate({ id: rejectId, reason: rejectReason || undefined })} disabled={rejectClientMutation.isPending}>
               {rejectClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
               Confirm Rejection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Missing Info Dialog */}
+      <Dialog open={missingId !== null} onOpenChange={(open) => { if (!open) { setMissingId(null); setMissingNote(""); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Flag Missing Information</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-slate-600">
+              What information is missing for <strong>{missingName}</strong>?
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="missing-note">Missing Information Note <span className="text-red-500">*</span></Label>
+              <Textarea id="missing-note" placeholder="e.g. Missing Medicaid ID, proof of address required..." value={missingNote} onChange={(e) => setMissingNote(e.target.value)} rows={3} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setMissingId(null); setMissingNote(""); }}>Cancel</Button>
+            <Button
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+              onClick={() => missingId !== null && missingNote.trim() && markMissingInfoMutation.mutate({ id: missingId, note: missingNote.trim() })}
+              disabled={markMissingInfoMutation.isPending || !missingNote.trim()}
+            >
+              {markMissingInfoMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <AlertCircle className="h-4 w-4 mr-2" />}
+              Flag as Missing Info
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Not Eligible Dialog */}
+      <Dialog open={notEligibleId !== null} onOpenChange={(open) => { if (!open) { setNotEligibleId(null); setNotEligibleReason(""); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Mark as Not Eligible</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-slate-600">
+              Why is <strong>{notEligibleName}</strong> not eligible?
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="not-eligible-reason">Reason <span className="text-red-500">*</span></Label>
+              <Textarea id="not-eligible-reason" placeholder="e.g. Does not meet income criteria, not a Medicaid member..." value={notEligibleReason} onChange={(e) => setNotEligibleReason(e.target.value)} rows={3} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setNotEligibleId(null); setNotEligibleReason(""); }}>Cancel</Button>
+            <Button
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              onClick={() => notEligibleId !== null && notEligibleReason.trim() && markNotEligibleMutation.mutate({ id: notEligibleId, reason: notEligibleReason.trim() })}
+              disabled={markNotEligibleMutation.isPending || !notEligibleReason.trim()}
+            >
+              {markNotEligibleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
+              Confirm Not Eligible
             </Button>
           </DialogFooter>
         </DialogContent>
