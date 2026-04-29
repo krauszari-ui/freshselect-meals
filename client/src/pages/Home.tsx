@@ -1021,11 +1021,9 @@ export default function Home() {
                         <Input
                           type="text"
                           value={form.dateOfBirth}
-                          onChange={(e) => update("dateOfBirth", formatDob(e.target.value))}
+                          onChange={(e) => update("dateOfBirth", e.target.value)}
                           className={errors.dateOfBirth ? "border-red-400" : ""}
                           placeholder="MM/DD/YYYY"
-                          maxLength={10}
-                          inputMode="numeric"
                         />
                         {errors.dateOfBirth && <p className="text-red-500 text-xs mt-1">{errors.dateOfBirth}</p>}
                       </div>
@@ -1578,11 +1576,10 @@ export default function Home() {
                               type="text"
                               placeholder="MM/DD/YYYY"
                               maxLength={10}
-                              inputMode="numeric"
                               value={member.dateOfBirth}
                               onChange={(e) => {
                                 const members = [...form.householdMembers];
-                                members[idx] = { ...members[idx], dateOfBirth: formatDob(e.target.value) };
+                                members[idx] = { ...members[idx], dateOfBirth: e.target.value };
                                 update("householdMembers", members);
                               }}
                               className={!member.dateOfBirth && errors.householdMembers ? "border-red-400" : ""}
