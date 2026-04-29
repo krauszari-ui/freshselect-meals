@@ -473,7 +473,7 @@ export default function AdminClients() {
   const setAssessmentCompletedFilter = (v: string) => setParam("assessmentCompleted", v);
   const setZipcodeFilter = (v: string) => setParam("zipcode", v);
   const setPriorityFilter = (v: string) => setParam("priority", v);
-  const setSortDir = (v: "desc" | "asc") => setParam("sort", v, false);
+  const setSortDir = (v: "desc" | "asc") => setParam("sort", v, true);
   const setPage = (p: number) => {
     const next = new URLSearchParams(searchParams);
     if (p <= 1) next.delete("page"); else next.set("page", String(p));
