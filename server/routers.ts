@@ -913,6 +913,33 @@ export const appRouter = router({
         clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
         details: { stage: "missing_information", note: input.note },
       });
+      // Send email to client if they have an email address
+      if (existing?.email) {
+        const clientName = `${existing.firstName} ${existing.lastName}`;
+        const escapedNote = input.note.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        await sendEmail({
+          to: existing.email,
+          subject: "Action Required: Additional Information Needed — FreshSelect Meals",
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+              <h2 style="color:#16a34a;margin-bottom:8px;">FreshSelect Meals</h2>
+              <hr style="border:none;border-top:1px solid #e5e7eb;margin-bottom:20px;" />
+              <p>Dear ${clientName},</p>
+              <p>Thank you for your application to the FreshSelect Meals program. After reviewing your file, our assessor has identified some information that is missing or needs to be provided before we can continue processing your application.</p>
+              <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px;margin:20px 0;">
+                <p style="font-weight:bold;color:#c2410c;margin:0 0 8px;">Missing Information:</p>
+                <p style="color:#7c2d12;margin:0;">${escapedNote}</p>
+              </div>
+              <p>Please contact us as soon as possible so we can complete your application:</p>
+              <ul style="color:#374151;">
+                <li>Phone: <strong>(718) 307-4664</strong></li>
+                <li>Email: <strong>info@freshselectmeals.com</strong></li>
+              </ul>
+              <p style="color:#6b7280;font-size:13px;margin-top:24px;">This message was sent on behalf of FreshSelect Meals. If you have questions, please call us directly.</p>
+            </div>
+          `,
+        }).catch(() => { /* non-blocking */ });
+      }
       return { success: true };
     }),
 

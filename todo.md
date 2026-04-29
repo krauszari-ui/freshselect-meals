@@ -649,3 +649,7 @@
 - [x] Add "Pending Assessment" and "Assessment Recorded" tabs to assessor client list page
 - [x] Add "Missing Information" tab to Assessor Portal with note dialog
 - [x] Add "Not Eligible" tab to Assessor Portal with reason dialog
+- [x] Email client when flagged as Missing Information with the note included
+- [x] Show Missing Info note and Not Eligible reason on admin client detail page
+- [x] Update intake form confirmation message to say "a few business days"
+- [x] Replace DOB calendar picker with text input on intake form
