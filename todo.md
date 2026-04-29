@@ -653,3 +653,4 @@
 - [x] Show Missing Info note and Not Eligible reason on admin client detail page
 - [x] Update intake form confirmation message to say "a few business days"
 - [x] Replace DOB calendar picker with text input on intake form
+- [x] Auto-format DOB fields as user types (MM/DD/YYYY)
