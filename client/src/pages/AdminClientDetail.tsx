@@ -23,7 +23,7 @@ import {
   ArrowLeft, Loader2, FileText, Plus, ChevronDown, ChevronUp,
   Pencil, Trash2, Upload, ExternalLink, Link2, Save, MessageSquare, Send, Mail, Paperclip,
   MailOpen, Reply, Clock, RefreshCw, CheckCircle2, XCircle, X, Activity, User, Tag, Layers,
-  FileUp, StickyNote, CheckSquare, AlertTriangle, ShieldCheck,
+  FileUp, StickyNote, CheckSquare, AlertTriangle, ShieldCheck, AlertCircle, Ban,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { formatLocalDate, formatLocalDateShort } from "@/lib/utils";
@@ -678,6 +678,18 @@ export default function AdminClientDetail() {
                 <div className="flex items-center gap-1 mt-0.5 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-0.5 w-fit">
                   <XCircle className="h-3 w-3" />
                   <span>Rejected by <strong>{(client as any).rejectedBy}</strong>{(client as any).rejectionReason ? ` — ${(client as any).rejectionReason}` : ""}</span>
+                </div>
+              )}
+              {(client as any).stage === "missing_information" && (client as any).missingInfoNote && (
+                <div className="flex items-start gap-1.5 mt-1 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1 max-w-sm">
+                  <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                  <span><strong>Missing Info:</strong> {(client as any).missingInfoNote}</span>
+                </div>
+              )}
+              {(client as any).stage === "not_eligible" && (client as any).notEligibleReason && (
+                <div className="flex items-start gap-1.5 mt-1 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1 max-w-sm">
+                  <Ban className="h-3 w-3 mt-0.5 shrink-0" />
+                  <span><strong>Not Eligible:</strong> {(client as any).notEligibleReason}</span>
                 </div>
               )}
               <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-slate-500">

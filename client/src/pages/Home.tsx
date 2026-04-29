@@ -871,7 +871,7 @@ export default function Home() {
             <h3 className="font-bold text-stone-800">What Happens Next?</h3>
             <div className="space-y-2 text-sm text-stone-600">
               <p>1. A confirmation email has been sent to your email address.</p>
-              <p>2. Our Social Care Navigator will review your application within 5 business days.</p>
+              <p>2. Our Social Care Navigator will review your application and follow up in a few business days.</p>
               <p>3. We will contact you to schedule a follow-up conversation.</p>
               <p>4. Once approved, you will begin receiving your food benefits.</p>
             </div>
@@ -984,10 +984,12 @@ export default function Home() {
                       <div>
                         <Label className="text-stone-700">Date of Birth *</Label>
                         <Input
-                          type="date"
+                          type="text"
                           value={form.dateOfBirth}
                           onChange={(e) => update("dateOfBirth", e.target.value)}
                           className={errors.dateOfBirth ? "border-red-400" : ""}
+                          placeholder="MM/DD/YYYY"
+                          maxLength={10}
                         />
                         {errors.dateOfBirth && <p className="text-red-500 text-xs mt-1">{errors.dateOfBirth}</p>}
                       </div>
@@ -1537,7 +1539,9 @@ export default function Home() {
                           <div>
                             <Label className="text-stone-600 text-xs">Date of Birth *</Label>
                             <Input
-                              type="date"
+                              type="text"
+                              placeholder="MM/DD/YYYY"
+                              maxLength={10}
                               value={member.dateOfBirth}
                               onChange={(e) => {
                                 const members = [...form.householdMembers];
