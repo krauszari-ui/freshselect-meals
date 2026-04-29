@@ -1121,10 +1121,13 @@ export default function AdminClients() {
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Language</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Members</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3 cursor-pointer select-none"
-                      onClick={() => setSortDir(sortDir === "desc" ? "asc" : "desc")}>
+                      onClick={() => {
+                        if (sortDir === "desc") setSortDir("asc");
+                        else setParam("sort", "", true);
+                      }}>
                       <span className="flex items-center gap-1">
                         Date Added
-                        {sortDir === "desc" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+                        {sortDir === "desc" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 text-orange-500" />}
                       </span>
                     </th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Priority</th>
