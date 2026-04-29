@@ -266,7 +266,20 @@ function validateStep1(form: FormData): FormErrors {
   const e: FormErrors = {};
   if (!form.firstName.trim()) e.firstName = "First name is required";
   if (!form.lastName.trim()) e.lastName = "Last name is required";
-  if (!form.dateOfBirth) e.dateOfBirth = "Date of birth is required";
+  if (!form.dateOfBirth) {
+    e.dateOfBirth = "Date of birth is required";
+  } else {
+    const dobMatch = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(form.dateOfBirth);
+    if (!dobMatch) {
+      e.dateOfBirth = "Enter date as MM/DD/YYYY (e.g. 04/15/1985)";
+    } else {
+      const [, mm, dd, yyyy] = dobMatch;
+      const d = new Date(`${yyyy}-${mm}-${dd}`);
+      if (isNaN(d.getTime()) || d.getMonth() + 1 !== parseInt(mm) || d.getDate() !== parseInt(dd)) {
+        e.dateOfBirth = "Enter a valid date in MM/DD/YYYY format";
+      }
+    }
+  }
   if (!form.medicaidId.trim()) e.medicaidId = "Medicaid ID is required";
   else if (!/^[A-Za-z]{2}\d{5}[A-Za-z]$/.test(form.medicaidId))
     e.medicaidId = "Format: 2 letters, 5 digits, 1 letter (e.g. AB12345C)";
@@ -336,7 +349,18 @@ function validateStep3(form: FormData): FormErrors {
   const missingName = form.householdMembers.some((m) => !m.name.trim());
   if (missingName) e.householdMembers = "Please enter the full name for every household member";
   const missingDob = form.householdMembers.some((m) => !m.dateOfBirth);
-  if (!missingName && missingDob) e.householdMembers = "Please enter the date of birth for every household member";
+  if (!missingName && missingDob) {
+    e.householdMembers = "Please enter the date of birth for every household member";
+  } else if (!missingName && !missingDob) {
+    const invalidDob = form.householdMembers.some((m) => {
+      const dobMatch = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(m.dateOfBirth);
+      if (!dobMatch) return true;
+      const [, mm, dd, yyyy] = dobMatch;
+      const d = new Date(`${yyyy}-${mm}-${dd}`);
+      return isNaN(d.getTime()) || d.getMonth() + 1 !== parseInt(mm) || d.getDate() !== parseInt(dd);
+    });
+    if (invalidDob) e.householdMembers = "Enter each date of birth as MM/DD/YYYY (e.g. 04/15/1985)";
+  }
   const missingMedicaid = form.householdMembers.some((m) => !m.medicaidId.trim());
   if (!missingName && !missingDob && missingMedicaid) e.householdMembers = "Please enter the Medicaid ID for every household member";
   if (form.mealFocus.length === 0) e.mealFocus = "Select at least one meal type";
