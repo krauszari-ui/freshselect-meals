@@ -493,42 +493,40 @@ export default function AdminClients() {
     document.getElementById("admin-main-scroll") ||
     document.querySelector<HTMLElement>("main");
 
-  // Restore scroll position when returning from a client detail page.
-  // In a SPA, history.back() triggers a popstate event but does NOT unmount/remount
-  // the component, so we listen for popstate to know when to restore scroll.
+  // Restore scroll position after back navigation.
+  // The back button in AdminClientDetail calls navigate(returnUrl) which updates
+  // searchParams. We watch searchParams changes and restore scroll if a saved
+  // position exists. Using a ref to avoid running on every filter change.
+  const prevSearchParamsRef = useRef(searchParams);
   useEffect(() => {
-    const restoreScroll = () => {
-      const saved = sessionStorage.getItem("adminClients.scrollTop");
-      if (saved) {
-        const container = getScrollContainer();
-        if (container) {
-          requestAnimationFrame(() => {
-            container.scrollTop = parseInt(saved, 10);
-            sessionStorage.removeItem("adminClients.scrollTop");
-          });
-        }
+    const saved = sessionStorage.getItem("adminClients.scrollTop");
+    if (saved) {
+      const container = getScrollContainer();
+      if (container) {
+        // Use a small delay to let the list re-render with the restored URL
+        const timer = setTimeout(() => {
+          container.scrollTop = parseInt(saved, 10);
+          sessionStorage.removeItem("adminClients.scrollTop");
+        }, 100);
+        return () => clearTimeout(timer);
       }
-    };
-    // Run once on mount (handles hard refresh / direct URL visit after back)
-    restoreScroll();
-    // Also run on popstate (handles SPA back navigation)
-    window.addEventListener("popstate", restoreScroll);
-    return () => window.removeEventListener("popstate", restoreScroll);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }
+    prevSearchParamsRef.current = searchParams;
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save scroll position before navigating to a client detail page.
-  // All filter changes use replaceState (via wouter's { replace: true }), so the
-  // history stack only has one entry for the clients list. We fix this by:
-  // 1. Saving the current scroll position to sessionStorage
-  // 2. Using wouter's navigate() WITHOUT replace:true so it does a pushState,
-  //    which adds the detail page as a new history entry on top of the current
-  //    filtered clients URL.
+  // Save the full current URL + scroll position to sessionStorage before navigating
+  // to a client detail page. The back button in AdminClientDetail reads this URL
+  // and navigates back to it directly — bypassing any browser history stack issues
+  // with wouter's SPA routing.
   const saveScrollAndNavigate = useCallback((href: string) => {
+    // Save full URL (pathname + search) so back button can restore it exactly
+    const currentUrl = window.location.pathname + window.location.search;
+    sessionStorage.setItem("adminClients.returnUrl", currentUrl);
+    // Also save scroll position
     const container = getScrollContainer();
     if (container) {
       sessionStorage.setItem("adminClients.scrollTop", String(container.scrollTop));
     }
-    // navigate() without options defaults to pushState in wouter v3
     navigate(href);
   }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 

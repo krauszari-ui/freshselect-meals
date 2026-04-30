@@ -654,7 +654,18 @@ export default function AdminClientDetail() {
           <div className="flex items-start gap-3">
             <button
               className="mt-1.5 text-slate-400 hover:text-slate-600"
-              onClick={() => window.history.back()}
+              onClick={() => {
+                // Use the URL saved by AdminClients when the row was clicked.
+                // This is more reliable than history.back() in a wouter SPA
+                // because filter changes use replaceState and may not be in the stack.
+                const returnUrl = sessionStorage.getItem("adminClients.returnUrl");
+                if (returnUrl) {
+                  sessionStorage.removeItem("adminClients.returnUrl");
+                  navigate(returnUrl);
+                } else {
+                  navigate("/admin/clients");
+                }
+              }}
               aria-label="Back to clients"
             >
               <ArrowLeft className="h-5 w-5" />
