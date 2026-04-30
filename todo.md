@@ -676,3 +676,6 @@
 - [x] Step 1: Login brute-force rate limiter — 10 attempts / 15 min per IP (Tier 1), 15 attempts / 24 hr hard block (Tier 2), applied to admin login and referrer portal login. Verified with dedicated unit test (11th attempt → 429, different IP still allowed). 116/116 tests pass.
 - [x] Step 2: HTTPS-only cookies in production + HTTP→HTTPS redirect via vercel.json — Secure flag already set via x-forwarded-proto header (Vercel-compatible). Added HTTP→HTTPS redirect rule in vercel.json. Verified with 4 unit tests covering all proxy scenarios. 120/120 tests pass.
 - [x] Step 3: Content Security Policy header via vercel.json — strict script-src 'self', style-src with Google Fonts, img-src with https: for CDN images, connect-src with forge.manus.ai, frame/object-src 'none'. Also added X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy. Verified with 8-test suite (csp.test.ts). 128/128 tests pass.
+
+## UX Improvements
+- [x] Replace DOB text input with three-dropdown (Month/Day/Year) picker on main applicant field and household member rows — DobPicker component with leap-year-aware day clamping, verified with 16 unit tests. 144/144 tests pass.
