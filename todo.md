@@ -655,3 +655,5 @@
 - [x] Replace DOB calendar picker with text input on intake form
 - [x] Auto-format DOB fields as user types (MM/DD/YYYY)
 - [x] Fix auto-stage on assessment complete to use 'assessment' instead of 'assessment_recorded'
+- [x] Fix existing DB records incorrectly set to 'assessment_recorded' by auto-stage bug — reset to 'assessment'
+- [x] Preserve Admin Clients list state (page, search, filters, scroll) when navigating back from Client Detail

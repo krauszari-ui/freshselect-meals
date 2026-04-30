@@ -652,9 +652,13 @@ export default function AdminClientDetail() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div className="flex items-start gap-3">
-            <Link href="/admin/clients">
-              <button className="mt-1.5 text-slate-400 hover:text-slate-600"><ArrowLeft className="h-5 w-5" /></button>
-            </Link>
+            <button
+              className="mt-1.5 text-slate-400 hover:text-slate-600"
+              onClick={() => window.history.back()}
+              aria-label="Back to clients"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold text-slate-900">{client.firstName} {client.lastName}</h1>
