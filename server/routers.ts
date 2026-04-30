@@ -390,6 +390,7 @@ export const appRouter = router({
       assessmentCompleted: z.boolean().optional(),
       zipcode: z.string().optional(),
       priority: z.string().optional(),
+      sortDir: z.enum(["asc", "desc"]).optional(),
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional(),
     })).query(async ({ input }) => listSubmissions(input)),

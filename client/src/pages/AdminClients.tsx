@@ -528,6 +528,7 @@ export default function AdminClients() {
       assessmentCompleted: dbAssessmentCompleted,
       zipcode: zipcodeFilter !== "all" ? zipcodeFilter : undefined,
       priority: priorityFilter !== "all" ? priorityFilter : undefined,
+      sortDir,
       page,
       pageSize: 25,
     });
@@ -731,15 +732,8 @@ export default function AdminClients() {
     navigate("/admin/clients", { replace: true });
   };
 
-  // Sort is still done client-side on the current page (DB returns desc by default)
-  const sortedRows = useMemo(() => {
-    if (!rows.length) return rows;
-    return [...rows].sort((a: any, b: any) => {
-      const da = new Date(a.createdAt).getTime();
-      const db = new Date(b.createdAt).getTime();
-      return sortDir === "desc" ? db - da : da - db;
-    });
-  }, [rows, sortDir]);
+  // Sorting is handled server-side; rows are already in the correct order
+  const sortedRows = rows;
 
   const staffList = (staffQuery.data ?? []) as any[];
 
