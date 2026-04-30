@@ -86,7 +86,7 @@ export function DobPicker({ value, onChange, error, className = "", size = "base
         <SelectTrigger className={triggerClass}>
           <SelectValue placeholder="Month" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent position="item-aligned" className="max-h-60 overflow-y-auto">
           {MONTHS.map((name, i) => (
             <SelectItem key={i + 1} value={String(i + 1)}>
               {name}
@@ -100,7 +100,7 @@ export function DobPicker({ value, onChange, error, className = "", size = "base
         <SelectTrigger className={triggerClass}>
           <SelectValue placeholder="Day" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent position="item-aligned" className="max-h-60 overflow-y-auto">
           {Array.from({ length: maxDays }, (_, i) => i + 1).map((d) => (
             <SelectItem key={d} value={String(d)}>
               {d}
@@ -114,7 +114,7 @@ export function DobPicker({ value, onChange, error, className = "", size = "base
         <SelectTrigger className={triggerClass}>
           <SelectValue placeholder="Year" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent position="item-aligned" className="max-h-60 overflow-y-auto">
           {Array.from({ length: 121 }, (_, i) => currentYear - i).map((y) => (
             <SelectItem key={y} value={String(y)}>
               {y}
