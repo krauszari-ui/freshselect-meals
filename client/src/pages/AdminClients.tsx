@@ -490,30 +490,45 @@ export default function AdminClients() {
   // ─── Scroll restoration ───────────────────────────────────────────────────
   // The scrollable element is AdminLayout's <main> (overflow-auto), not window.
   const getScrollContainer = () =>
-    document.querySelector<HTMLElement>("main.overflow-auto, main[class*='overflow-auto']") ||
+    document.getElementById("admin-main-scroll") ||
     document.querySelector<HTMLElement>("main");
 
-  // Restore scroll position when returning from a client detail page
+  // Restore scroll position when returning from a client detail page.
+  // In a SPA, history.back() triggers a popstate event but does NOT unmount/remount
+  // the component, so we listen for popstate to know when to restore scroll.
   useEffect(() => {
-    const saved = sessionStorage.getItem("adminClients.scrollTop");
-    if (saved) {
-      const container = getScrollContainer();
-      if (container) {
-        // Wait for the list to render before scrolling
-        requestAnimationFrame(() => {
-          container.scrollTop = parseInt(saved, 10);
-          sessionStorage.removeItem("adminClients.scrollTop");
-        });
+    const restoreScroll = () => {
+      const saved = sessionStorage.getItem("adminClients.scrollTop");
+      if (saved) {
+        const container = getScrollContainer();
+        if (container) {
+          requestAnimationFrame(() => {
+            container.scrollTop = parseInt(saved, 10);
+            sessionStorage.removeItem("adminClients.scrollTop");
+          });
+        }
       }
-    }
+    };
+    // Run once on mount (handles hard refresh / direct URL visit after back)
+    restoreScroll();
+    // Also run on popstate (handles SPA back navigation)
+    window.addEventListener("popstate", restoreScroll);
+    return () => window.removeEventListener("popstate", restoreScroll);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save scroll position before navigating to a client detail page
+  // Save scroll position before navigating to a client detail page.
+  // All filter changes use replaceState (via wouter's { replace: true }), so the
+  // history stack only has one entry for the clients list. We fix this by:
+  // 1. Saving the current scroll position to sessionStorage
+  // 2. Using wouter's navigate() WITHOUT replace:true so it does a pushState,
+  //    which adds the detail page as a new history entry on top of the current
+  //    filtered clients URL.
   const saveScrollAndNavigate = useCallback((href: string) => {
     const container = getScrollContainer();
     if (container) {
       sessionStorage.setItem("adminClients.scrollTop", String(container.scrollTop));
     }
+    // navigate() without options defaults to pushState in wouter v3
     navigate(href);
   }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 

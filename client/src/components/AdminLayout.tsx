@@ -219,7 +219,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 min-w-0 overflow-auto bg-slate-50">
+      <main id="admin-main-scroll" className="flex-1 min-w-0 overflow-auto bg-slate-50">
         {/* Mobile top bar with hamburger */}
         <div className="md:hidden sticky top-0 z-20 bg-green-900 text-white flex items-center gap-3 px-4 py-3 shadow-md">
           <button
