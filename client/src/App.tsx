@@ -18,6 +18,7 @@ import AdminDuplicates from "./pages/AdminDuplicates";
 import AdminAssessmentReport from "./pages/AdminAssessmentReport";
 import AdminNotifications from "./pages/AdminNotifications";
 import AdminAuditLog from "./pages/AdminAuditLog";
+import { usePageViewLogger } from "./hooks/usePageViewLogger";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AdminReferrals from "./pages/AdminReferrals";
 import ReferrerPortal from "./pages/ReferrerPortal";
@@ -26,6 +27,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 
 function Router() {
+  usePageViewLogger();
   return (
     <Switch>
       {/* Public */}

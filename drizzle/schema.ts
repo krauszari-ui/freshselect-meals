@@ -373,5 +373,7 @@ export const auditLogs = mysqlTable("auditLogs", {
   clientName: varchar("clientName", { length: 256 }),
   /** JSON payload with action-specific details */
   details: json("details"),
+  /** Session UUID — groups all actions from a single login session */
+  sessionId: varchar("sessionId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

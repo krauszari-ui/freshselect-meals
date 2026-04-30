@@ -11,7 +11,8 @@ import {
   ScrollText, ChevronLeft, ChevronRight, Search, RefreshCw,
   ChevronDown, ChevronUp, LogIn, LogOut, UserCog, FileText,
   Trash2, Mail, ClipboardList, Activity, Shield, Link2, Users,
-  Edit, CheckCircle, AlertCircle, ArrowRightLeft, Key,
+  Edit, CheckCircle, AlertCircle, ArrowRightLeft, Key, Eye, List,
+  Globe,
 } from "lucide-react";
 
 // ─── Action registry ──────────────────────────────────────────────────────────
@@ -21,6 +22,8 @@ const ACTION_META: Record<string, { label: string; color: string; icon: React.El
   login_failed:               { label: "Login Failed",           color: "bg-red-100 text-red-800",       icon: AlertCircle },
   logout:                     { label: "Logout",                 color: "bg-slate-100 text-slate-700",   icon: LogOut },
   password_reset:             { label: "Password Reset",         color: "bg-yellow-100 text-yellow-800", icon: Key },
+  // Navigation
+  page_view:                  { label: "Page View",              color: "bg-sky-50 text-sky-600",        icon: Globe },
   // Client lifecycle
   stage_changed:              { label: "Stage Changed",          color: "bg-blue-100 text-blue-800",     icon: ArrowRightLeft },
   status_changed:             { label: "Status Changed",         color: "bg-indigo-100 text-indigo-800", icon: Activity },
@@ -65,6 +68,7 @@ const ACTION_META: Record<string, { label: string; color: string; icon: React.El
 
 const ACTION_GROUPS: Record<string, string[]> = {
   "Auth Events":    ["login_success", "login_failed", "logout", "password_reset"],
+  "Navigation":     ["page_view"],
   "Client Changes": ["stage_changed", "status_changed", "priority_changed", "assignment_changed", "client_edited", "client_deleted", "bulk_deleted", "duplicate_deleted", "client_approved", "client_rejected"],
   "Assessment":     ["assessment_completed", "assessment_incomplete", "scn_edited", "notes_edited"],
   "Tasks":          ["task_created", "task_status_changed"],
@@ -80,6 +84,20 @@ const ACTION_GROUPS: Record<string, string[]> = {
 function DetailView({ action, details }: { action: string; details: unknown }) {
   if (!details || typeof details !== "object") return null;
   const d = details as Record<string, unknown>;
+
+  if (action === "page_view") {
+    const pvTitle = String(d.title ?? d.path ?? "—");
+    const pvPath = d.path ? String(d.path) : "";
+    const pvShowPath = pvPath && pvTitle !== pvPath;
+    return (
+      <span className="text-sky-700">
+        {pvTitle}
+        {pvShowPath && (
+          <span className="text-slate-400 ml-1 font-mono text-xs">({pvPath})</span>
+        )}
+      </span>
+    );
+  }
 
   if (action === "stage_changed" || action === "status_changed" || action === "priority_changed") {
     return (
@@ -119,47 +137,32 @@ function DetailView({ action, details }: { action: string; details: unknown }) {
   if (action === "task_created") {
     return <span>{String(d.description ?? "")} <span className="text-slate-400">({String(d.area ?? "")})</span></span>;
   }
-
   if (action === "task_status_changed") {
     return <span>Status → <span className="font-medium">{String(d.status ?? "")}</span></span>;
   }
-
   if (action === "document_uploaded") {
     return <span>{String(d.name ?? "")} <span className="text-slate-400">({String(d.category ?? "")})</span></span>;
   }
-
-  if (action === "service_created") {
-    return <span>{String(d.name ?? "")}</span>;
-  }
-
+  if (action === "service_created") return <span>{String(d.name ?? "")}</span>;
   if (action === "service_status_changed") {
     return <span>Status → <span className="font-medium">{String(d.status ?? "")}</span></span>;
   }
-
   if (action === "email_sent") {
     return <span>To: {String(d.to ?? "—")} · Subject: <span className="italic">{String(d.subject ?? "—")}</span></span>;
   }
-
   if (action === "case_note_added") {
     return <span className="italic text-slate-600">"{String(d.preview ?? "")}{String(d.preview ?? "").length >= 120 ? "…" : ""}"</span>;
   }
-
   if (action === "login_failed") {
     return <span>Reason: {String(d.reason ?? "—")} {d.email ? `· ${String(d.email)}` : ""} {d.ip ? `· IP: ${String(d.ip)}` : ""}</span>;
   }
-
   if (action === "login_success") {
     return <span>{d.email ? String(d.email) : ""} {d.ip ? `· IP: ${String(d.ip)}` : ""} {d.portal ? `· ${String(d.portal)}` : ""}</span>;
   }
-
-  if (action === "logout") {
-    return d.ip ? <span>IP: {String(d.ip)}</span> : null;
-  }
-
+  if (action === "logout") return d.ip ? <span>IP: {String(d.ip)}</span> : null;
   if (action === "bulk_deleted") {
     return <span>{String(d.count ?? 0)} client{Number(d.count) !== 1 ? "s" : ""} deleted</span>;
   }
-
   if (action === "worker_promoted" || action === "worker_permissions_updated") {
     const perms = d.permissions as Record<string, boolean> | undefined;
     if (perms) {
@@ -168,27 +171,99 @@ function DetailView({ action, details }: { action: string; details: unknown }) {
     }
     return <span>User #{String(d.userId ?? "")}</span>;
   }
-
   if (action === "referral_link_created") {
     return <span>Code: <span className="font-mono">{String(d.code ?? "")}</span> · {String(d.referrerName ?? "")}</span>;
   }
-
   if (action === "referral_link_updated") {
     const changes = Array.isArray(d.changes) ? (d.changes as string[]).join(", ") : "";
     return <span>Link #{String(d.id ?? "")} · Changed: {changes}</span>;
   }
+  if (action === "client_rejected" && d.reason) return <span>Reason: {String(d.reason)}</span>;
 
-  if (action === "client_rejected" && d.reason) {
-    return <span>Reason: {String(d.reason)}</span>;
-  }
-
-  // Fallback: render key=value pairs
   const entries = Object.entries(d).filter(([, v]) => v !== null && v !== undefined && v !== "");
   if (entries.length === 0) return null;
   return (
     <span className="text-xs text-slate-500">
       {entries.map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`).join(" · ")}
     </span>
+  );
+}
+
+// ─── Session Timeline Row ─────────────────────────────────────────────────────
+function SessionTimeline({ sessionId }: { sessionId: string }) {
+  const { data, isLoading } = trpc.auditLog.getSessionActivity.useQuery({ sessionId });
+  const events = (data ?? []) as any[];
+
+  if (isLoading) {
+    return (
+      <tr className="bg-slate-50/80 border-b">
+        <td colSpan={6} className="px-8 py-4 text-slate-400 text-sm">Loading session activity…</td>
+      </tr>
+    );
+  }
+
+  if (events.length === 0) {
+    return (
+      <tr className="bg-slate-50/80 border-b">
+        <td colSpan={6} className="px-8 py-4 text-slate-400 text-sm italic">No activity recorded for this session.</td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr className="bg-slate-50/80 border-b">
+      <td colSpan={6} className="px-0 py-0">
+        <div className="px-8 py-3 space-y-0">
+          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 px-2">
+            Session Timeline · {events.length} event{events.length !== 1 ? "s" : ""}
+          </div>
+          <div className="relative border-l-2 border-slate-200 ml-2 space-y-0">
+            {events.map((ev: any, idx: number) => {
+              const meta = ACTION_META[ev.action] ?? { label: ev.action, color: "bg-slate-100 text-slate-700", icon: Activity };
+              const Icon = meta.icon;
+              const isLogin = ev.action === "login_success";
+              const isLogout = ev.action === "logout";
+              return (
+                <div
+                  key={ev.id}
+                  className={"relative flex items-start gap-3 px-4 py-2 " + (isLogin || isLogout ? "opacity-60" : "")}
+                >
+                  {/* Timeline dot */}
+                  <div className={"absolute -left-[9px] top-3 h-4 w-4 rounded-full border-2 border-white flex items-center justify-center " + (isLogin ? "bg-green-400" : isLogout ? "bg-slate-400" : "bg-white border-slate-300")}>
+                    <Icon className="h-2.5 w-2.5 text-slate-500" />
+                  </div>
+
+                  {/* Time */}
+                  <span className="text-xs text-slate-400 whitespace-nowrap w-20 shrink-0 pt-0.5">
+                    {new Date(ev.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                  </span>
+
+                  {/* Badge */}
+                  <span className={"inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium shrink-0 " + meta.color}>
+                    <Icon className="h-3 w-3" />
+                    {meta.label}
+                  </span>
+
+                  {/* Client link */}
+                  {ev.clientId && (
+                    <Link href={"/admin/clients/" + ev.clientId}>
+                      <span className="text-green-700 hover:underline text-xs font-medium shrink-0">
+                        {ev.clientName ?? "Client #" + ev.clientId}
+                      </span>
+                    </Link>
+                  )}
+
+                  {/* Detail */}
+                  <span className="text-xs text-slate-500 min-w-0 truncate">
+                    <DetailView action={ev.action} details={ev.details} />
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -201,6 +276,8 @@ export default function AdminAuditLog() {
   const [searchInput, setSearchInput] = useState("");
   const [searchText, setSearchText] = useState("");
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<"flat" | "session">("flat");
 
   const { data, isLoading, refetch } = trpc.auditLog.list.useQuery(
     { page, pageSize: PAGE_SIZE, action: actionFilter !== "all" ? actionFilter : undefined },
@@ -218,12 +295,41 @@ export default function AdminAuditLog() {
       )
     : rows;
 
+  // Group by session for session view
+  const sessionGroups: { sessionId: string | null; loginRow: any; rows: any[] }[] = [];
+  if (viewMode === "session") {
+    const seen = new Map<string, number>(); // sessionId → index in sessionGroups
+    for (const row of filtered) {
+      const sid = row.sessionId as string | null;
+      if (!sid) {
+        // No session — treat as standalone
+        sessionGroups.push({ sessionId: null, loginRow: row, rows: [row] });
+      } else if (seen.has(sid)) {
+        // Add to existing group
+        const idx = seen.get(sid)!;
+        sessionGroups[idx].rows.push(row);
+        // Update loginRow if this is the login event
+        if (row.action === "login_success") sessionGroups[idx].loginRow = row;
+      } else {
+        seen.set(sid, sessionGroups.length);
+        sessionGroups.push({ sessionId: sid, loginRow: row, rows: [row] });
+      }
+    }
+  }
+
   function handleSearch() { setSearchText(searchInput); setPage(1); }
   function handleActionChange(val: string) { setActionFilter(val); setPage(1); }
   function toggleRow(id: number) {
     setExpandedRows((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+  function toggleSession(sid: string) {
+    setExpandedSessions((prev) => {
+      const next = new Set(prev);
+      next.has(sid) ? next.delete(sid) : next.add(sid);
       return next;
     });
   }
@@ -240,9 +346,26 @@ export default function AdminAuditLog() {
               <p className="text-sm text-slate-500">Immutable record of every action — logins, edits, deletions, and more</p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2 self-start sm:self-auto">
-            <RefreshCw className="h-4 w-4" /> Refresh
-          </Button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {/* View mode toggle */}
+            <div className="flex rounded-md border border-slate-200 overflow-hidden text-sm">
+              <button
+                className={"px-3 py-1.5 flex items-center gap-1.5 transition-colors " + (viewMode === "flat" ? "bg-green-700 text-white" : "bg-white text-slate-600 hover:bg-slate-50")}
+                onClick={() => setViewMode("flat")}
+              >
+                <List className="h-3.5 w-3.5" /> Flat
+              </button>
+              <button
+                className={"px-3 py-1.5 flex items-center gap-1.5 transition-colors border-l border-slate-200 " + (viewMode === "session" ? "bg-green-700 text-white" : "bg-white text-slate-600 hover:bg-slate-50")}
+                onClick={() => setViewMode("session")}
+              >
+                <Eye className="h-3.5 w-3.5" /> By Session
+              </button>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -290,95 +413,186 @@ export default function AdminAuditLog() {
           </CardContent>
         </Card>
 
-        {/* Table */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Events</CardTitle></CardHeader>
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="p-8 text-center text-slate-400">Loading…</div>
-            ) : filtered.length === 0 ? (
-              <div className="p-8 text-center text-slate-400">
-                No audit events found. Events will appear here as staff take actions.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-slate-50 text-slate-600">
-                      <th className="text-left px-4 py-3 font-medium w-40">Timestamp</th>
-                      <th className="text-left px-4 py-3 font-medium w-48">Action</th>
-                      <th className="text-left px-4 py-3 font-medium w-40">Staff Member</th>
-                      <th className="text-left px-4 py-3 font-medium w-40">Client</th>
-                      <th className="text-left px-4 py-3 font-medium">Details</th>
-                      <th className="w-8 px-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((row: any, i: number) => {
-                      const meta = ACTION_META[row.action] ?? { label: row.action, color: "bg-slate-100 text-slate-700", icon: Activity };
-                      const Icon = meta.icon;
-                      const isExpanded = expandedRows.has(row.id);
-                      const hasRawDetails = row.details && typeof row.details === "object" && Object.keys(row.details).length > 0;
-                      return (
-                        <>
-                          <tr
-                            key={row.id}
-                            className={"border-b last:border-0 hover:bg-slate-50 transition-colors cursor-pointer " + (i % 2 === 0 ? "" : "bg-slate-50/40")}
-                            onClick={() => hasRawDetails && toggleRow(row.id)}
-                          >
-                            <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs">
-                              {new Date(row.createdAt).toLocaleString()}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={"inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium " + meta.color}>
-                                <Icon className="h-3 w-3" />
-                                {meta.label}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-slate-700 font-medium">
-                              {row.actorName ?? <span className="text-slate-400 italic">System</span>}
-                            </td>
-                            <td className="px-4 py-3">
-                              {row.clientId ? (
-                                <Link href={"/admin/clients/" + row.clientId} onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                                  <span className="text-green-700 hover:underline cursor-pointer font-medium">
-                                    {row.clientName ?? "Client #" + row.clientId}
-                                  </span>
-                                </Link>
-                              ) : (
-                                <span className="text-slate-400 italic">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-slate-600 text-xs max-w-xs">
-                              <DetailView action={row.action} details={row.details} />
-                            </td>
-                            <td className="px-2 py-3 text-slate-400">
-                              {hasRawDetails && (
-                                isExpanded
+        {/* ── Session View ── */}
+        {viewMode === "session" && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Eye className="h-4 w-4 text-green-700" /> Sessions
+                <span className="text-xs font-normal text-slate-400 ml-1">Click a session to expand its full activity timeline</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {isLoading ? (
+                <div className="p-8 text-center text-slate-400">Loading…</div>
+              ) : sessionGroups.length === 0 ? (
+                <div className="p-8 text-center text-slate-400">No events found.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-slate-50 text-slate-600">
+                        <th className="w-8 px-3"></th>
+                        <th className="text-left px-4 py-3 font-medium w-40">Login Time</th>
+                        <th className="text-left px-4 py-3 font-medium w-44">Staff Member</th>
+                        <th className="text-left px-4 py-3 font-medium w-32">Role</th>
+                        <th className="text-left px-4 py-3 font-medium">Summary</th>
+                        <th className="text-left px-4 py-3 font-medium w-20">Events</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sessionGroups.map((group, gi) => {
+                        const loginRow = group.loginRow;
+                        const sid = group.sessionId;
+                        const isExpanded = sid ? expandedSessions.has(sid) : false;
+                        const loginDetails = loginRow.details as Record<string, unknown> | null;
+                        const role = loginDetails?.role as string | undefined;
+                        // Count meaningful actions (exclude page_view and login/logout)
+                        const actionCount = group.rows.filter((r: any) => r.action !== "page_view" && r.action !== "login_success" && r.action !== "logout").length;
+                        const pageCount = group.rows.filter((r: any) => r.action === "page_view").length;
+
+                        return (
+                          <>
+                            <tr
+                              key={gi}
+                              className={"border-b hover:bg-slate-50 transition-colors " + (sid ? "cursor-pointer" : "")}
+                              onClick={() => sid && toggleSession(sid)}
+                            >
+                              <td className="px-3 py-3 text-slate-400">
+                                {sid && (isExpanded
                                   ? <ChevronUp className="h-4 w-4" />
                                   : <ChevronDown className="h-4 w-4" />
-                              )}
-                            </td>
-                          </tr>
-                          {isExpanded && hasRawDetails && (
-                            <tr key={row.id + "-expanded"} className="bg-slate-50 border-b">
-                              <td colSpan={6} className="px-6 py-3">
-                                <div className="text-xs font-mono text-slate-600 bg-white border rounded p-3 overflow-x-auto">
-                                  <div className="text-xs font-semibold text-slate-400 mb-1 font-sans">Raw Details</div>
-                                  {JSON.stringify(row.details, null, 2)}
-                                </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs">
+                                {new Date(loginRow.createdAt).toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-slate-700 font-medium">
+                                {loginRow.actorName ?? <span className="text-slate-400 italic">Unknown</span>}
+                              </td>
+                              <td className="px-4 py-3">
+                                {role && (
+                                  <Badge variant="outline" className="text-xs capitalize">{role}</Badge>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-xs text-slate-500">
+                                {actionCount > 0 && (
+                                  <span className="mr-3 text-slate-700 font-medium">{actionCount} action{actionCount !== 1 ? "s" : ""}</span>
+                                )}
+                                {pageCount > 0 && (
+                                  <span className="text-sky-600">{pageCount} page view{pageCount !== 1 ? "s" : ""}</span>
+                                )}
+                                {actionCount === 0 && pageCount === 0 && !sid && (
+                                  <span className="italic text-slate-400">No session data</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <Badge className="bg-slate-100 text-slate-700 text-xs">{group.rows.length}</Badge>
                               </td>
                             </tr>
-                          )}
-                        </>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                            {isExpanded && sid && <SessionTimeline key={sid + "-timeline"} sessionId={sid} />}
+                          </>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Flat View ── */}
+        {viewMode === "flat" && (
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Events</CardTitle></CardHeader>
+            <CardContent className="p-0">
+              {isLoading ? (
+                <div className="p-8 text-center text-slate-400">Loading…</div>
+              ) : filtered.length === 0 ? (
+                <div className="p-8 text-center text-slate-400">
+                  No audit events found. Events will appear here as staff take actions.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-slate-50 text-slate-600">
+                        <th className="text-left px-4 py-3 font-medium w-40">Timestamp</th>
+                        <th className="text-left px-4 py-3 font-medium w-48">Action</th>
+                        <th className="text-left px-4 py-3 font-medium w-40">Staff Member</th>
+                        <th className="text-left px-4 py-3 font-medium w-40">Client</th>
+                        <th className="text-left px-4 py-3 font-medium">Details</th>
+                        <th className="w-8 px-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((row: any, i: number) => {
+                        const meta = ACTION_META[row.action] ?? { label: row.action, color: "bg-slate-100 text-slate-700", icon: Activity };
+                        const Icon = meta.icon;
+                        const isExpanded = expandedRows.has(row.id);
+                        const hasRawDetails = row.details && typeof row.details === "object" && Object.keys(row.details).length > 0;
+                        return (
+                          <>
+                            <tr
+                              key={row.id}
+                              className={"border-b last:border-0 hover:bg-slate-50 transition-colors cursor-pointer " + (i % 2 === 0 ? "" : "bg-slate-50/40")}
+                              onClick={() => hasRawDetails && toggleRow(row.id)}
+                            >
+                              <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs">
+                                {new Date(row.createdAt).toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={"inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium " + meta.color}>
+                                  <Icon className="h-3 w-3" />
+                                  {meta.label}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-slate-700 font-medium">
+                                {row.actorName ?? <span className="text-slate-400 italic">System</span>}
+                              </td>
+                              <td className="px-4 py-3">
+                                {row.clientId ? (
+                                  <Link href={"/admin/clients/" + row.clientId} onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                                    <span className="text-green-700 hover:underline cursor-pointer font-medium">
+                                      {row.clientName ?? "Client #" + row.clientId}
+                                    </span>
+                                  </Link>
+                                ) : (
+                                  <span className="text-slate-400 italic">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600 text-xs max-w-xs">
+                                <DetailView action={row.action} details={row.details} />
+                              </td>
+                              <td className="px-2 py-3 text-slate-400">
+                                {hasRawDetails && (
+                                  isExpanded
+                                    ? <ChevronUp className="h-4 w-4" />
+                                    : <ChevronDown className="h-4 w-4" />
+                                )}
+                              </td>
+                            </tr>
+                            {isExpanded && hasRawDetails && (
+                              <tr key={row.id + "-expanded"} className="bg-slate-50 border-b">
+                                <td colSpan={6} className="px-6 py-3">
+                                  <div className="text-xs font-mono text-slate-600 bg-white border rounded p-3 overflow-x-auto">
+                                    <div className="text-xs font-semibold text-slate-400 mb-1 font-sans">Raw Details</div>
+                                    {JSON.stringify(row.details, null, 2)}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Pagination */}
         {totalPages > 1 && (
