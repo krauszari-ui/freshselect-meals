@@ -663,3 +663,4 @@
 - [x] Make all Client Overview and Assessment tab fields editable (personal info, address, household, employment, food preferences, health category sub-fields)
 - [x] Add edit for health categories themselves in Assessment tab (add/remove categories inline)
 - [x] Warn before removing a health category that has sub-data (confirmation dialog listing what will be hidden)
+- [x] Add structured session activity logs to Audit Log page (session grouping, page views, expandable session timeline per login)

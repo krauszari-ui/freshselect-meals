@@ -987,6 +987,7 @@ export interface LogAuditParams {
   clientId?: number | null;
   clientName?: string | null;
   details?: Record<string, unknown> | null;
+  sessionId?: string | null;
 }
 
 /** Write an immutable audit log entry. Fire-and-forget: never throws. */
@@ -1001,6 +1002,7 @@ export async function logAudit(params: LogAuditParams): Promise<void> {
       clientId: params.clientId ?? null,
       clientName: params.clientName ?? null,
       details: params.details ?? null,
+      sessionId: params.sessionId ?? null,
     });
   } catch {
     // Audit log failures must never break the main operation
@@ -1015,6 +1017,7 @@ export interface AuditLogRow {
   clientId: number | null;
   clientName: string | null;
   details: unknown;
+  sessionId: string | null;
   createdAt: Date;
 }
 
@@ -1049,4 +1052,15 @@ export async function getAuditLogs(opts: {
     rows: rows as AuditLogRow[],
     total: Number(totalResult[0]?.count ?? 0),
   };
+}
+
+/** Fetch all audit log entries for a given session UUID, ordered chronologically. */
+export async function getAuditLogsBySession(sessionId: string): Promise<AuditLogRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const { eq, asc } = await import("drizzle-orm");
+  const rows = await db.select().from(auditLogs)
+    .where(eq(auditLogs.sessionId, sessionId))
+    .orderBy(asc(auditLogs.createdAt));
+  return rows as AuditLogRow[];
 }

@@ -169,6 +169,13 @@
       "when": 1777417717552,
       "tag": "0023_giant_killraven",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1777531568352,
+      "tag": "0024_natural_echo",
+      "breakpoints": true
     }
   ]
 }

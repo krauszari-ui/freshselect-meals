@@ -1,6 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { randomUUID } from "crypto";
 import { getSessionCookieOptions } from "./_core/cookies";
+
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
@@ -30,7 +32,7 @@ import {
   getSubmissionsByIds,
   createNotification, listNotifications, getUnreadNotificationCount,
   markNotificationRead, markAllNotificationsRead,
-  logAudit, getAuditLogs,
+  logAudit, getAuditLogs, getAuditLogsBySession,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -114,6 +116,7 @@ const submissionInputSchema = z.object({
   uploadedDocuments: z.record(z.string(), z.string()).optional(),
 }).passthrough();
 
+const SESSION_ID_COOKIE = "admin_session_id";
 
 export const appRouter = router({
   system: systemRouter,
@@ -122,9 +125,11 @@ export const appRouter = router({
     logout: publicProcedure.mutation(async ({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      ctx.res.clearCookie(SESSION_ID_COOKIE, { ...cookieOptions, maxAge: -1 });
       if (ctx.user) {
         const ip = (ctx.req as any).ip ?? ctx.req.socket?.remoteAddress ?? "unknown";
-        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "logout", details: { ip } });
+        const sessionId = (ctx.req as any).cookies?.[SESSION_ID_COOKIE] ?? null;
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "logout", details: { ip }, sessionId });
       }
       return { success: true } as const;
     }),
@@ -169,11 +174,14 @@ export const appRouter = router({
           await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_failed", details: { reason: "account_deactivated", ip } });
           throw new TRPCError({ code: "FORBIDDEN", message: "Your account has been deactivated. Please contact your administrator." });
         }
+        // Generate a session UUID for activity grouping
+        const sessionId = randomUUID();
         // Log successful login
-        await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_success", details: { role: user.role, ip } });
+        await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_success", details: { role: user.role, ip }, sessionId });
         const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || "" });
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        ctx.res.cookie(SESSION_ID_COOKIE, sessionId, { ...cookieOptions, maxAge: ONE_YEAR_MS });
         return { success: true, role: user.role } as const;
       }),
   }),
@@ -1369,6 +1377,26 @@ export const appRouter = router({
         const { page, pageSize, ...filters } = input;
         const offset = (page - 1) * pageSize;
         return getAuditLogs({ ...filters, limit: pageSize, offset });
+      }),
+    // Log a page view from the frontend — called on every route change
+    logPageView: protectedProcedure
+      .input(z.object({ path: z.string(), title: z.string().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const sessionId = (ctx.req as any).cookies?.[SESSION_ID_COOKIE] ?? null;
+        await logAudit({
+          actorId: ctx.user.id,
+          actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
+          action: "page_view",
+          details: { path: input.path, title: input.title ?? null },
+          sessionId,
+        });
+        return { success: true };
+      }),
+    // Get all audit log entries for a specific session
+    getSessionActivity: adminProcedure
+      .input(z.object({ sessionId: z.string() }))
+      .query(async ({ input }) => {
+        return getAuditLogsBySession(input.sessionId);
       }),
   }),
 });
