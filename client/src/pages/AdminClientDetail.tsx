@@ -203,17 +203,52 @@ export default function AdminClientDetail() {
   const [showAddService, setShowAddService] = useState(false);
   const [taskArea, setTaskArea] = useState<"intake_rep" | "assigned_worker">("intake_rep");
 
+  // Edit/delete state for household members
+  const [editHouseholdIdx, setEditHouseholdIdx] = useState<number | null>(null);
+  const [editHouseholdForm, setEditHouseholdForm] = useState({ name: "", dateOfBirth: "", medicaidId: "", relationship: "" });
+
+  // Edit/delete state for addresses
+  const [editAddressIdx, setEditAddressIdx] = useState<number | null>(null);
+  const [editAddressForm, setEditAddressForm] = useState({ street: "", apt: "", city: "", state: "NY", zip: "" });
+
+  // Edit/delete state for phones
+  const [editPhoneIdx, setEditPhoneIdx] = useState<number | null>(null);
+  const [editPhoneValue, setEditPhoneValue] = useState("");
+
+  // Edit/delete state for emails
+  const [editEmailIdx, setEditEmailIdx] = useState<number | null>(null);
+  const [editEmailValue, setEditEmailValue] = useState("");
+
+  // Assessment sub-field inline edit state
+  const [editMiscarriageDate, setEditMiscarriageDate] = useState<string | null>(null);
+  const [editDueDate, setEditDueDate] = useState<string | null>(null);
+  const [editInfantMode, setEditInfantMode] = useState(false);
+  const [editInfantForm, setEditInfantForm] = useState({ infantName: "", infantDateOfBirth: "", infantMedicaidId: "" });
+  const [editConditionIdx, setEditConditionIdx] = useState<string | null>(null);
+  const [editConditionName, setEditConditionName] = useState("");
+  const [editOtherDesc, setEditOtherDesc] = useState<string | null>(null);
+
   // Form states for dialogs
   const [editForm, setEditForm] = useState<{
     firstName: string; lastName: string; email: string; cellPhone: string; medicaidId: string;
     language: string; program: string; borough: string; neighborhood: string; supermarket: string; referralSource: string;
     dateOfBirth: string; streetAddress: string; aptUnit: string; city: string; state: string; zipcode: string;
     householdMembers: Array<{ name: string; dateOfBirth: string; medicaidId: string; relationship: string }>;
+    // Employment
+    employed: string; spouseEmployed: string;
+    // Food preferences
+    foodAllergies: string; foodAllergiesDetails: string; dietaryRestrictions: string;
+    mealFocus: string[]; breakfastItems: string; lunchItems: string; dinnerItems: string; snackItems: string;
+    needsRefrigerator: string; needsMicrowave: string; needsCookingUtensils: string;
   }>({
     firstName: "", lastName: "", email: "", cellPhone: "", medicaidId: "",
     language: "", program: "", borough: "", neighborhood: "", supermarket: "", referralSource: "",
     dateOfBirth: "", streetAddress: "", aptUnit: "", city: "", state: "", zipcode: "",
     householdMembers: [],
+    employed: "", spouseEmployed: "",
+    foodAllergies: "", foodAllergiesDetails: "", dietaryRestrictions: "",
+    mealFocus: [], breakfastItems: "", lunchItems: "", dinnerItems: "", snackItems: "",
+    needsRefrigerator: "", needsMicrowave: "", needsCookingUtensils: "",
   });
   const [householdForm, setHouseholdForm] = useState({ name: "", dateOfBirth: "", medicaidId: "" });
   const [addressForm, setAddressForm] = useState({ street: "", apt: "", city: "", state: "NY", zip: "" });
@@ -579,16 +614,42 @@ export default function AdminClientDetail() {
         medicaidId: m.medicaidId || "",
         relationship: m.relationship || "",
       })),
+      employed: fd.employed || "",
+      spouseEmployed: fd.spouseEmployed || "",
+      foodAllergies: fd.foodAllergies || "",
+      foodAllergiesDetails: fd.foodAllergiesDetails || "",
+      dietaryRestrictions: fd.dietaryRestrictions || "",
+      mealFocus: fd.mealFocus || [],
+      breakfastItems: fd.breakfastItems || "",
+      lunchItems: fd.lunchItems || "",
+      dinnerItems: fd.dinnerItems || "",
+      snackItems: fd.snackItems || "",
+      needsRefrigerator: fd.needsRefrigerator || "",
+      needsMicrowave: fd.needsMicrowave || "",
+      needsCookingUtensils: fd.needsCookingUtensils || "",
     });
     setShowEdit(true);
   };
 
   const handleEditSave = () => {
-    const { dateOfBirth, streetAddress, aptUnit, city, state, zipcode, householdMembers, ...topLevelFields } = editForm;
+    const {
+      dateOfBirth, streetAddress, aptUnit, city, state, zipcode, householdMembers,
+      employed, spouseEmployed,
+      foodAllergies, foodAllergiesDetails, dietaryRestrictions,
+      mealFocus, breakfastItems, lunchItems, dinnerItems, snackItems,
+      needsRefrigerator, needsMicrowave, needsCookingUtensils,
+      ...topLevelFields
+    } = editForm;
     updateClientMutation.mutate({
       id,
       ...topLevelFields,
-      formData: { dateOfBirth, streetAddress, aptUnit, city, state, zipcode, householdMembers },
+      formData: {
+        dateOfBirth, streetAddress, aptUnit, city, state, zipcode, householdMembers,
+        employed, spouseEmployed,
+        foodAllergies, foodAllergiesDetails, dietaryRestrictions,
+        mealFocus, breakfastItems, lunchItems, dinnerItems, snackItems,
+        needsRefrigerator, needsMicrowave, needsCookingUtensils,
+      },
     });
   };
 
@@ -621,6 +682,112 @@ export default function AdminClientDetail() {
     const updated = [...additionalEmails, emailForm.trim()];
     updateClientMutation.mutate({ id, formData: { additionalEmails: updated } }, {
       onSuccess: () => { setShowAddEmail(false); setEmailForm(""); toast.success("Email added"); utils.admin.getById.invalidate({ id }); },
+    });
+  };
+
+  // ── Edit/Delete handlers for Overview lists ─────────────────────────────
+  const handleEditHousehold = () => {
+    if (editHouseholdIdx === null) return;
+    const updated = householdMembers.map((m: any, i: number) =>
+      i === editHouseholdIdx ? { ...m, ...editHouseholdForm } : m
+    );
+    updateClientMutation.mutate({ id, formData: { householdMembers: updated } }, {
+      onSuccess: () => { setEditHouseholdIdx(null); utils.admin.getById.invalidate({ id }); toast.success("Member updated"); },
+    });
+  };
+
+  const handleDeleteHousehold = (idx: number) => {
+    const updated = householdMembers.filter((_: any, i: number) => i !== idx);
+    updateClientMutation.mutate({ id, additionalMembersCount: updated.length, formData: { householdMembers: updated } }, {
+      onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Member removed"); },
+    });
+  };
+
+  const handleEditAddress = () => {
+    if (editAddressIdx === null) return;
+    const updated = additionalAddresses.map((a: any, i: number) =>
+      i === editAddressIdx ? { ...editAddressForm } : a
+    );
+    updateClientMutation.mutate({ id, formData: { additionalAddresses: updated } }, {
+      onSuccess: () => { setEditAddressIdx(null); utils.admin.getById.invalidate({ id }); toast.success("Address updated"); },
+    });
+  };
+
+  const handleDeleteAddress = (idx: number) => {
+    const updated = additionalAddresses.filter((_: any, i: number) => i !== idx);
+    updateClientMutation.mutate({ id, formData: { additionalAddresses: updated } }, {
+      onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Address removed"); },
+    });
+  };
+
+  const handleEditPhone = () => {
+    if (editPhoneIdx === null) return;
+    const updated = additionalPhones.map((p: string, i: number) => i === editPhoneIdx ? editPhoneValue : p);
+    updateClientMutation.mutate({ id, formData: { additionalPhones: updated } }, {
+      onSuccess: () => { setEditPhoneIdx(null); utils.admin.getById.invalidate({ id }); toast.success("Phone updated"); },
+    });
+  };
+
+  const handleDeletePhone = (idx: number) => {
+    const updated = additionalPhones.filter((_: string, i: number) => i !== idx);
+    updateClientMutation.mutate({ id, formData: { additionalPhones: updated } }, {
+      onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Phone removed"); },
+    });
+  };
+
+  const handleEditEmail = () => {
+    if (editEmailIdx === null) return;
+    const updated = additionalEmails.map((e: string, i: number) => i === editEmailIdx ? editEmailValue : e);
+    updateClientMutation.mutate({ id, formData: { additionalEmails: updated } }, {
+      onSuccess: () => { setEditEmailIdx(null); utils.admin.getById.invalidate({ id }); toast.success("Email updated"); },
+    });
+  };
+
+  const handleDeleteEmail = (idx: number) => {
+    const updated = additionalEmails.filter((_: string, i: number) => i !== idx);
+    updateClientMutation.mutate({ id, formData: { additionalEmails: updated } }, {
+      onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Email removed"); },
+    });
+  };
+
+  // ── Assessment sub-field save handlers ───────────────────────────────────
+  const handleSaveMiscarriageDate = () => {
+    if (editMiscarriageDate === null) return;
+    updateClientMutation.mutate({ id, formData: { miscarriageDate: editMiscarriageDate } }, {
+      onSuccess: () => { setEditMiscarriageDate(null); utils.admin.getById.invalidate({ id }); toast.success("Miscarriage date updated"); },
+    });
+  };
+
+  const handleSaveDueDate = () => {
+    if (editDueDate === null) return;
+    updateClientMutation.mutate({ id, formData: { dueDate: editDueDate } }, {
+      onSuccess: () => { setEditDueDate(null); utils.admin.getById.invalidate({ id }); toast.success("Due date updated"); },
+    });
+  };
+
+  const handleSaveInfant = () => {
+    updateClientMutation.mutate({ id, formData: { ...editInfantForm } }, {
+      onSuccess: () => { setEditInfantMode(false); utils.admin.getById.invalidate({ id }); toast.success("Infant info updated"); },
+    });
+  };
+
+  const handleSaveConditionName = (conditionKey: string) => {
+    const existingConditionDetails = (fd as any).conditionDetails || {};
+    const existingConditionClientNames = (fd as any).conditionClientNames || {};
+    const updatedConditionDetails = {
+      ...existingConditionDetails,
+      [conditionKey]: { ...(existingConditionDetails[conditionKey] || {}), clientName: editConditionName },
+    };
+    const updatedConditionClientNames = { ...existingConditionClientNames, [conditionKey]: editConditionName };
+    updateClientMutation.mutate({ id, formData: { conditionDetails: updatedConditionDetails, conditionClientNames: updatedConditionClientNames } }, {
+      onSuccess: () => { setEditConditionIdx(null); utils.admin.getById.invalidate({ id }); toast.success("Condition name updated"); },
+    });
+  };
+
+  const handleSaveOtherDesc = () => {
+    if (editOtherDesc === null) return;
+    updateClientMutation.mutate({ id, formData: { otherHealthCategoryDetails: editOtherDesc } }, {
+      onSuccess: () => { setEditOtherDesc(null); utils.admin.getById.invalidate({ id }); toast.success("Description updated"); },
     });
   };
 
@@ -812,10 +979,19 @@ export default function AdminClientDetail() {
                   <div className="space-y-2">
                     {householdMembers.map((m: any, i: number) => (
                       <div key={i} className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                        <p className="text-sm font-medium text-slate-900">{m.name || `Member ${i + 1}`}</p>
-                        <div className="flex gap-4 mt-1 text-xs text-slate-500">
-                          <span>DOB: {m.dateOfBirth || m.dob || "—"}</span>
-                          <span>Medicaid: {m.medicaidId || "—"}</span>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-slate-900">{m.name || `Member ${i + 1}`}</p>
+                            <div className="flex gap-4 mt-1 text-xs text-slate-500">
+                              <span>DOB: {m.dateOfBirth || m.dob || "—"}</span>
+                              <span>Medicaid: {m.medicaidId || "—"}</span>
+                              {m.relationship && <span>Rel: {m.relationship}</span>}
+                            </div>
+                          </div>
+                          <div className="flex gap-1 shrink-0 ml-2">
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-blue-600" onClick={() => { setEditHouseholdIdx(i); setEditHouseholdForm({ name: m.name || "", dateOfBirth: m.dateOfBirth || m.dob || "", medicaidId: m.medicaidId || "", relationship: m.relationship || "" }); }}><Pencil className="h-3 w-3" /></Button>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-red-600" onClick={() => handleDeleteHousehold(i)} disabled={updateClientMutation.isPending}><Trash2 className="h-3 w-3" /></Button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -828,8 +1004,16 @@ export default function AdminClientDetail() {
                   <div className="space-y-2">
                     {additionalAddresses.map((a: any, i: number) => (
                       <div key={i} className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                        <p className="text-sm text-slate-700">{a.street} {a.apt && `Apt ${a.apt}`}</p>
-                        <p className="text-xs text-slate-500">{a.city}, {a.state} {a.zip}</p>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="text-sm text-slate-700">{a.street} {a.apt && `Apt ${a.apt}`}</p>
+                            <p className="text-xs text-slate-500">{a.city}, {a.state} {a.zip}</p>
+                          </div>
+                          <div className="flex gap-1 shrink-0 ml-2">
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-blue-600" onClick={() => { setEditAddressIdx(i); setEditAddressForm({ street: a.street || "", apt: a.apt || "", city: a.city || "", state: a.state || "NY", zip: a.zip || "" }); }}><Pencil className="h-3 w-3" /></Button>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-red-600" onClick={() => handleDeleteAddress(i)} disabled={updateClientMutation.isPending}><Trash2 className="h-3 w-3" /></Button>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -840,19 +1024,60 @@ export default function AdminClientDetail() {
                 {additionalPhones.length > 0 ? (
                   <div className="space-y-1">
                     {additionalPhones.map((p: string, i: number) => (
-                      <p key={i} className="text-sm text-slate-700 p-2 rounded bg-slate-50 border border-slate-100">{p}</p>
+                      <div key={i} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100">
+                        <span className="text-sm text-slate-700">{p}</span>
+                        <div className="flex gap-1 shrink-0 ml-2">
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-blue-600" onClick={() => { setEditPhoneIdx(i); setEditPhoneValue(p); }}><Pencil className="h-3 w-3" /></Button>
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-red-600" onClick={() => handleDeletePhone(i)} disabled={updateClientMutation.isPending}><Trash2 className="h-3 w-3" /></Button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 ) : <p className="text-sm text-slate-400">No additional phone numbers. Click Add to create one.</p>}
               </SectionCard>
 
               <SectionCard title="Email Addresses" onAdd={() => setShowAddEmail(true)}>
-                {client.email && <p className="text-sm text-slate-700 p-2 rounded bg-slate-50 border border-slate-100 mb-1">{client.email}</p>}
+                {client.email && <p className="text-sm text-slate-700 p-2 rounded bg-slate-50 border border-slate-100 mb-1">{client.email} <span className="text-xs text-slate-400">(primary)</span></p>}
                 {additionalEmails.length > 0 && additionalEmails.map((e: string, i: number) => (
-                  <p key={i} className="text-sm text-slate-700 p-2 rounded bg-slate-50 border border-slate-100 mb-1">{e}</p>
+                  <div key={i} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100 mb-1">
+                    <span className="text-sm text-slate-700">{e}</span>
+                    <div className="flex gap-1 shrink-0 ml-2">
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-blue-600" onClick={() => { setEditEmailIdx(i); setEditEmailValue(e); }}><Pencil className="h-3 w-3" /></Button>
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-red-600" onClick={() => handleDeleteEmail(i)} disabled={updateClientMutation.isPending}><Trash2 className="h-3 w-3" /></Button>
+                    </div>
+                  </div>
                 ))}
                 {!client.email && additionalEmails.length === 0 && <p className="text-sm text-slate-400">No email addresses. Click Add to create one.</p>}
               </SectionCard>
+
+              {/* Employment */}
+              <div className="bg-white rounded-lg border border-slate-200 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Employment</h3>
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-500 gap-1" onClick={() => openEditDialog()}><Pencil className="h-3 w-3" /> Edit</Button>
+                </div>
+                <InfoLine label="Client Employed" value={fd.employed || "—"} />
+                <InfoLine label="Spouse Employed" value={fd.spouseEmployed || "—"} />
+              </div>
+
+              {/* Food Preferences */}
+              <div className="bg-white rounded-lg border border-slate-200 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Food Preferences</h3>
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-500 gap-1" onClick={() => openEditDialog()}><Pencil className="h-3 w-3" /> Edit</Button>
+                </div>
+                <InfoLine label="Food Allergies" value={fd.foodAllergies || "—"} />
+                {fd.foodAllergies === "Yes" && fd.foodAllergiesDetails && <InfoLine label="Allergy Details" value={fd.foodAllergiesDetails} />}
+                <InfoLine label="Dietary Restrictions" value={fd.dietaryRestrictions || "—"} />
+                {fd.mealFocus && (fd.mealFocus as string[]).length > 0 && <InfoLine label="Meal Focus" value={(fd.mealFocus as string[]).join(", ")} />}
+                {fd.breakfastItems && <InfoLine label="Breakfast" value={fd.breakfastItems} />}
+                {fd.lunchItems && <InfoLine label="Lunch" value={fd.lunchItems} />}
+                {fd.dinnerItems && <InfoLine label="Dinner" value={fd.dinnerItems} />}
+                {fd.snackItems && <InfoLine label="Snacks" value={fd.snackItems} />}
+                <InfoLine label="Needs Refrigerator" value={fd.needsRefrigerator || "—"} />
+                <InfoLine label="Needs Microwave" value={fd.needsMicrowave || "—"} />
+                <InfoLine label="Needs Cooking Utensils" value={fd.needsCookingUtensils || "—"} />
+              </div>
             </div>
 
             <div className="space-y-5">
@@ -1433,11 +1658,23 @@ export default function AdminClientDetail() {
                         const docUrls = cData?.docUrls || (cData?.docUrl ? [cData.docUrl] : []);
                         return (
                           <div key={cKey} className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
-                            <p className="text-sm font-semibold text-slate-800 mb-2">{condition}</p>
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-sm font-semibold text-slate-800">{condition}</p>
+                              {editConditionIdx !== cKey
+                                ? <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-slate-500 gap-1" onClick={() => { setEditConditionIdx(cKey); setEditConditionName(clientName); }}><Pencil className="h-3 w-3" /> Edit</Button>
+                                : <div className="flex items-center gap-1">
+                                    <Button size="sm" className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => { const existingConditionDetails = (fd as any).conditionDetails || {}; const existingConditionClientNames = (fd as any).conditionClientNames || {}; const updatedConditionDetails = { ...existingConditionDetails, [cKey]: { ...(existingConditionDetails[cKey] || {}), clientName: editConditionName } }; const updatedConditionClientNames = { ...existingConditionClientNames, [cKey]: editConditionName }; updateClientMutation.mutate({ id, formData: { conditionDetails: updatedConditionDetails, conditionClientNames: updatedConditionClientNames } }, { onSuccess: () => { setEditConditionIdx(null); utils.admin.getById.invalidate({ id }); toast.success("Condition name updated"); } }); }} disabled={updateClientMutation.isPending}>{updateClientMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}</Button>
+                                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditConditionIdx(null)}>Cancel</Button>
+                                  </div>
+                              }
+                            </div>
                             <div className="space-y-1.5">
                               <div className="flex items-center justify-between">
                                 <span className="text-xs text-slate-500">Client name</span>
-                                <span className={`text-sm ${clientName ? "text-slate-900" : "text-slate-400 italic"}`}>{clientName || "Not provided"}</span>
+                                {editConditionIdx === cKey
+                                  ? <Input value={editConditionName} onChange={(e) => setEditConditionName(e.target.value)} className="h-7 text-sm w-48" placeholder="Enter client name" />
+                                  : <span className={`text-sm ${clientName ? "text-slate-900" : "text-slate-400 italic"}`}>{clientName || "Not provided"}</span>
+                                }
                               </div>
                               {docUrls.length > 0 ? (
                                 <div className="flex flex-wrap gap-2 mt-1">
@@ -1461,26 +1698,50 @@ export default function AdminClientDetail() {
                   {/* Had a Miscarriage: miscarriage date */}
                   {activeCategories.includes("Had a Miscarriage") && (
                     <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50/40 p-4">
-                      <p className="text-sm font-semibold text-rose-800 mb-1">Had a Miscarriage</p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-slate-600">Date of Miscarriage</span>
-                        <span className={`text-sm ${(fd as any).miscarriageDate ? "text-slate-900" : "text-slate-400 italic"}`}>
-                          {(fd as any).miscarriageDate ? formatLocalDateShort((fd as any).miscarriageDate) : "Not provided"}
-                        </span>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-semibold text-rose-800">Had a Miscarriage</p>
+                        {editMiscarriageDate === null
+                          ? <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-slate-500 gap-1" onClick={() => setEditMiscarriageDate((fd as any).miscarriageDate ? String((fd as any).miscarriageDate).split("T")[0] : "")}><Pencil className="h-3 w-3" /> Edit</Button>
+                          : <div className="flex items-center gap-1">
+                              <Input type="date" value={editMiscarriageDate} onChange={(e) => setEditMiscarriageDate(e.target.value)} className="h-7 text-xs w-36" />
+                              <Button size="sm" className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => updateClientMutation.mutate({ id, formData: { miscarriageDate: editMiscarriageDate } }, { onSuccess: () => { setEditMiscarriageDate(null); utils.admin.getById.invalidate({ id }); toast.success("Miscarriage date updated"); } })} disabled={updateClientMutation.isPending}>{updateClientMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}</Button>
+                              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditMiscarriageDate(null)}>Cancel</Button>
+                            </div>
+                        }
                       </div>
+                      {editMiscarriageDate === null && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Date of Miscarriage</span>
+                          <span className={`text-sm ${(fd as any).miscarriageDate ? "text-slate-900" : "text-slate-400 italic"}`}>
+                            {(fd as any).miscarriageDate ? formatLocalDateShort((fd as any).miscarriageDate) : "Not provided"}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
 
                   {/* Pregnant: due date reminder */}
                   {hasPregnant && (
                     <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/40 p-4">
-                      <p className="text-sm font-semibold text-amber-800 mb-1">Pregnant</p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-slate-600">Due date</span>
-                        <span className={`text-sm ${fd.dueDate || screening.dueDate ? "text-slate-900" : "text-red-500 italic"}`}>
-                          {fd.dueDate || screening.dueDate ? formatLocalDateShort(fd.dueDate || screening.dueDate) : "Not entered — required (edit in SCN section below)"}
-                        </span>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-semibold text-amber-800">Pregnant</p>
+                        {editDueDate === null
+                          ? <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-slate-500 gap-1" onClick={() => setEditDueDate((fd.dueDate || screening.dueDate || "").split("T")[0])}><Pencil className="h-3 w-3" /> Edit</Button>
+                          : <div className="flex items-center gap-1">
+                              <Input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} className="h-7 text-xs w-36" />
+                              <Button size="sm" className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => updateClientMutation.mutate({ id, formData: { dueDate: editDueDate } }, { onSuccess: () => { setEditDueDate(null); utils.admin.getById.invalidate({ id }); toast.success("Due date updated"); } })} disabled={updateClientMutation.isPending}>{updateClientMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}</Button>
+                              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditDueDate(null)}>Cancel</Button>
+                            </div>
+                        }
                       </div>
+                      {editDueDate === null && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Due date</span>
+                          <span className={`text-sm ${fd.dueDate || screening.dueDate ? "text-slate-900" : "text-red-500 italic"}`}>
+                            {fd.dueDate || screening.dueDate ? formatLocalDateShort(fd.dueDate || screening.dueDate) : "Not entered"}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1492,41 +1753,71 @@ export default function AdminClientDetail() {
                     const allFilled = infantName && infantDob && infantMedicaidId;
                     return (
                       <div className={`mt-4 rounded-lg border p-4 ${allFilled ? "border-slate-200 bg-slate-50/40" : "border-amber-200 bg-amber-50/40"}`}>
-                        <div className="flex items-center gap-2 mb-3">
-                          <p className="text-sm font-semibold text-amber-800">Postpartum — Infant Information</p>
-                          {!allFilled && <span className="text-xs text-amber-700 font-medium bg-amber-100 px-2 py-0.5 rounded">Incomplete</span>}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-amber-800">Postpartum — Infant Information</p>
+                            {!allFilled && <span className="text-xs text-amber-700 font-medium bg-amber-100 px-2 py-0.5 rounded">Incomplete</span>}
+                          </div>
+                          {!editInfantMode
+                            ? <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-slate-500 gap-1" onClick={() => { setEditInfantForm({ infantName, infantDateOfBirth: infantDob ? infantDob.split("T")[0] : "", infantMedicaidId }); setEditInfantMode(true); }}><Pencil className="h-3 w-3" /> Edit</Button>
+                            : <div className="flex items-center gap-1">
+                                <Button size="sm" className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => updateClientMutation.mutate({ id, formData: { ...editInfantForm } }, { onSuccess: () => { setEditInfantMode(false); utils.admin.getById.invalidate({ id }); toast.success("Infant info updated"); } })} disabled={updateClientMutation.isPending}>{updateClientMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}</Button>
+                                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditInfantMode(false)}>Cancel</Button>
+                              </div>
+                          }
                         </div>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-slate-600">Infant Name</span>
-                            <span className={`text-sm ${infantName ? "text-slate-900" : "text-slate-400 italic"}`}>{infantName || "Not provided"}</span>
+                        {editInfantMode ? (
+                          <div className="space-y-2">
+                            <div><Label className="text-xs">Infant Name</Label><Input value={editInfantForm.infantName} onChange={(e) => setEditInfantForm({ ...editInfantForm, infantName: e.target.value })} className="h-8 text-sm" /></div>
+                            <div><Label className="text-xs">Infant Date of Birth</Label><Input type="date" value={editInfantForm.infantDateOfBirth} onChange={(e) => setEditInfantForm({ ...editInfantForm, infantDateOfBirth: e.target.value })} className="h-8 text-sm" /></div>
+                            <div><Label className="text-xs">Infant Medicaid ID (CIN)</Label><Input value={editInfantForm.infantMedicaidId} onChange={(e) => setEditInfantForm({ ...editInfantForm, infantMedicaidId: e.target.value })} className="h-8 text-sm font-mono" /></div>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-slate-600">Infant Date of Birth</span>
-                            <span className={`text-sm ${infantDob ? "text-slate-900" : "text-slate-400 italic"}`}>
-                              {infantDob ? formatLocalDateShort(infantDob) : "Not provided"}
-                            </span>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-slate-600">Infant Name</span>
+                              <span className={`text-sm ${infantName ? "text-slate-900" : "text-slate-400 italic"}`}>{infantName || "Not provided"}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-slate-600">Infant Date of Birth</span>
+                              <span className={`text-sm ${infantDob ? "text-slate-900" : "text-slate-400 italic"}`}>
+                                {infantDob ? formatLocalDateShort(infantDob) : "Not provided"}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-slate-600">Infant Medicaid ID (CIN)</span>
+                              <span className={`text-sm font-mono ${infantMedicaidId ? "text-slate-900" : "text-slate-400 italic"}`}>{infantMedicaidId || "Not provided"}</span>
+                            </div>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-slate-600">Infant Medicaid ID (CIN)</span>
-                            <span className={`text-sm font-mono ${infantMedicaidId ? "text-slate-900" : "text-slate-400 italic"}`}>{infantMedicaidId || "Not provided"}</span>
-                          </div>
-                        </div>
+                        )}
                       </div>
                     );
                   })()}
 
-                  {/* Other: read-only description submitted by client */}
+                  {/* Other: editable description */}
                   {hasOther && (
                     <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/40 p-4">
-                      <p className="text-sm font-semibold text-slate-800 mb-2">Other Health Condition</p>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-semibold text-slate-800">Other Health Condition</p>
+                        {editOtherDesc === null
+                          ? <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-slate-500 gap-1" onClick={() => setEditOtherDesc(otherDetails || "")}><Pencil className="h-3 w-3" /> Edit</Button>
+                          : <div className="flex items-center gap-1">
+                              <Button size="sm" className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => updateClientMutation.mutate({ id, formData: { otherHealthCategoryDetails: editOtherDesc } }, { onSuccess: () => { setEditOtherDesc(null); utils.admin.getById.invalidate({ id }); toast.success("Description updated"); } })} disabled={updateClientMutation.isPending}>{updateClientMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}</Button>
+                              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditOtherDesc(null)}>Cancel</Button>
+                            </div>
+                        }
+                      </div>
                       <div className="space-y-1.5">
+                        {editOtherDesc !== null ? (
+                          <Textarea value={editOtherDesc} onChange={(e) => setEditOtherDesc(e.target.value)} className="text-sm min-h-[60px]" placeholder="Describe the health condition..." />
+                        ) : (
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-slate-500">Description</span>
                           <span className={`text-sm ${otherDetails ? "text-slate-900" : "text-slate-400 italic"}`}>
                             {otherDetails || "Not provided"}
                           </span>
                         </div>
+                        )}
                         {(() => {
                           const otherDocs = conditionDetails["Other"]?.docUrls || (conditionDetails["Other"]?.docUrl ? [conditionDetails["Other"].docUrl] : []);
                           return otherDocs.length > 0 ? (
@@ -2284,6 +2575,60 @@ export default function AdminClientDetail() {
                   ))}
                 </div>
               </div>
+              {/* Employment */}
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Employment</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label className="text-xs">Client Employed</Label>
+                    <Select value={editForm.employed} onValueChange={(v) => setEditForm({ ...editForm, employed: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{["Yes","No","Unknown"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label className="text-xs">Spouse Employed</Label>
+                    <Select value={editForm.spouseEmployed} onValueChange={(v) => setEditForm({ ...editForm, spouseEmployed: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{["Yes","No","N/A","Unknown"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              {/* Food Preferences */}
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Food Preferences</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label className="text-xs">Food Allergies</Label>
+                    <Select value={editForm.foodAllergies} onValueChange={(v) => setEditForm({ ...editForm, foodAllergies: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{["Yes","No"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  {editForm.foodAllergies === "Yes" && <div><Label className="text-xs">Allergy Details</Label><Input value={editForm.foodAllergiesDetails} onChange={(e) => setEditForm({ ...editForm, foodAllergiesDetails: e.target.value })} /></div>}
+                  <div className="col-span-2"><Label className="text-xs">Dietary Restrictions</Label><Input value={editForm.dietaryRestrictions} onChange={(e) => setEditForm({ ...editForm, dietaryRestrictions: e.target.value })} placeholder="e.g. Halal, Kosher, Vegetarian" /></div>
+                  <div><Label className="text-xs">Breakfast Items</Label><Input value={editForm.breakfastItems} onChange={(e) => setEditForm({ ...editForm, breakfastItems: e.target.value })} /></div>
+                  <div><Label className="text-xs">Lunch Items</Label><Input value={editForm.lunchItems} onChange={(e) => setEditForm({ ...editForm, lunchItems: e.target.value })} /></div>
+                  <div><Label className="text-xs">Dinner Items</Label><Input value={editForm.dinnerItems} onChange={(e) => setEditForm({ ...editForm, dinnerItems: e.target.value })} /></div>
+                  <div><Label className="text-xs">Snack Items</Label><Input value={editForm.snackItems} onChange={(e) => setEditForm({ ...editForm, snackItems: e.target.value })} /></div>
+                  <div><Label className="text-xs">Needs Refrigerator</Label>
+                    <Select value={editForm.needsRefrigerator} onValueChange={(v) => setEditForm({ ...editForm, needsRefrigerator: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{["Yes","No"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label className="text-xs">Needs Microwave</Label>
+                    <Select value={editForm.needsMicrowave} onValueChange={(v) => setEditForm({ ...editForm, needsMicrowave: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{["Yes","No"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label className="text-xs">Needs Cooking Utensils</Label>
+                    <Select value={editForm.needsCookingUtensils} onValueChange={(v) => setEditForm({ ...editForm, needsCookingUtensils: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>{["Yes","No"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
             </div>
             <DialogFooter className="mt-4">
               <Button variant="outline" onClick={() => setShowEdit(false)}>Cancel</Button>
@@ -2373,6 +2718,75 @@ export default function AdminClientDetail() {
               <Button variant="outline" onClick={() => setShowAddEmail(false)}>Cancel</Button>
               <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleAddEmail} disabled={updateClientMutation.isPending}>
                 {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Household Member Dialog */}
+        <Dialog open={editHouseholdIdx !== null} onOpenChange={(open) => { if (!open) setEditHouseholdIdx(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Edit Household Member</DialogTitle><DialogDescription>Update this household member's information</DialogDescription></DialogHeader>
+            <div className="space-y-3">
+              <div><Label className="text-xs">Full Name *</Label><Input value={editHouseholdForm.name} onChange={(e) => setEditHouseholdForm({ ...editHouseholdForm, name: e.target.value })} /></div>
+              <div><Label className="text-xs">Date of Birth</Label><Input type="date" value={editHouseholdForm.dateOfBirth} onChange={(e) => setEditHouseholdForm({ ...editHouseholdForm, dateOfBirth: e.target.value })} /></div>
+              <div><Label className="text-xs">Medicaid ID (CIN)</Label><Input placeholder="AA00000A" value={editHouseholdForm.medicaidId} onChange={(e) => setEditHouseholdForm({ ...editHouseholdForm, medicaidId: e.target.value })} /></div>
+              <div><Label className="text-xs">Relationship</Label><Input placeholder="e.g. Spouse, Child" value={editHouseholdForm.relationship} onChange={(e) => setEditHouseholdForm({ ...editHouseholdForm, relationship: e.target.value })} /></div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditHouseholdIdx(null)}>Cancel</Button>
+              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleEditHousehold} disabled={updateClientMutation.isPending}>
+                {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Address Dialog */}
+        <Dialog open={editAddressIdx !== null} onOpenChange={(open) => { if (!open) setEditAddressIdx(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Edit Address</DialogTitle><DialogDescription>Update this address</DialogDescription></DialogHeader>
+            <div className="space-y-3">
+              <div><Label className="text-xs">Street *</Label><Input value={editAddressForm.street} onChange={(e) => setEditAddressForm({ ...editAddressForm, street: e.target.value })} /></div>
+              <div><Label className="text-xs">Apt/Unit</Label><Input value={editAddressForm.apt} onChange={(e) => setEditAddressForm({ ...editAddressForm, apt: e.target.value })} /></div>
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label className="text-xs">City</Label><Input value={editAddressForm.city} onChange={(e) => setEditAddressForm({ ...editAddressForm, city: e.target.value })} /></div>
+                <div><Label className="text-xs">State</Label><Input value={editAddressForm.state} onChange={(e) => setEditAddressForm({ ...editAddressForm, state: e.target.value })} /></div>
+                <div><Label className="text-xs">Zip</Label><Input value={editAddressForm.zip} onChange={(e) => setEditAddressForm({ ...editAddressForm, zip: e.target.value })} /></div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditAddressIdx(null)}>Cancel</Button>
+              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleEditAddress} disabled={updateClientMutation.isPending}>
+                {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Phone Dialog */}
+        <Dialog open={editPhoneIdx !== null} onOpenChange={(open) => { if (!open) setEditPhoneIdx(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Edit Phone Number</DialogTitle><DialogDescription>Update this phone number</DialogDescription></DialogHeader>
+            <div><Label className="text-xs">Phone Number *</Label><Input value={editPhoneValue} onChange={(e) => setEditPhoneValue(e.target.value)} /></div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditPhoneIdx(null)}>Cancel</Button>
+              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleEditPhone} disabled={updateClientMutation.isPending}>
+                {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Email Dialog */}
+        <Dialog open={editEmailIdx !== null} onOpenChange={(open) => { if (!open) setEditEmailIdx(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Edit Email Address</DialogTitle><DialogDescription>Update this email address</DialogDescription></DialogHeader>
+            <div><Label className="text-xs">Email *</Label><Input type="email" value={editEmailValue} onChange={(e) => setEditEmailValue(e.target.value)} /></div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditEmailIdx(null)}>Cancel</Button>
+              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleEditEmail} disabled={updateClientMutation.isPending}>
+                {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
               </Button>
             </DialogFooter>
           </DialogContent>
