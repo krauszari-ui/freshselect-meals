@@ -1,5 +1,13 @@
 {
   "version": 2,
   "buildCommand": "bash scripts/vercel-build.sh",
-  "outputDirectory": ".vercel/output"
+  "outputDirectory": ".vercel/output",
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "header", "key": "x-forwarded-proto", "value": "http" }],
+      "destination": "https://freshselectmeals.com/:path*",
+      "permanent": true
+    }
+  ]
 }
