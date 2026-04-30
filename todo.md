@@ -679,3 +679,4 @@
 
 ## UX Improvements
 - [x] Replace DOB text input with three-dropdown (Month/Day/Year) picker on main applicant field and household member rows — DobPicker component with leap-year-aware day clamping, verified with 16 unit tests. 144/144 tests pass.
+- [x] Bug: DobPicker dropdowns not selectable — fixed by switching SelectContent to position="item-aligned" + max-h-60. Root cause: popper position set viewport height = trigger height (~36px), making items invisible. 144/144 tests pass.
