@@ -526,6 +526,8 @@ export const appRouter = router({
       // HTML-escape the body so staff cannot accidentally or maliciously inject HTML/scripts
       const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
       const safeBody = escapeHtml(input.body).replace(/\n/g, "<br/>");
+      // Validate attachment URLs — only allow https:// to prevent javascript: injection
+      const safeAttachmentUrls = (input.attachmentUrls ?? []).filter((u) => u.startsWith("https://"));
       const success = await sendEmail({
         to: submission.email,
         subject: resolvedSubject,
@@ -533,7 +535,7 @@ export const appRouter = router({
         html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
           <p style="color:#2d5a27;font-weight:bold;">FreshSelect Meals</p>
           ${safeBody}
-          ${input.attachmentUrls && input.attachmentUrls.length > 0 ? `<hr/><p style="font-size:13px;color:#666;">Attachments: ${input.attachmentUrls.map((u, i) => `<a href="${u}">Attachment ${i + 1}</a>`).join(", ")}</p>` : ""}
+          ${safeAttachmentUrls.length > 0 ? `<hr/><p style="font-size:13px;color:#666;">Attachments: ${safeAttachmentUrls.map((u, i) => `<a href="${escapeHtml(u)}">Attachment ${i + 1}</a>`).join(", ")}</p>` : ""}
           <hr/><p style="font-size:12px;color:#999;">FreshSelect Meals &mdash; (718) 307-4664 | admin@freshselectmeals.com<br/>To reply, simply reply to this email.</p>
         </div>`,
       });
@@ -916,8 +918,9 @@ export const appRouter = router({
       });
       // Send email to client if they have an email address
       if (existing?.email) {
-        const clientName = `${existing.firstName} ${existing.lastName}`;
-        const escapedNote = input.note.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        const clientName = escHtml(`${existing.firstName ?? ""} ${existing.lastName ?? ""}`.trim());
+        const escapedNote = escHtml(input.note);
         await sendEmail({
           to: existing.email,
           subject: "Action Required: Additional Information Needed — FreshSelect Meals",
@@ -1275,17 +1278,26 @@ export const appRouter = router({
       const user = await getUserByEmail(input.email);
       if (!user || !user.passwordHash) return { success: true };
       if (user.role !== "admin" && user.role !== "worker" && user.role !== "super_admin" && user.role !== "viewer" && user.role !== "assessor") return { success: true };
+      // Validate origin against allowlist to prevent open redirect — attacker could craft a
+      // reset link pointing to evil.com to steal the token
+      const { ALLOWED_ORIGINS } = await import("./_core/security");
+      const originAllowed = ALLOWED_ORIGINS.some((o: string | RegExp) =>
+        typeof o === "string" ? o === input.origin : o.test(input.origin)
+      );
+      if (!originAllowed) return { success: true }; // silently ignore — don't reveal allowlist
       const token = require("crypto").randomBytes(32).toString("hex");
       const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
       await setPasswordResetToken(user.id, token, expires);
       const resetUrl = `${input.origin}/admin/reset-password?token=${token}`;
+      const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+      const safeName = escHtml(user.name || "there");
       const { sendEmail } = await import("./email");
       await sendEmail({
         to: user.email!,
         subject: "Reset your FreshSelect Meals password",
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
   <h2 style="color:#2d6a4f">Password Reset Request</h2>
-  <p>Hi ${user.name || "there"},</p>
+  <p>Hi ${safeName},</p>
   <p>We received a request to reset your password for the FreshSelect Meals admin portal.</p>
   <p style="margin:24px 0">
     <a href="${resetUrl}" style="background:#2d6a4f;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Reset Password</a>

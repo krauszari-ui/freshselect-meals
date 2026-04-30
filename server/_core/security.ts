@@ -17,7 +17,7 @@ import { nanoid } from "nanoid";
 // ---------------------------------------------------------------------------
 // Allowed origins
 // ---------------------------------------------------------------------------
-const ALLOWED_ORIGINS = [
+export const ALLOWED_ORIGINS = [
   "https://freshselectmeals.com",
   "https://www.freshselectmeals.com",
   // Vercel preview deployments
