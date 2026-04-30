@@ -56,18 +56,18 @@ export const submissionLimiter = rateLimit({
 /**
  * Login brute-force protection — two-tier system:
  *
- * Tier 1 (loginLimiter):  10 attempts per IP per 60 minutes → 1-hour lockout
+ * Tier 1 (loginLimiter):  10 attempts per IP per 15 minutes → 15-minute lockout
  * Tier 2 (loginHardLimiter): 15 attempts per IP per 24 hours → 24-hour lockout
  *                             (requires waiting out the window — effectively a manual reset)
  *
  * Both limiters are applied together on each login route.
  */
 export const loginLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
+  windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  message: { error: "Too many login attempts. Your IP has been locked out for 1 hour. Please try again later." },
+  message: { error: "Too many login attempts. Your IP has been locked out for 15 minutes. Please try again later." },
 });
 
 /** Hard cap: 15 total attempts per IP per 24 hours — locks out for the rest of the day */
@@ -97,13 +97,13 @@ export const passwordResetLimiter = rateLimit({
   message: { error: "Too many password reset requests. Please wait 15 minutes before trying again." },
 });
 
-/** Referrer portal login — Tier 1: 10 attempts / 1 hour per IP */
+/** Referrer portal login — Tier 1: 10 attempts / 15 minutes per IP */
 export const referrerLoginLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
+  windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  message: { error: "Too many login attempts. Your IP has been locked out for 1 hour. Please try again later." },
+  message: { error: "Too many login attempts. Your IP has been locked out for 15 minutes. Please try again later." },
 });
 
 /** Referrer portal login — Tier 2: 15 attempts / 24 hours per IP (hard block) */

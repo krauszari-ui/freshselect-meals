@@ -671,3 +671,8 @@
 - [x] SECURITY BUG 3: file extension now derived from MIME type, not user-supplied filename
 - [x] SECURITY BUG 4: category parameter sanitized to alphanumeric+hyphens only
 - [x] SECURITY BUG 5: logPageView rate-limited to 60 page views per user per minute
+
+## Security Hardening Steps
+- [x] Step 1: Login brute-force rate limiter — 10 attempts / 15 min per IP (Tier 1), 15 attempts / 24 hr hard block (Tier 2), applied to admin login and referrer portal login. Verified with dedicated unit test (11th attempt → 429, different IP still allowed). 116/116 tests pass.
+- [ ] Step 2: HTTPS-only cookies in production + HTTP→HTTPS redirect via vercel.json
+- [ ] Step 3: Content Security Policy header via vercel.json (Vercel-aware, not Express Helmet)
