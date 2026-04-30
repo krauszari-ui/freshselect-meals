@@ -675,4 +675,4 @@
 ## Security Hardening Steps
 - [x] Step 1: Login brute-force rate limiter — 10 attempts / 15 min per IP (Tier 1), 15 attempts / 24 hr hard block (Tier 2), applied to admin login and referrer portal login. Verified with dedicated unit test (11th attempt → 429, different IP still allowed). 116/116 tests pass.
 - [x] Step 2: HTTPS-only cookies in production + HTTP→HTTPS redirect via vercel.json — Secure flag already set via x-forwarded-proto header (Vercel-compatible). Added HTTP→HTTPS redirect rule in vercel.json. Verified with 4 unit tests covering all proxy scenarios. 120/120 tests pass.
-- [ ] Step 3: Content Security Policy header via vercel.json (Vercel-aware, not Express Helmet)
+- [x] Step 3: Content Security Policy header via vercel.json — strict script-src 'self', style-src with Google Fonts, img-src with https: for CDN images, connect-src with forge.manus.ai, frame/object-src 'none'. Also added X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy. Verified with 8-test suite (csp.test.ts). 128/128 tests pass.
