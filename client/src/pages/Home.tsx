@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SignaturePad } from "@/components/SignaturePad";
+import { DobPicker } from "@/components/DobPicker";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -999,12 +1000,10 @@ export default function Home() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <Label className="text-stone-700">Date of Birth *</Label>
-                        <Input
-                          type="text"
+                        <DobPicker
                           value={form.dateOfBirth}
-                          onChange={(e) => update("dateOfBirth", e.target.value)}
-                          className={errors.dateOfBirth ? "border-red-400" : ""}
-                          placeholder="MM/DD/YYYY"
+                          onChange={(v) => update("dateOfBirth", v)}
+                          error={!!errors.dateOfBirth}
                         />
                         {errors.dateOfBirth && <p className="text-red-500 text-xs mt-1">{errors.dateOfBirth}</p>}
                       </div>
@@ -1591,17 +1590,15 @@ export default function Home() {
                           </div>
                           <div>
                             <Label className="text-stone-600 text-xs">Date of Birth *</Label>
-                            <Input
-                              type="text"
-                              placeholder="MM/DD/YYYY"
-                              maxLength={10}
+                            <DobPicker
                               value={member.dateOfBirth}
-                              onChange={(e) => {
+                              onChange={(v) => {
                                 const members = [...form.householdMembers];
-                                members[idx] = { ...members[idx], dateOfBirth: e.target.value };
+                                members[idx] = { ...members[idx], dateOfBirth: v };
                                 update("householdMembers", members);
                               }}
-                              className={!member.dateOfBirth && errors.householdMembers ? "border-red-400" : ""}
+                              error={!member.dateOfBirth && !!errors.householdMembers}
+                              size="sm"
                             />
                             {!member.dateOfBirth && errors.householdMembers && (
                               <p className="text-red-500 text-xs mt-0.5">Date of birth is required</p>
