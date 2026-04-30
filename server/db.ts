@@ -136,6 +136,7 @@ export interface ListSubmissionsOptions {
   assessmentCompleted?: boolean;
   zipcode?: string;
   priority?: string;
+  sortDir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 }
@@ -143,7 +144,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, excludeStage, excludeStages, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, page = 1, pageSize = 20 } = opts;
+  const { search, status, stage, excludeStage, excludeStages, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, sortDir = "desc", page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -191,7 +192,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
       rejectedBy: submissions.rejectedBy,
       missingInfoNote: submissions.missingInfoNote,
       notEligibleReason: submissions.notEligibleReason,
-    }).from(submissions).where(where).orderBy(desc(submissions.createdAt)).limit(pageSize).offset(offset),
+    }).from(submissions).where(where).orderBy(sortDir === "asc" ? asc(submissions.createdAt) : desc(submissions.createdAt)).limit(pageSize).offset(offset),
     db.select({ count: sql<number>`count(*)` }).from(submissions).where(where),
     db.select({ totalAdditional: sql<number>`COALESCE(SUM(additionalMembersCount), 0)`, totalClients: sql<number>`count(*)` }).from(submissions).where(where),
   ]);
