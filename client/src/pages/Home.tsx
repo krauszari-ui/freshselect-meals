@@ -291,6 +291,9 @@ function validateStep2(form: FormData, uploads?: Record<string, { url: string; f
   if (!sq.utilityShutoff) e["sq.utilityShutoff"] = "Required";
   if (!sq.receivesSnap) e["sq.receivesSnap"] = "Required";
   if (!sq.receivesWic) e["sq.receivesWic"] = "Required";
+  if (!sq.enrolledHealthHome) e["sq.enrolledHealthHome"] = "Required";
+  if (!sq.householdMembersCount.trim()) e["sq.householdMembersCount"] = "Required";
+  if (!sq.householdMembersWithMedicaid.trim()) e["sq.householdMembersWithMedicaid"] = "Required";
   if (!sq.medicationsRequireRefrigeration) e["sq.medicationsRequireRefrigeration"] = "Required";
   if (!sq.breastmilkRefrigeration) e["sq.breastmilkRefrigeration"] = "Required";
   // Health categories required
@@ -1179,10 +1182,48 @@ export default function Home() {
                       </div>
                     ))}
 
-                    {/* Q5-Q6 Yes/No */}
+                    {/* Q5 - Enrolled in Health Home */}
+                    <div>
+                      <Label className="text-stone-700">5. Enrolled in Health Home *</Label>
+                      <YesNoSelect
+                        value={form.screeningQuestions.enrolledHealthHome}
+                        onChange={(v) => updateScreening("enrolledHealthHome", v)}
+                        error={errors["sq.enrolledHealthHome"]}
+                      />
+                    </div>
+
+                    {/* Q6 - Household Members */}
+                    <div>
+                      <Label className="text-stone-700">6. Number of household members *</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={form.screeningQuestions.householdMembersCount}
+                        onChange={(e) => updateScreening("householdMembersCount", e.target.value)}
+                        className={`mt-1 ${errors["sq.householdMembersCount"] ? "border-red-400" : ""}`}
+                        placeholder="e.g. 3"
+                      />
+                      {errors["sq.householdMembersCount"] && <p className="text-red-500 text-xs mt-1">{errors["sq.householdMembersCount"]}</p>}
+                    </div>
+
+                    {/* Q7 - Household Members with Medicaid */}
+                    <div>
+                      <Label className="text-stone-700">7. Household members with Medicaid *</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={form.screeningQuestions.householdMembersWithMedicaid}
+                        onChange={(e) => updateScreening("householdMembersWithMedicaid", e.target.value)}
+                        className={`mt-1 ${errors["sq.householdMembersWithMedicaid"] ? "border-red-400" : ""}`}
+                        placeholder="e.g. 2"
+                      />
+                      {errors["sq.householdMembersWithMedicaid"] && <p className="text-red-500 text-xs mt-1">{errors["sq.householdMembersWithMedicaid"]}</p>}
+                    </div>
+
+                    {/* Q8-Q9 Yes/No */}
                     {[
-                      { key: "medicationsRequireRefrigeration" as const, label: "5. Medications require refrigeration *" },
-                      { key: "breastmilkRefrigeration" as const, label: "6. Breastmilk refrigeration needed *" },
+                      { key: "medicationsRequireRefrigeration" as const, label: "8. Medications require refrigeration *" },
+                      { key: "breastmilkRefrigeration" as const, label: "9. Breastmilk refrigeration needed *" },
                     ].map(({ key, label }) => (
                       <div key={key}>
                         <Label className="text-stone-700">{label}</Label>
