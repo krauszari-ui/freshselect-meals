@@ -658,3 +658,4 @@
 - [x] Fix existing DB records incorrectly set to 'assessment_recorded' by auto-stage bug — reset to 'assessment'
 - [x] Preserve Admin Clients list state (page, search, filters, scroll) when navigating back from Client Detail
 - [x] Add three new fields to SCN Screening Questionnaire: Enrolled in Health Home, Household Members, Household Members with Medicaid
+- [x] Fix back navigation from Client Detail to restore exact page/filters on Admin Clients list (still broken)
