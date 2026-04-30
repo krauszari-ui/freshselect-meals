@@ -1366,6 +1366,8 @@ export default function AdminClientDetail() {
                 "Substance Use Disorder", "Diabetes", "Serious Mental Illness (SMI)",
               ];
               const conditionDetails: Record<string, { clientName?: string; docUrl?: string; docUrls?: string[] }> = (fd as any).conditionDetails || {};
+              // conditionClientNames is the flat map used by newer form submissions
+              const conditionClientNames: Record<string, string> = (fd as any).conditionClientNames || {};
               const activeCategories = hcEditMode ? hcEdits : healthCategories;
               const selectedMedical = activeCategories.filter((c: string) => MEDICAL_CONDITIONS.includes(c));
               const hasPregnant = activeCategories.includes("Pregnant");
@@ -1426,7 +1428,8 @@ export default function AdminClientDetail() {
                       {selectedMedical.map((condition: string) => {
                         const cKey = condition;
                         const cData = conditionDetails[cKey];
-                        const clientName = cData?.clientName || "";
+                        // Newer submissions store names in conditionClientNames; older ones in conditionDetails
+                        const clientName = cData?.clientName || conditionClientNames[cKey] || "";
                         const docUrls = cData?.docUrls || (cData?.docUrl ? [cData.docUrl] : []);
                         return (
                           <div key={cKey} className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
@@ -1452,6 +1455,19 @@ export default function AdminClientDetail() {
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+
+                  {/* Had a Miscarriage: miscarriage date */}
+                  {activeCategories.includes("Had a Miscarriage") && (
+                    <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50/40 p-4">
+                      <p className="text-sm font-semibold text-rose-800 mb-1">Had a Miscarriage</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-slate-600">Date of Miscarriage</span>
+                        <span className={`text-sm ${(fd as any).miscarriageDate ? "text-slate-900" : "text-slate-400 italic"}`}>
+                          {(fd as any).miscarriageDate ? formatLocalDateShort((fd as any).miscarriageDate) : "Not provided"}
+                        </span>
+                      </div>
                     </div>
                   )}
 
