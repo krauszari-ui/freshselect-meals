@@ -175,7 +175,9 @@ function createWorkerContext(): TrpcContext {
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
-  };
+    // Workers need canEdit:true to call editProcedure mutations
+    permissions: { canView: true, canEdit: true, canExport: true, canDelete: false, showReferralLinks: true },
+  } as any;
 
   return {
     user,
@@ -366,7 +368,7 @@ describe("admin.updateStatus", () => {
     const caller = appRouter.createCaller(createUserContext());
     await expect(
       caller.admin.updateStatus({ id: 1, status: "approved" })
-    ).rejects.toThrow("Staff access required");
+    ).rejects.toThrow("Edit access required");
   });
 });
 
@@ -549,7 +551,7 @@ describe("admin.updateClient", () => {
     const caller = appRouter.createCaller(createUserContext());
     await expect(
       caller.admin.updateClient({ id: 1, firstName: "Hacker" })
-    ).rejects.toThrow("Staff access required");
+    ).rejects.toThrow("Edit access required");
   });
 });
 
@@ -685,7 +687,7 @@ describe("admin.updateAdminNotes", () => {
     const caller = appRouter.createCaller(createUserContext());
     await expect(
       caller.admin.updateAdminNotes({ id: 1, adminNotes: "Hacked" })
-    ).rejects.toThrow("Staff access required");
+    ).rejects.toThrow("Edit access required");
   });
 });
 

@@ -664,3 +664,10 @@
 - [x] Add edit for health categories themselves in Assessment tab (add/remove categories inline)
 - [x] Warn before removing a health category that has sub-data (confirmation dialog listing what will be hidden)
 - [x] Add structured session activity logs to Audit Log page (session grouping, page views, expandable session timeline per login)
+
+## Security Audit Fixes
+- [x] SECURITY BUG 1: viewer/assessor role can call staffProcedure mutations (edit/delete client data) - enforce canEdit/canDelete server-side
+- [x] SECURITY BUG 2: upload.document is publicProcedure - unauthenticated users can upload files to S3 (NOTE: intentional for intake form - kept public but hardened)
+- [x] SECURITY BUG 3: file extension now derived from MIME type, not user-supplied filename
+- [x] SECURITY BUG 4: category parameter sanitized to alphanumeric+hyphens only
+- [x] SECURITY BUG 5: logPageView rate-limited to 60 page views per user per minute

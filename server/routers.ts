@@ -56,11 +56,35 @@ const superAdminProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx });
 });
 
-// Worker or Admin guard
+// Worker or Admin guard (read-only access — viewer and assessor can query but NOT mutate)
 const staffProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "worker" && ctx.user.role !== "super_admin" && ctx.user.role !== "viewer" && ctx.user.role !== "assessor")
     throw new TRPCError({ code: "FORBIDDEN", message: "Staff access required" });
   return next({ ctx });
+});
+
+// Edit guard: worker (with canEdit), admin, super_admin — viewer and assessor are blocked
+const editProcedure = protectedProcedure.use(({ ctx, next }) => {
+  const role = ctx.user.role;
+  if (role === "admin" || role === "super_admin") return next({ ctx });
+  if (role === "worker") {
+    const perms = (ctx.user as any).permissions;
+    if (perms?.canEdit) return next({ ctx });
+    throw new TRPCError({ code: "FORBIDDEN", message: "You do not have edit permission" });
+  }
+  throw new TRPCError({ code: "FORBIDDEN", message: "Edit access required" });
+});
+
+// Delete guard: worker (with canDelete), admin, super_admin only
+const deleteProcedure = protectedProcedure.use(({ ctx, next }) => {
+  const role = ctx.user.role;
+  if (role === "admin" || role === "super_admin") return next({ ctx });
+  if (role === "worker") {
+    const perms = (ctx.user as any).permissions;
+    if (perms?.canDelete) return next({ ctx });
+    throw new TRPCError({ code: "FORBIDDEN", message: "You do not have delete permission" });
+  }
+  throw new TRPCError({ code: "FORBIDDEN", message: "Delete access required" });
 });
 
 // Assessor guard (assessor + admin + super_admin)
@@ -71,6 +95,9 @@ const assessorProcedure = protectedProcedure.use(({ ctx, next }) => {
 });
 
 const householdMemberSchema = z.object({ name: z.string(), dateOfBirth: z.string(), medicaidId: z.string(), relationship: z.string().optional().default("") });
+
+// In-memory rate-limit map for logPageView: userId -> array of timestamps
+const pageViewRateMap = new Map<number, number[]>();
 
 const screeningQuestionsSchema = z.object({
   livingSituation: z.string().optional(), utilityShutoff: z.string().optional(),
@@ -192,25 +219,29 @@ export const appRouter = router({
       .input(z.object({ fileName: z.string(), fileData: z.string(), contentType: z.string(), category: z.string() }))
       .mutation(async ({ input }) => {
         // MIME type whitelist — reject anything that isn't a known safe document/image type
-        const ALLOWED_MIME_TYPES = new Set([
-          "application/pdf",
-          "image/jpeg",
-          "image/png",
-          "image/webp",
-          "image/gif",
-          "application/msword",                                                    // .doc
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
-        ]);
-        if (!ALLOWED_MIME_TYPES.has(input.contentType)) {
+        const ALLOWED_MIME_TYPES: Record<string, string> = {
+          "application/pdf": "pdf",
+          "image/jpeg": "jpg",
+          "image/png": "png",
+          "image/webp": "webp",
+          "image/gif": "gif",
+          "application/msword": "doc",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+        };
+        if (!ALLOWED_MIME_TYPES[input.contentType]) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: `File type '${input.contentType}' is not allowed. Accepted types: PDF, JPG, PNG, WEBP, GIF, DOC, DOCX.`,
           });
         }
+        // FIX: derive extension from MIME type, not from user-supplied filename
+        // This prevents an attacker from uploading malicious.php with contentType=image/jpeg
+        const safeExt = ALLOWED_MIME_TYPES[input.contentType];
         const buffer = Buffer.from(input.fileData, "base64");
         const suffix = Math.random().toString(36).substring(2, 8);
-        const ext = input.fileName.split(".").pop() || "file";
-        const key = `documents/${input.category}-${suffix}.${ext}`;
+        // FIX: sanitize category to alphanumeric + hyphens only to prevent S3 path traversal
+        const safeCategory = input.category.replace(/[^a-zA-Z0-9-_]/g, "").slice(0, 50) || "doc";
+        const key = `documents/${safeCategory}-${suffix}.${safeExt}`;
         const { url } = await storagePut(key, buffer, input.contentType);
         return { url, key };
       }),
@@ -458,7 +489,7 @@ export const appRouter = router({
         records: String(g.ids).split(',').map(Number).map(id => rowMap.get(id)).filter(Boolean),
       }));
     }),
-    deleteDuplicate: staffProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
+    deleteDuplicate: deleteProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
       const { deleteSubmission } = await import('./db');
       const existing = await getSubmissionById(input.id);
       await deleteSubmission(input.id);
@@ -507,7 +538,7 @@ export const appRouter = router({
       if (!link) return [];
       return listReferrerMessagesBySubmission(input.submissionId);
     }),
-    deleteReferrerNote: staffProcedure.input(z.object({
+    deleteReferrerNote: deleteProcedure.input(z.object({
       messageId: z.number(),
     })).mutation(async ({ input }) => {
       await deleteReferrerMessageById(input.messageId);
@@ -566,7 +597,7 @@ export const appRouter = router({
     })).query(async ({ input }) => {
       return listClientEmails(input.submissionId);
     }),
-    deleteClientEmail: staffProcedure.input(z.object({
+    deleteClientEmail: deleteProcedure.input(z.object({
       id: z.number(),
     })).mutation(async ({ input, ctx }) => {
       await deleteClientEmailById(input.id);
@@ -574,7 +605,7 @@ export const appRouter = router({
       return { success: true };
     }),
 
-    updateStatus: staffProcedure.input(z.object({
+    updateStatus: editProcedure.input(z.object({
       id: z.number(),
       status: z.enum(["new", "in_review", "approved", "rejected", "on_hold"]),
       adminNotes: z.string().optional(),
@@ -585,7 +616,7 @@ export const appRouter = router({
       return { success: true };
     }),
 
-    updateStage: staffProcedure.input(z.object({
+    updateStage: editProcedure.input(z.object({
       id: z.number(),
       stage: z.enum(["referral", "assessment", "assessment_recorded", "missing_information", "not_eligible", "level_one_only", "level_one_household", "level_2_active", "ineligible", "provider_attestation_required", "flagged"]),
     })).mutation(async ({ input, ctx }) => {
@@ -674,7 +705,7 @@ export const appRouter = router({
 
       byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input }) => getTasksBySubmission(input.submissionId)),
 
-      create: staffProcedure.input(z.object({
+      create: editProcedure.input(z.object({
         submissionId: z.number(), description: z.string().min(1),
         area: z.enum(["intake_rep", "assigned_worker"]),
         assignedTo: z.number().optional(),
@@ -685,7 +716,7 @@ export const appRouter = router({
         return { success: true, id };
       }),
 
-      updateStatus: staffProcedure.input(z.object({
+      updateStatus: editProcedure.input(z.object({
         id: z.number(), status: z.enum(["open", "completed", "verified"]),
       })).mutation(async ({ input, ctx }) => {
         await updateTaskStatus(input.id, input.status);
@@ -697,7 +728,7 @@ export const appRouter = router({
     // ─── Case Notes ───────────────────────────────────────────────────────
     notes: router({
       byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input }) => getCaseNotesBySubmission(input.submissionId)),
-      create: staffProcedure.input(z.object({ submissionId: z.number(), content: z.string().min(1) }))
+      create: editProcedure.input(z.object({ submissionId: z.number(), content: z.string().min(1) }))
         .mutation(async ({ ctx, input }) => {
           const id = await createCaseNote({ ...input, createdBy: ctx.user.id });
           const client = await getSubmissionById(input.submissionId);
@@ -710,7 +741,7 @@ export const appRouter = router({
     documents: router({
       byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input }) => getDocumentsBySubmission(input.submissionId)),
       library: staffProcedure.input(z.object({ category: z.string().optional() }).optional()).query(async ({ input }) => getLibraryDocuments(input?.category)),
-      upload: staffProcedure.input(z.object({
+      upload: editProcedure.input(z.object({
         submissionId: z.number().nullable(), name: z.string(), category: z.enum(["provider_attestation", "consent", "supporting_documentation", "id_document", "medicaid_card", "birth_certificate", "marriage_license", "forms", "uncategorized"]),
         fileData: z.string(), contentType: z.string(),
       })).mutation(async ({ ctx, input }) => {
@@ -753,7 +784,7 @@ export const appRouter = router({
     // ─── Services ─────────────────────────────────────────────────────────
     services: router({
       byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input }) => getServicesBySubmission(input.submissionId)),
-      create: staffProcedure.input(z.object({
+      create: editProcedure.input(z.object({
         submissionId: z.number(), name: z.string().min(1), description: z.string().optional(),
         startDate: z.string().optional(),
       })).mutation(async ({ ctx, input }) => {
@@ -766,7 +797,7 @@ export const appRouter = router({
         await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "service_created", clientId: input.submissionId, clientName: client ? `${client.firstName} ${client.lastName}` : undefined, details: { name: input.name } });
         return { success: true, id };
       }),
-      updateStatus: staffProcedure.input(z.object({
+      updateStatus: editProcedure.input(z.object({
         id: z.number(), status: z.enum(["active", "completed", "cancelled"]),
       })).mutation(async ({ input, ctx }) => {
         await updateServiceStatus(input.id, input.status);
@@ -776,7 +807,7 @@ export const appRouter = router({
     }),
 
     // ─── Client edit/delete ────────────────────────────────────────────────
-    updateClient: staffProcedure.input(z.object({
+    updateClient: editProcedure.input(z.object({
       id: z.number(),
       // Top-level DB columns
       firstName: z.string().optional(),
@@ -850,7 +881,7 @@ export const appRouter = router({
     }),
 
     // ─── Update admin notes (assessment) ──────────────────────────────────
-    updateAdminNotes: staffProcedure.input(z.object({
+    updateAdminNotes: editProcedure.input(z.object({
       id: z.number(),
       adminNotes: z.string(),
     })).mutation(async ({ input, ctx }) => {
@@ -973,7 +1004,7 @@ export const appRouter = router({
     }),
 
     // ─── Assessment Completion & SCN Edits ─────────────────────────────────
-    updateAssessmentCompleted: staffProcedure.input(z.object({
+    updateAssessmentCompleted: editProcedure.input(z.object({
       id: z.number(),
       completed: z.boolean(),
     })).mutation(async ({ input, ctx }) => {
@@ -990,7 +1021,7 @@ export const appRouter = router({
       return { success: true };
     }),
 
-    updateScreeningAnswers: staffProcedure.input(z.object({
+    updateScreeningAnswers: editProcedure.input(z.object({
       id: z.number(),
       // Full flat formData patch — top-level fields (screenerName, screeningDate, receivesSnap, etc.)
       // plus an optional nested 'screening' object that gets deep-merged
@@ -1379,9 +1410,23 @@ export const appRouter = router({
         return getAuditLogs({ ...filters, limit: pageSize, offset });
       }),
     // Log a page view from the frontend — called on every route change
+    // Rate-limited: max 60 page views per user per minute (prevents audit log flooding)
     logPageView: protectedProcedure
       .input(z.object({ path: z.string(), title: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
+        // In-memory sliding window: 60 page views per user per 60 seconds
+        const now = Date.now();
+        const windowMs = 60_000;
+        const maxPerWindow = 60;
+        const userId = ctx.user.id;
+        if (!pageViewRateMap.has(userId)) pageViewRateMap.set(userId, []);
+        const timestamps = pageViewRateMap.get(userId)!.filter(t => now - t < windowMs);
+        if (timestamps.length >= maxPerWindow) {
+          // Silently drop — don't throw, just skip logging
+          return { success: true };
+        }
+        timestamps.push(now);
+        pageViewRateMap.set(userId, timestamps);
         const sessionId = (ctx.req as any).cookies?.[SESSION_ID_COOKIE] ?? null;
         await logAudit({
           actorId: ctx.user.id,
