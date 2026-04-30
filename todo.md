@@ -674,5 +674,5 @@
 
 ## Security Hardening Steps
 - [x] Step 1: Login brute-force rate limiter — 10 attempts / 15 min per IP (Tier 1), 15 attempts / 24 hr hard block (Tier 2), applied to admin login and referrer portal login. Verified with dedicated unit test (11th attempt → 429, different IP still allowed). 116/116 tests pass.
-- [ ] Step 2: HTTPS-only cookies in production + HTTP→HTTPS redirect via vercel.json
+- [x] Step 2: HTTPS-only cookies in production + HTTP→HTTPS redirect via vercel.json — Secure flag already set via x-forwarded-proto header (Vercel-compatible). Added HTTP→HTTPS redirect rule in vercel.json. Verified with 4 unit tests covering all proxy scenarios. 120/120 tests pass.
 - [ ] Step 3: Content Security Policy header via vercel.json (Vercel-aware, not Express Helmet)
