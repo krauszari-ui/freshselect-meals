@@ -369,10 +369,10 @@ export default function AdminClientDetail() {
   const updateAssessmentCompletedMutation = trpc.admin.updateAssessmentCompleted.useMutation({
     onSuccess: (_data, variables) => {
       utils.admin.getById.invalidate({ id });
-      // When marking complete (not incomplete), auto-advance stage to Assessment Recorded
+      // When marking complete (not incomplete), auto-advance stage to Assessment
       if (variables.completed) {
-        updateStageMutation.mutate({ id, stage: "assessment_recorded" });
-        toast.success("Assessment marked complete — stage updated to Assessment Recorded");
+        updateStageMutation.mutate({ id, stage: "assessment" });
+        toast.success("Assessment marked complete — stage updated to Assessment");
       } else {
         toast.success("Assessment marked incomplete");
       }
