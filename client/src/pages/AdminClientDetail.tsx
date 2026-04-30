@@ -343,6 +343,7 @@ export default function AdminClientDetail() {
   // Health category editing state
   const [hcEditMode, setHcEditMode] = useState(false);
   const [hcEdits, setHcEdits] = useState<string[]>([]);
+  const [hcRemoveWarning, setHcRemoveWarning] = useState<{ cat: string; details: string[] } | null>(null);
 
   // Health condition details editing state
   // conditionEdits: { [conditionKey]: { clientName: string; docUrls: string[] } }
@@ -1628,9 +1629,32 @@ export default function AdminClientDetail() {
                           <Checkbox
                             checked={hcEdits.includes(cat)}
                             onCheckedChange={(checked) => {
-                              setHcEdits((prev) =>
-                                checked ? [...prev, cat] : prev.filter((c) => c !== cat)
-                              );
+                              if (checked) {
+                                setHcEdits((prev) => [...prev, cat]);
+                                return;
+                              }
+                              // Check for sub-data before removing
+                              const subDetails: string[] = [];
+                              if (cat === "Pregnant" && fd.dueDate) subDetails.push(`Due date: ${fd.dueDate}`);
+                              if (cat === "Had a Miscarriage" && fd.miscarriageDate) subDetails.push(`Miscarriage date: ${fd.miscarriageDate}`);
+                              if (cat.startsWith("Postpartum")) {
+                                if (fd.infantName) subDetails.push(`Infant name: ${fd.infantName}`);
+                                if (fd.infantDateOfBirth) subDetails.push(`Infant DOB: ${fd.infantDateOfBirth}`);
+                                if (fd.infantMedicaidId) subDetails.push(`Infant Medicaid ID: ${fd.infantMedicaidId}`);
+                              }
+                              const MEDICAL_CONDS = ["HIV / AIDS", "Hypertension", "Chronic Condition", "Substance Use Disorder", "Diabetes", "Serious Mental Illness (SMI)"];
+                              if (MEDICAL_CONDS.includes(cat)) {
+                                const cData = conditionDetails[cat];
+                                const cName = cData?.clientName || conditionClientNames[cat];
+                                if (cName) subDetails.push(`Client name: ${cName}`);
+                                const docs = cData?.docUrls || (cData?.docUrl ? [cData.docUrl] : []);
+                                if (docs.length > 0) subDetails.push(`${docs.length} document${docs.length > 1 ? "s" : ""} attached`);
+                              }
+                              if (subDetails.length > 0) {
+                                setHcRemoveWarning({ cat, details: subDetails });
+                              } else {
+                                setHcEdits((prev) => prev.filter((c) => c !== cat));
+                              }
                             }}
                           />
                           <span className="text-sm text-slate-700">{cat}</span>
@@ -2788,6 +2812,33 @@ export default function AdminClientDetail() {
               <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleEditEmail} disabled={updateClientMutation.isPending}>
                 {updateClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Health Category Removal Warning Dialog */}
+        <Dialog open={hcRemoveWarning !== null} onOpenChange={(open) => { if (!open) setHcRemoveWarning(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-700">
+                <span>⚠️</span> Remove "{hcRemoveWarning?.cat}"?
+              </DialogTitle>
+              <DialogDescription>
+                This category has associated data that will be hidden (but not deleted) if you remove it:
+              </DialogDescription>
+            </DialogHeader>
+            <ul className="text-sm text-slate-700 space-y-1 pl-4 list-disc">
+              {hcRemoveWarning?.details.map((d, i) => <li key={i}>{d}</li>)}
+            </ul>
+            <p className="text-xs text-slate-500">The data remains saved and will reappear if you re-add this category.</p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setHcRemoveWarning(null)}>Keep Category</Button>
+              <Button className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => {
+                if (hcRemoveWarning) {
+                  setHcEdits((prev) => prev.filter((c) => c !== hcRemoveWarning.cat));
+                  setHcRemoveWarning(null);
+                }
+              }}>Remove Anyway</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
