@@ -20,7 +20,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import * as XLSX from "xlsx";
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import { formatLocalDate, formatLocalDateShort } from "@/lib/utils";
 import { toast } from "sonner";
@@ -486,6 +486,36 @@ export default function AdminClients() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
+
+  // ─── Scroll restoration ───────────────────────────────────────────────────
+  // The scrollable element is AdminLayout's <main> (overflow-auto), not window.
+  const getScrollContainer = () =>
+    document.querySelector<HTMLElement>("main.overflow-auto, main[class*='overflow-auto']") ||
+    document.querySelector<HTMLElement>("main");
+
+  // Restore scroll position when returning from a client detail page
+  useEffect(() => {
+    const saved = sessionStorage.getItem("adminClients.scrollTop");
+    if (saved) {
+      const container = getScrollContainer();
+      if (container) {
+        // Wait for the list to render before scrolling
+        requestAnimationFrame(() => {
+          container.scrollTop = parseInt(saved, 10);
+          sessionStorage.removeItem("adminClients.scrollTop");
+        });
+      }
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save scroll position before navigating to a client detail page
+  const saveScrollAndNavigate = useCallback((href: string) => {
+    const container = getScrollContainer();
+    if (container) {
+      sessionStorage.setItem("adminClients.scrollTop", String(container.scrollTop));
+    }
+    navigate(href);
+  }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep local input in sync when URL changes externally (e.g. browser back)
   useEffect(() => {
@@ -1155,17 +1185,18 @@ export default function AdminClients() {
                           />
                         </td>
                         <td className="px-4 py-3">
-                          <Link href={`/admin/clients/${client.id}`}>
-                            <div className="flex items-center gap-3 cursor-pointer">
-                              <div className={`h-9 w-9 rounded-full ${avatarColor} flex items-center justify-center text-white font-medium text-xs shrink-0`}>
-                                {initials}
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-green-700 hover:text-green-800">{client.firstName} {client.lastName}</p>
-                                <p className="text-xs text-slate-400">{workerName}</p>
-                              </div>
+                          <div
+                            className="flex items-center gap-3 cursor-pointer"
+                            onClick={() => saveScrollAndNavigate(`/admin/clients/${client.id}`)}
+                          >
+                            <div className={`h-9 w-9 rounded-full ${avatarColor} flex items-center justify-center text-white font-medium text-xs shrink-0`}>
+                              {initials}
                             </div>
-                          </Link>
+                            <div>
+                              <p className="text-sm font-medium text-green-700 hover:text-green-800">{client.firstName} {client.lastName}</p>
+                              <p className="text-xs text-slate-400">{workerName}</p>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-600">{client.medicaidId}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{dob}</td>
