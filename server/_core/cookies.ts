@@ -39,10 +39,14 @@ export function getSessionCookieOptions(
   //       ? hostname
   //       : undefined;
 
+  // BUG-SEC-D FIX: SameSite=none requires Secure=true — browsers silently reject
+  // SameSite=none cookies without the Secure flag, causing sessions to fail on HTTP.
+  // Use SameSite=lax on plain HTTP (local dev) and SameSite=none only on HTTPS.
+  const secure = isSecureRequest(req);
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req),
+    sameSite: secure ? "none" : "lax",
+    secure,
   };
 }
