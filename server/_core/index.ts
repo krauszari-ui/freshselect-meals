@@ -7,7 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { applySecurityMiddleware, submissionLimiter, loginLimiter, loginHardLimiter, uploadLimiter, referrerLoginLimiter, referrerLoginHardLimiter, passwordResetLimiter } from "./security";
+import { applySecurityMiddleware, submissionLimiter, loginLimiter, loginHardLimiter, uploadLimiter, referrerLoginLimiter, referrerLoginHardLimiter, passwordResetLimiter, referrerCodeLimiter } from "./security";
 import { requestLogger } from "./logger";
 import { createClientEmail, getSubmissionById, createNotification } from "../db";
 import { sdk } from "./sdk";
@@ -287,6 +287,14 @@ async function startServer() {
   // Referrer portal login: same two-tier protection (nested under admin router)
   app.use("/api/trpc/admin.referrerPortal.login", referrerLoginLimiter);
   app.use("/api/trpc/admin.referrerPortal.login", referrerLoginHardLimiter);
+  // BUG-SEC-A FIX: rate-limit referrer portal code-based endpoints to prevent PII enumeration
+  // by brute-forcing referral codes (myClients, myStats, myMessages, reply, etc.)
+  app.use("/api/trpc/admin.referrerPortal.myClients", referrerCodeLimiter);
+  app.use("/api/trpc/admin.referrerPortal.myStats", referrerCodeLimiter);
+  app.use("/api/trpc/admin.referrerPortal.myMessages", referrerCodeLimiter);
+  app.use("/api/trpc/admin.referrerPortal.reply", referrerCodeLimiter);
+  app.use("/api/trpc/admin.referrerPortal.markAllRead", referrerCodeLimiter);
+  app.use("/api/trpc/admin.referrerPortal.deleteMessage", referrerCodeLimiter);
 
   app.use("/api/trpc/upload.document", uploadLimiter);
   // Password reset: 5 requests / 15 min per IP — prevents inbox flooding

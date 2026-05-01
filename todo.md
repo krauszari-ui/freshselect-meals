@@ -680,3 +680,9 @@
 ## UX Improvements
 - [x] Replace DOB text input with three-dropdown (Month/Day/Year) picker on main applicant field and household member rows — DobPicker component with leap-year-aware day clamping, verified with 16 unit tests. 144/144 tests pass.
 - [x] Bug: DobPicker dropdowns not selectable — fixed by switching SelectContent to position="item-aligned" + max-h-60. Root cause: popper position set viewport height = trigger height (~36px), making items invisible. 144/144 tests pass.
+
+## Deep Security Audit Fixes (May 2026)
+- [x] BUG-SEC-A: referrer portal myClients/myStats/myMessages/reply/markAllRead/deleteMessage — added referrerCodeLimiter (60 req/15 min per IP) to all 6 endpoints in index.ts
+- [x] BUG-SEC-B: admin documents.upload — added MAX_ADMIN_UPLOAD_BYTES (10 MB) server-side check on decoded buffer before S3 write
+- [x] BUG-SEC-C: admin documents.upload — replaced user-supplied extension with MIME_TO_EXT map; S3 key now always uses MIME-derived extension (safeExt)
+- [x] BUG-SEC-D: cookies.ts — SameSite now set to 'lax' on HTTP and 'none' only when Secure=true (HTTPS). 9 regression tests added, 153/153 total tests pass.

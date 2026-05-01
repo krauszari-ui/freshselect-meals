@@ -97,6 +97,21 @@ export const passwordResetLimiter = rateLimit({
   message: { error: "Too many password reset requests. Please wait 15 minutes before trying again." },
 });
 
+/**
+ * BUG-SEC-A FIX: Referrer code-based endpoints (myClients, myStats, myMessages, reply, etc.)
+ * accept a raw code string with no authentication. Without a rate limiter an attacker could
+ * brute-force short codes and enumerate PII (phone numbers, emails, client names).
+ * 60 requests / 15 min per IP — generous enough for normal portal use, tight enough to
+ * make brute-force of a 6-char alphanumeric code (2.2 billion combos) take years.
+ */
+export const referrerCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 60,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please wait 15 minutes before trying again." },
+});
+
 /** Referrer portal login — Tier 1: 10 attempts / 15 minutes per IP */
 export const referrerLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

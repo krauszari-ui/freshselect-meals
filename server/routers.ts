@@ -762,9 +762,21 @@ export const appRouter = router({
           });
         }
         const buffer = Buffer.from(input.fileData, "base64");
+        // BUG-SEC-B FIX: enforce 10 MB server-side limit on decoded bytes
+        const MAX_ADMIN_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+        if (buffer.length > MAX_ADMIN_UPLOAD_BYTES) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "File is too large. Maximum allowed size is 10 MB." });
+        }
         const suffix = Math.random().toString(36).substring(2, 8);
-        const ext = input.name.split(".").pop() || "file";
-        const key = `admin-docs/${input.category}-${suffix}.${ext}`;
+        // BUG-SEC-C FIX: derive extension from MIME type, not user-supplied filename
+        // Prevents name="evil.php" with contentType=image/jpeg from storing a .php key in S3
+        const MIME_TO_EXT: Record<string, string> = {
+          "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png",
+          "image/webp": "webp", "image/gif": "gif", "application/msword": "doc",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+        };
+        const safeExt = MIME_TO_EXT[input.contentType] ?? "bin";
+        const key = `admin-docs/${input.category}-${suffix}.${safeExt}`;
         const { url } = await storagePut(key, buffer, input.contentType);
         const id = await createDocument({
           submissionId: input.submissionId, name: input.name, category: input.category,
