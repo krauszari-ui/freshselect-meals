@@ -686,3 +686,8 @@
 - [x] BUG-SEC-B: admin documents.upload — added MAX_ADMIN_UPLOAD_BYTES (10 MB) server-side check on decoded buffer before S3 write
 - [x] BUG-SEC-C: admin documents.upload — replaced user-supplied extension with MIME_TO_EXT map; S3 key now always uses MIME-derived extension (safeExt)
 - [x] BUG-SEC-D: cookies.ts — SameSite now set to 'lax' on HTTP and 'none' only when Secure=true (HTTPS). 9 regression tests added, 153/153 total tests pass.
+
+## Second-Pass Security Audit Fixes (May 2026)
+- [x] BUG-SEC2-A: email.ts buildEmailHtml — added esc() helper and applied to all 15+ user-supplied fields. 6 regression tests confirm XSS payloads are neutralised.
+- [x] BUG-SEC2-B: referrerPortal.reply — attachmentUrl now validated with z.string().url().startsWith('https://'); server-side double-check strips non-https values before DB write. 5 regression tests pass.
+- [x] BUG-SEC2-C: password reset token now stored as SHA-256 hash. Raw token sent in email link; hash stored in DB. resetPassword and validateToken both hash the incoming token before lookup. 4 regression tests confirm one-way property. 168/168 tests pass.

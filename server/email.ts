@@ -104,6 +104,16 @@ interface SubmissionEmailData {
 
 // ─── HTML builder ─────────────────────────────────────────────────────────────
 
+/** HTML-escape a value for safe interpolation into email HTML. */
+function esc(val: unknown): string {
+  return String(val ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
   const fd = data.formData as Record<string, unknown>;
   const screeningQuestions = fd.screeningQuestions as Record<string, unknown> | undefined;
@@ -144,21 +154,21 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
 
   <div class="section">
     <h3>Primary Member Information</h3>
-    <div class="field"><span class="field-label">Name</span><span class="field-value">${data.firstName} ${data.lastName}</span></div>
-    <div class="field"><span class="field-label">Date of Birth</span><span class="field-value">${fd.dateOfBirth || "N/A"}</span></div>
-    <div class="field"><span class="field-label">Medicaid ID</span><span class="field-value">${data.medicaidId}</span></div>
+    <div class="field"><span class="field-label">Name</span><span class="field-value">${esc(data.firstName)} ${esc(data.lastName)}</span></div>
+    <div class="field"><span class="field-label">Date of Birth</span><span class="field-value">${esc(fd.dateOfBirth) || "N/A"}</span></div>
+    <div class="field"><span class="field-label">Medicaid ID</span><span class="field-value">${esc(data.medicaidId)}</span></div>
   </div>
 
   <div class="section">
     <h3>Contact Information</h3>
-    <div class="field"><span class="field-label">Phone</span><span class="field-value">${data.cellPhone}</span></div>
-    <div class="field"><span class="field-label">Email</span><span class="field-value">${data.email}</span></div>
-    <div class="field"><span class="field-label">Address</span><span class="field-value">${fd.streetAddress || ""}, ${fd.city || "Brooklyn"}, ${fd.state || "NY"} ${fd.zipcode || ""}</span></div>
+    <div class="field"><span class="field-label">Phone</span><span class="field-value">${esc(data.cellPhone)}</span></div>
+    <div class="field"><span class="field-label">Email</span><span class="field-value">${esc(data.email)}</span></div>
+    <div class="field"><span class="field-label">Address</span><span class="field-value">${esc(fd.streetAddress)}, ${esc(fd.city) || "Brooklyn"}, ${esc(fd.state) || "NY"} ${esc(fd.zipcode)}</span></div>
   </div>
 
   <div class="section">
     <h3>Vendor</h3>
-    <div class="field"><span class="field-label">Selected Vendor</span><span class="field-value">${data.supermarket}</span></div>
+    <div class="field"><span class="field-label">Selected Vendor</span><span class="field-value">${esc(data.supermarket)}</span></div>
   </div>`;
 
   if (screeningQuestions && Object.keys(screeningQuestions).length > 0) {
@@ -179,7 +189,7 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
     for (const [key, label] of Object.entries(labels)) {
       const val = (screeningQuestions as Record<string, unknown>)[key];
       if (val !== undefined && val !== null && val !== "") {
-        html += `<div class="field"><span class="field-label">${label}</span><span class="field-value">${val}</span></div>`;
+        html += `<div class="field"><span class="field-label">${esc(label)}</span><span class="field-value">${esc(val)}</span></div>`;
       }
     }
     html += `</div>`;
@@ -189,10 +199,10 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
     html += `
   <div class="section">
     <h3>Health Categories</h3>
-    <div class="field"><span class="field-label">Selected</span><span class="field-value">${healthCategories.join(", ")}</span></div>`;
-    if (fd.dueDate) html += `<div class="field"><span class="field-label">Due Date</span><span class="field-value">${fd.dueDate}</span></div>`;
-    if (fd.miscarriageDate) html += `<div class="field"><span class="field-label">Miscarriage Date</span><span class="field-value">${fd.miscarriageDate}</span></div>`;
-    if (fd.infantName) html += `<div class="field"><span class="field-label">Infant Name</span><span class="field-value">${fd.infantName}</span></div>`;
+    <div class="field"><span class="field-label">Selected</span><span class="field-value">${healthCategories.map(esc).join(", ")}</span></div>`;
+    if (fd.dueDate) html += `<div class="field"><span class="field-label">Due Date</span><span class="field-value">${esc(fd.dueDate)}</span></div>`;
+    if (fd.miscarriageDate) html += `<div class="field"><span class="field-label">Miscarriage Date</span><span class="field-value">${esc(fd.miscarriageDate)}</span></div>`;
+    if (fd.infantName) html += `<div class="field"><span class="field-label">Infant Name</span><span class="field-value">${esc(fd.infantName)}</span></div>`;
     html += `</div>`;
   }
 
@@ -200,8 +210,8 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
     html += `
   <div class="section">
     <h3>Food Allergies / Dietary Restrictions</h3>`;
-    if (fd.foodAllergies) html += `<div class="field"><span class="field-label">Food Allergies</span><span class="field-value">${fd.foodAllergiesDetails || fd.foodAllergies}</span></div>`;
-    if (fd.dietaryRestrictions) html += `<div class="field"><span class="field-label">Dietary Restrictions</span><span class="field-value">${fd.dietaryRestrictions}</span></div>`;
+    if (fd.foodAllergies) html += `<div class="field"><span class="field-label">Food Allergies</span><span class="field-value">${esc(fd.foodAllergiesDetails) || esc(fd.foodAllergies)}</span></div>`;
+    if (fd.dietaryRestrictions) html += `<div class="field"><span class="field-label">Dietary Restrictions</span><span class="field-value">${esc(fd.dietaryRestrictions)}</span></div>`;
     html += `</div>`;
   }
 
@@ -210,7 +220,7 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
   <div class="section">
     <h3>Household Members</h3>`;
     householdMembers.forEach((m, i) => {
-      html += `<div class="field"><span class="field-label">Member ${i + 1}</span><span class="field-value">${m.name || "N/A"} (DOB: ${m.dateOfBirth || "N/A"}, CIN: ${m.medicaidId || "N/A"})</span></div>`;
+      html += `<div class="field"><span class="field-label">Member ${i + 1}</span><span class="field-value">${esc(m.name) || "N/A"} (DOB: ${esc(m.dateOfBirth) || "N/A"}, CIN: ${esc(m.medicaidId) || "N/A"})</span></div>`;
     });
     html += `</div>`;
   }
@@ -219,16 +229,16 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
     html += `
   <div class="section">
     <h3>Meal Preferences</h3>
-    <div class="field"><span class="field-label">Meal Focus</span><span class="field-value">${mealFocus.join(", ")}</span></div>
+    <div class="field"><span class="field-label">Meal Focus</span><span class="field-value">${mealFocus.map(esc).join(", ")}</span></div>
   </div>`;
   }
 
   html += `
   <div class="section">
     <h3>Household Appliances</h3>
-    <div class="field"><span class="field-label">Needs Refrigerator</span><span class="field-value">${fd.needsRefrigerator || "N/A"}</span></div>
-    <div class="field"><span class="field-label">Needs Microwave</span><span class="field-value">${fd.needsMicrowave || "N/A"}</span></div>
-    <div class="field"><span class="field-label">Needs Cooking Utensils</span><span class="field-value">${fd.needsCookingUtensils || "N/A"}</span></div>
+    <div class="field"><span class="field-label">Needs Refrigerator</span><span class="field-value">${esc(fd.needsRefrigerator) || "N/A"}</span></div>
+    <div class="field"><span class="field-label">Needs Microwave</span><span class="field-value">${esc(fd.needsMicrowave) || "N/A"}</span></div>
+    <div class="field"><span class="field-label">Needs Cooking Utensils</span><span class="field-value">${esc(fd.needsCookingUtensils) || "N/A"}</span></div>
   </div>`;
 
   if (isAdmin) {
@@ -239,7 +249,9 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
     <h3>Uploaded Documents</h3>`;
       for (const [key, url] of Object.entries(uploadUrls)) {
         const label = key.replace(/([A-Z])/g, " $1").replace(/^./, (s: string) => s.toUpperCase());
-        html += `<div class="field"><span class="field-label">${label}</span><span class="field-value"><a href="${url}" style="color:#2d5a27;">View Document</a></span></div>`;
+        // Only allow https:// document URLs to prevent javascript: injection
+        const safeUrl = typeof url === "string" && url.startsWith("https://") ? url : "#";
+        html += `<div class="field"><span class="field-label">${esc(label)}</span><span class="field-value"><a href="${esc(safeUrl)}" style="color:#2d5a27;">View Document</a></span></div>`;
       }
       html += `</div>`;
     }

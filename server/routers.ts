@@ -1203,17 +1203,21 @@ export const appRouter = router({
         code: z.string(),
         message: z.string().min(1).max(2000),
         submissionId: z.number().optional(),
-        attachmentUrl: z.string().optional(),
+        attachmentUrl: z.string().url().startsWith("https://").optional(),
       })).mutation(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        // Validate attachment URL — only allow https:// to prevent javascript:/data: injection
+        const safeAttachmentUrl = input.attachmentUrl && input.attachmentUrl.startsWith("https://")
+          ? input.attachmentUrl
+          : null;
         const id = await createReferrerMessage({
           referralLinkId: link.id,
           submissionId: input.submissionId ?? null,
           senderId: null,
           message: input.message,
           direction: "referrer",
-          attachmentUrl: input.attachmentUrl ?? null,
+          attachmentUrl: safeAttachmentUrl,
         });
         // Fire in-app notification for staff
         createNotification({
@@ -1337,8 +1341,11 @@ export const appRouter = router({
       );
       if (!originAllowed) return { success: true }; // silently ignore — don't reveal allowlist
       const token = require("crypto").randomBytes(32).toString("hex");
+      // Store SHA-256 hash of the token so a DB leak doesn't expose usable tokens.
+      // The raw token is sent in the email link; the hash is what lives in the DB.
+      const tokenHash = require("crypto").createHash("sha256").update(token).digest("hex");
       const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-      await setPasswordResetToken(user.id, token, expires);
+      await setPasswordResetToken(user.id, tokenHash, expires);
       const resetUrl = `${input.origin}/admin/reset-password?token=${token}`;
       const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
       const safeName = escHtml(user.name || "there");
@@ -1363,7 +1370,9 @@ export const appRouter = router({
       token: z.string().min(1),
       newPassword: z.string().min(8, "Password must be at least 8 characters"),
     })).mutation(async ({ input }) => {
-      const user = await getUserByResetToken(input.token);
+      // Hash the incoming token before DB lookup — the DB stores the hash, not the raw token
+      const tokenHash = require("crypto").createHash("sha256").update(input.token).digest("hex");
+      const user = await getUserByResetToken(tokenHash);
       if (!user) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired reset link" });
       if (!user.passwordResetExpires || new Date() > user.passwordResetExpires)
         throw new TRPCError({ code: "BAD_REQUEST", message: "This reset link has expired. Please request a new one." });
@@ -1373,7 +1382,8 @@ export const appRouter = router({
       return { success: true };
     }),
     validateToken: publicProcedure.input(z.object({ token: z.string() })).query(async ({ input }) => {
-      const user = await getUserByResetToken(input.token);
+      const tokenHash = require("crypto").createHash("sha256").update(input.token).digest("hex");
+      const user = await getUserByResetToken(tokenHash);
       if (!user || !user.passwordResetExpires || new Date() > user.passwordResetExpires)
         return { valid: false };
       return { valid: true, email: user.email, name: user.name };
