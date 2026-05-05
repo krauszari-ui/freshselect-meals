@@ -691,3 +691,8 @@
 - [x] BUG-SEC2-A: email.ts buildEmailHtml — added esc() helper and applied to all 15+ user-supplied fields. 6 regression tests confirm XSS payloads are neutralised.
 - [x] BUG-SEC2-B: referrerPortal.reply — attachmentUrl now validated with z.string().url().startsWith('https://'); server-side double-check strips non-https values before DB write. 5 regression tests pass.
 - [x] BUG-SEC2-C: password reset token now stored as SHA-256 hash. Raw token sent in email link; hash stored in DB. resetPassword and validateToken both hash the incoming token before lookup. 4 regression tests confirm one-way property. 168/168 tests pass.
+
+## Third-Pass Security Audit Fixes (May 2026)
+- [x] BUG-SEC3-A: Deactivated staff sessions remain valid — fixed by adding isActive === 0 check in sdk.ts authenticateRequest(). Now every request rejects deactivated accounts immediately. 3 regression tests added.
+- [x] BUG-SEC3-B: signatureDataUrl has no max length — added .max(500_000) to submissionInputSchema. 4 regression tests confirm oversized signatures are rejected with a clear error message.
+- [x] BUG-SEC3-C: S3 keys use Math.random() — replaced with crypto.randomBytes(16).toString('hex') in both public upload.document and admin documents.upload endpoints. 128-bit keyspace vs ~31-bit Math.random. 4 regression tests confirm uniqueness and key format. 179/179 tests pass.

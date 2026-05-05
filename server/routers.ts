@@ -137,7 +137,8 @@ const submissionInputSchema = z.object({
   needsRefrigerator: z.string().min(1), needsMicrowave: z.string().min(1), needsCookingUtensils: z.string().min(1),
   hipaaConsent: z.boolean().refine((val) => val === true, { message: "HIPAA consent is required" }),
   guardianName: z.string().min(1, "Guardian name is required"),
-  signatureDataUrl: z.string().min(1, "Electronic signature is required"),
+  // BUG-SEC3-B FIX: cap signature to ~375 KB decoded (500_000 base64 chars) to prevent DoS via huge SVG
+  signatureDataUrl: z.string().min(1, "Electronic signature is required").max(500_000, "Signature data is too large"),
   ref: z.string().optional(),
   screeningQuestions: screeningQuestionsSchema.optional(),
   uploadedDocuments: z.record(z.string(), z.string()).optional(),
@@ -238,7 +239,8 @@ export const appRouter = router({
         // This prevents an attacker from uploading malicious.php with contentType=image/jpeg
         const safeExt = ALLOWED_MIME_TYPES[input.contentType];
         const buffer = Buffer.from(input.fileData, "base64");
-        const suffix = Math.random().toString(36).substring(2, 8);
+        // BUG-SEC3-C FIX: use cryptographically random suffix (128-bit) instead of Math.random() (6 base-36 chars)
+        const suffix = require("crypto").randomBytes(16).toString("hex");
         // FIX: sanitize category to alphanumeric + hyphens only to prevent S3 path traversal
         const safeCategory = input.category.replace(/[^a-zA-Z0-9-_]/g, "").slice(0, 50) || "doc";
         const key = `documents/${safeCategory}-${suffix}.${safeExt}`;
@@ -767,7 +769,8 @@ export const appRouter = router({
         if (buffer.length > MAX_ADMIN_UPLOAD_BYTES) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "File is too large. Maximum allowed size is 10 MB." });
         }
-        const suffix = Math.random().toString(36).substring(2, 8);
+        // BUG-SEC3-C FIX: use cryptographically random suffix (128-bit) instead of Math.random()
+        const suffix = require("crypto").randomBytes(16).toString("hex");
         // BUG-SEC-C FIX: derive extension from MIME type, not user-supplied filename
         // Prevents name="evil.php" with contentType=image/jpeg from storing a .php key in S3
         const MIME_TO_EXT: Record<string, string> = {
