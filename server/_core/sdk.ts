@@ -104,6 +104,12 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
+    // BUG-SEC3-A FIX: reject deactivated accounts on every authenticated request.
+    // Without this, a fired employee's 1-year JWT cookie stays valid indefinitely.
+    if (user.isActive === 0) {
+      throw ForbiddenError("Account has been deactivated");
+    }
+
     // Update last sign-in timestamp (non-blocking)
     db.upsertUser({ openId: user.openId, lastSignedIn: new Date() }).catch(
       (err) => console.warn("[Auth] Failed to update lastSignedIn:", err)
