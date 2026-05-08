@@ -55,24 +55,31 @@ async function startServer() {
   app.post("/api/inbound-email", express.raw({ type: "*/*" }), async (req, res) => {
     try {
       // ── Signature verification ──────────────────────────────────────────────
+      // BUG-SEC4-A FIX: fail CLOSED — if the secret is not configured, reject all requests.
+      // Previously: if (webhookSecret) { ... } — missing secret silently skipped verification,
+      // allowing any attacker to POST fake email.received events and inject messages into
+      // client records by guessing a submission ID in the To address.
       const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
-      if (webhookSecret) {
-        const svixId = req.headers["svix-id"] as string | undefined;
-        const svixTimestamp = req.headers["svix-timestamp"] as string | undefined;
-        const svixSignature = req.headers["svix-signature"] as string | undefined;
-        if (!svixId || !svixTimestamp || !svixSignature) {
-          console.warn("[Inbound Email] Missing Svix headers — rejecting request");
-          res.status(400).json({ ok: false, error: "missing_svix_headers" });
-          return;
-        }
-        try {
-          const wh = new Webhook(webhookSecret);
-          wh.verify(req.body, { "svix-id": svixId, "svix-timestamp": svixTimestamp, "svix-signature": svixSignature });
-        } catch (verifyErr) {
-          console.warn("[Inbound Email] Invalid webhook signature — rejecting request");
-          res.status(400).json({ ok: false, error: "invalid_signature" });
-          return;
-        }
+      if (!webhookSecret) {
+        console.error("[Inbound Email] RESEND_WEBHOOK_SECRET is not set — rejecting all webhook requests (fail closed)");
+        res.status(500).json({ ok: false, error: "webhook_secret_not_configured" });
+        return;
+      }
+      const svixId = req.headers["svix-id"] as string | undefined;
+      const svixTimestamp = req.headers["svix-timestamp"] as string | undefined;
+      const svixSignature = req.headers["svix-signature"] as string | undefined;
+      if (!svixId || !svixTimestamp || !svixSignature) {
+        console.warn("[Inbound Email] Missing Svix headers — rejecting request");
+        res.status(400).json({ ok: false, error: "missing_svix_headers" });
+        return;
+      }
+      try {
+        const wh = new Webhook(webhookSecret);
+        wh.verify(req.body, { "svix-id": svixId, "svix-timestamp": svixTimestamp, "svix-signature": svixSignature });
+      } catch (verifyErr) {
+        console.warn("[Inbound Email] Invalid webhook signature — rejecting request");
+        res.status(400).json({ ok: false, error: "invalid_signature" });
+        return;
       }
 
       // Parse the raw body

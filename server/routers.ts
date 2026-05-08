@@ -379,9 +379,11 @@ export const appRouter = router({
     // Dashboard stats
     stats: staffProcedure.query(async () => getSubmissionStats()),
     taskStats: staffProcedure.query(async () => getTaskStats()),
-    recentClients: staffProcedure.input(z.object({ days: z.number().optional(), limit: z.number().optional() }).optional()).query(async ({ input }) => getRecentSubmissions(input?.days ?? 7, input?.limit ?? 10)),
-    recentlyUpdated: staffProcedure.input(z.object({ days: z.number().optional(), limit: z.number().optional() }).optional()).query(async ({ input }) => getRecentlyUpdated(input?.days ?? 7, input?.limit ?? 10)),
-    addedCount: staffProcedure.input(z.object({ days: z.number().optional() }).optional()).query(async ({ input }) => getAddedCount(input?.days ?? 7)),
+    // BUG-SEC4-B FIX: add .int().min(1).max() bounds to prevent a compromised staff account
+    // from passing limit=999999 to dump the entire submissions table in one query.
+    recentClients: staffProcedure.input(z.object({ days: z.number().int().min(1).max(365).optional(), limit: z.number().int().min(1).max(200).optional() }).optional()).query(async ({ input }) => getRecentSubmissions(input?.days ?? 7, input?.limit ?? 10)),
+    recentlyUpdated: staffProcedure.input(z.object({ days: z.number().int().min(1).max(365).optional(), limit: z.number().int().min(1).max(200).optional() }).optional()).query(async ({ input }) => getRecentlyUpdated(input?.days ?? 7, input?.limit ?? 10)),
+    addedCount: staffProcedure.input(z.object({ days: z.number().int().min(1).max(365).optional() }).optional()).query(async ({ input }) => getAddedCount(input?.days ?? 7)),
     staffList: staffProcedure.query(async () => listStaffUsers()),
 
     // Assessor: list only assessment-completed clients

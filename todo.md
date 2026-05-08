@@ -696,3 +696,7 @@
 - [x] BUG-SEC3-A: Deactivated staff sessions remain valid — fixed by adding isActive === 0 check in sdk.ts authenticateRequest(). Now every request rejects deactivated accounts immediately. 3 regression tests added.
 - [x] BUG-SEC3-B: signatureDataUrl has no max length — added .max(500_000) to submissionInputSchema. 4 regression tests confirm oversized signatures are rejected with a clear error message.
 - [x] BUG-SEC3-C: S3 keys use Math.random() — replaced with crypto.randomBytes(16).toString('hex') in both public upload.document and admin documents.upload endpoints. 128-bit keyspace vs ~31-bit Math.random. 4 regression tests confirm uniqueness and key format. 179/179 tests pass.
+
+## Fourth-Pass Security Audit Fixes (May 2026)
+- [x] BUG-SEC4-A: Inbound email webhook skipped Svix signature verification when RESEND_WEBHOOK_SECRET was absent — attacker could POST fake email.received events to inject messages into any client record by guessing a submission ID. Fixed: fail CLOSED — if secret is not set, endpoint returns 500 immediately. 4 regression tests confirm old open behaviour vs new closed behaviour.
+- [x] BUG-SEC4-B: recentClients/recentlyUpdated/addedCount had no bounds on days/limit — a compromised staff account could pass limit=999999 to dump the entire submissions table. Fixed: added .int().min(1).max(200) on limit and .int().min(1).max(365) on days. 7 regression tests confirm bounds. 189/190 tests pass (1 pre-existing failure: Resend domain not yet verified in dashboard).
