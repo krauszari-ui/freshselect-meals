@@ -239,6 +239,15 @@ export const appRouter = router({
         // This prevents an attacker from uploading malicious.php with contentType=image/jpeg
         const safeExt = ALLOWED_MIME_TYPES[input.contentType];
         const buffer = Buffer.from(input.fileData, "base64");
+        // BUG-SEC5-B FIX: enforce server-side file size limit (10 MB decoded)
+        // The public endpoint has no auth, so this prevents unauthenticated S3 flooding.
+        const MAX_PUBLIC_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+        if (buffer.byteLength > MAX_PUBLIC_UPLOAD_BYTES) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "File too large. Maximum allowed size is 10 MB.",
+          });
+        }
         // BUG-SEC3-C FIX: use cryptographically random suffix (128-bit) instead of Math.random() (6 base-36 chars)
         const suffix = require("crypto").randomBytes(16).toString("hex");
         // FIX: sanitize category to alphanumeric + hyphens only to prevent S3 path traversal

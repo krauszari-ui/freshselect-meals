@@ -487,16 +487,31 @@ export async function updateServiceStatus(id: number, status: Service["status"])
 
 export interface WorkerPermissions { canView: boolean; canEdit: boolean; canExport: boolean; canDelete: boolean; }
 
+// Safe user columns — never include passwordHash or passwordResetToken in list responses
+const SAFE_USER_COLUMNS = {
+  id: users.id,
+  openId: users.openId,
+  name: users.name,
+  email: users.email,
+  loginMethod: users.loginMethod,
+  role: users.role,
+  permissions: users.permissions,
+  isActive: users.isActive,
+  createdAt: users.createdAt,
+  updatedAt: users.updatedAt,
+  lastSignedIn: users.lastSignedIn,
+} as const;
+
 export async function listWorkers() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.select().from(users).where(eq(users.role, "worker")).orderBy(desc(users.createdAt));
+  return db.select(SAFE_USER_COLUMNS).from(users).where(eq(users.role, "worker")).orderBy(desc(users.createdAt));
 }
 
 export async function listStaffUsers() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.select().from(users).where(
+  return db.select(SAFE_USER_COLUMNS).from(users).where(
     or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"), eq(users.role, "assessor"))
   ).orderBy(desc(users.createdAt));
 }
@@ -565,7 +580,7 @@ export async function setUserRole(userId: number, role: "user" | "admin" | "work
 export async function listAllUsers() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.select().from(users).orderBy(desc(users.createdAt));
+  return db.select(SAFE_USER_COLUMNS).from(users).orderBy(desc(users.createdAt));
 }
 
 // ─── Submission update/delete helpers ────────────────────────────────────
