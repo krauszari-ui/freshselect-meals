@@ -196,6 +196,7 @@ const NEIGHBORHOODS = [
       { name: "Rosemary Kosher", address: "392 Flushing Ave, Brooklyn, NY 11205", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/rosemary-logo_a286acb8.webp" },
       { name: "Chestnut", address: "700 Myrtle Ave, Brooklyn, NY 11205", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/chestnut-store_b43a49f5.jpg" },
       { name: "Central Market", address: "50 Division Ave, Brooklyn, NY 11249", logo: "https://d2xsxph8kpxj0f.cloudfront.net/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ/central-market-store_1b7c6b82.jpg" },
+      { name: "One Stop Kosher", address: "98 Rutledge St, Brooklyn, NY 11249", logo: "/manus-storage/one-stop-kosher-logo_b1da654a.webp" },
     ],
   },
   {
