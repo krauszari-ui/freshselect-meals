@@ -21,6 +21,10 @@ export const users = mysqlTable("users", {
   passwordResetExpires: timestamp("passwordResetExpires"),
   /** Whether the staff account is active */
   isActive: int("isActive").default(1).notNull(),
+  /** Per-account brute-force protection: consecutive failed login counter */
+  failedLoginAttempts: int("failedLoginAttempts").default(0).notNull(),
+  /** Per-account lockout expiry (null = not locked) */
+  lockedUntil: timestamp("lockedUntil"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

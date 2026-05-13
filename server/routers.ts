@@ -17,6 +17,7 @@ import {
   createService, getServicesBySubmission, updateServiceStatus,
   updateSubmissionFields, updateSubmissionPriority, deleteSubmission, bulkDeleteSubmissions,
   createReferralLink, listReferralLinks, getReferralLinkByCode,
+  recordFailedLogin, clearFailedLogins,
   updateReferralLink, deleteReferralLink, incrementReferralUsage, getReferralStats,
   getReferralLinkByEmail, getClientsByReferralCode, getUserByEmail,
   getSubmissionByRef,
@@ -183,14 +184,32 @@ export const appRouter = router({
         const ip = (ctx.req as any).ip ?? ctx.req.socket?.remoteAddress ?? "unknown";
         const user = await getUserByEmail(input.email);
         if (!user || !user.passwordHash) {
-          // Log failed attempt: unknown email
+          // Constant-time dummy compare to prevent user-enumeration via timing
+          await bcrypt.compare(input.password, "$2b$12$invalidhashpaddingtomatch.cost.rounds.here");
           await logAudit({ action: "login_failed", actorName: input.email, details: { reason: "unknown_email", ip } });
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
         }
+        // ── Per-account lockout check (must happen BEFORE bcrypt to save CPU) ──
+        if (user.lockedUntil && new Date() < user.lockedUntil) {
+          const remainingMs = user.lockedUntil.getTime() - Date.now();
+          const remainingMin = Math.ceil(remainingMs / 60000);
+          const isHardLock = (user.failedLoginAttempts ?? 0) >= 15;
+          await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_failed", details: { reason: "account_locked", lockedUntil: user.lockedUntil, ip } });
+          if (isHardLock) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "Your account has been locked due to too many failed attempts. Please reset your password to regain access." });
+          }
+          throw new TRPCError({ code: "FORBIDDEN", message: `Your account is temporarily locked. Please try again in ${remainingMin} minute${remainingMin !== 1 ? "s" : ""}.` });
+        }
         const valid = await bcrypt.compare(input.password, user.passwordHash);
         if (!valid) {
-          // Log failed attempt: wrong password
-          await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_failed", details: { reason: "wrong_password", ip } });
+          const { attempts, lockedUntil } = await recordFailedLogin(user.id);
+          await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_failed", details: { reason: "wrong_password", attempts, ip } });
+          if (lockedUntil && attempts >= 15) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "Your account has been locked due to too many failed attempts. Please reset your password to regain access." });
+          }
+          if (lockedUntil && attempts >= 10) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "Too many failed attempts. Your account is locked for 1 hour." });
+          }
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
         }
         if (user.role !== "admin" && user.role !== "worker" && user.role !== "super_admin" && user.role !== "viewer" && user.role !== "assessor") {
@@ -202,6 +221,8 @@ export const appRouter = router({
           await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_failed", details: { reason: "account_deactivated", ip } });
           throw new TRPCError({ code: "FORBIDDEN", message: "Your account has been deactivated. Please contact your administrator." });
         }
+        // Clear failed-login counter on successful auth
+        await clearFailedLogins(user.id);
         // Generate a session UUID for activity grouping
         const sessionId = randomUUID();
         // Log successful login
@@ -1085,7 +1106,11 @@ export const appRouter = router({
       stats: staffProcedure.query(async () => getReferralStats()),
       getByCode: publicProcedure.input(z.object({ code: z.string() })).query(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
-        return link || null;
+        if (!link) return null;
+        // SECURITY: never expose the bcrypt hash to the client
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { passwordHash: _ph, ...safeLink } = link;
+        return safeLink;
       }),
       create: adminProcedure.input(z.object({
         code: z.string().min(2).max(64),

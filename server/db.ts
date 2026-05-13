@@ -571,6 +571,36 @@ export async function toggleWorkerActive(userId: number, isActive: boolean): Pro
   await db.update(users).set({ isActive: isActive ? 1 : 0 }).where(eq(users.id, userId));
 }
 
+/** Increment failed login counter and optionally set a lockout expiry */
+export async function recordFailedLogin(userId: number): Promise<{ attempts: number; lockedUntil: Date | null }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Atomically increment and fetch
+  await db.update(users)
+    .set({ failedLoginAttempts: sql`failedLoginAttempts + 1` })
+    .where(eq(users.id, userId));
+  const [row] = await db.select({ failedLoginAttempts: users.failedLoginAttempts, lockedUntil: users.lockedUntil })
+    .from(users).where(eq(users.id, userId)).limit(1);
+  const attempts = row?.failedLoginAttempts ?? 1;
+  let lockedUntil: Date | null = row?.lockedUntil ?? null;
+  // 10+ attempts → lock for 1 hour; 15+ → lock for 24 hours (require reset)
+  if (attempts >= 15) {
+    lockedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await db.update(users).set({ lockedUntil }).where(eq(users.id, userId));
+  } else if (attempts >= 10) {
+    lockedUntil = new Date(Date.now() + 60 * 60 * 1000);
+    await db.update(users).set({ lockedUntil }).where(eq(users.id, userId));
+  }
+  return { attempts, lockedUntil };
+}
+
+/** Clear failed login counter and lockout after a successful login */
+export async function clearFailedLogins(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ failedLoginAttempts: 0, lockedUntil: null }).where(eq(users.id, userId));
+}
+
 export async function setUserRole(userId: number, role: "user" | "admin" | "worker" | "super_admin" | "viewer" | "assessor"): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -635,7 +665,9 @@ export async function createReferralLink(data: InsertReferralLink): Promise<numb
 export async function listReferralLinks() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.select().from(referralLinks).orderBy(desc(referralLinks.createdAt));
+  const rows = await db.select().from(referralLinks).orderBy(desc(referralLinks.createdAt));
+  // SECURITY: never send bcrypt hashes to the client — strip before returning
+  return rows.map(({ passwordHash: _ph, ...safe }) => safe);
 }
 
 export async function getReferralLinkByCode(code: string) {
