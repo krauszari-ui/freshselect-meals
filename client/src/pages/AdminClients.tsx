@@ -73,7 +73,7 @@ interface AddClientForm {
 }
 
 const NEIGHBORHOODS_LIST = [
-  { name: "Williamsburg", vendors: ["Foodoo Kosher", "Rosemary Kosher", "Chestnut", "Central Market"] },
+  { name: "Williamsburg", vendors: ["Foodoo Kosher", "Rosemary Kosher", "Chestnut", "Central Market", "One Stop Kosher"] },
   { name: "Borough Park", vendors: ["KRM", "Certo Market", "Breadberry"] },
   { name: "Flatbush", vendors: ["Pomegranate", "Moisha's Discount"] },
   { name: "Monsey", vendors: ["Evergreen", "Hatzlacha"] },
