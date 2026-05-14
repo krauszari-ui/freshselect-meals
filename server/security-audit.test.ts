@@ -34,13 +34,14 @@ describe("BUG-SEC-B: admin documents.upload server-side size limit", () => {
   it("routers.ts contains MAX_ADMIN_UPLOAD_BYTES constant", () => {
     const routersSrc = readFileSync(join(__dirname, "routers.ts"), "utf8");
     expect(routersSrc).toContain("MAX_ADMIN_UPLOAD_BYTES");
-    expect(routersSrc).toContain("10 * 1024 * 1024");
+    // Limit was reduced to 3 MB to stay under Vercel's 4.5 MB serverless body limit
+    expect(routersSrc).toContain("3 * 1024 * 1024");
   });
 
-  it("routers.ts throws BAD_REQUEST when buffer exceeds 10 MB", () => {
+  it("routers.ts throws BAD_REQUEST when buffer exceeds the size limit", () => {
     const routersSrc = readFileSync(join(__dirname, "routers.ts"), "utf8");
     expect(routersSrc).toContain("buffer.length > MAX_ADMIN_UPLOAD_BYTES");
-    expect(routersSrc).toContain("File is too large. Maximum allowed size is 10 MB.");
+    expect(routersSrc).toContain("File is too large.");
   });
 });
 

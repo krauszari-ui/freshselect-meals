@@ -6,8 +6,9 @@
  *   - Fix: SAFE_USER_COLUMNS projection excludes sensitive fields
  *
  * BUG-SEC5-B: public upload.document missing server-side file size check
- *   - An unauthenticated caller could POST 10 MB base64 payloads repeatedly
- *   - Fix: MAX_PUBLIC_UPLOAD_BYTES (10 MB) check added before S3 write
+ *   - An unauthenticated caller could POST large base64 payloads repeatedly
+ *   - Fix: MAX_PUBLIC_UPLOAD_BYTES (3 MB) check added before S3 write
+ *     (Limit reduced from 10 MB to 3 MB to stay under Vercel's 4.5 MB serverless body limit)
  */
 
 import { describe, it, expect } from "vitest";
@@ -74,11 +75,12 @@ describe("BUG-SEC5-A: SAFE_USER_COLUMNS excludes sensitive fields", () => {
 // ─── BUG-SEC5-B: public upload.document server-side size check ───────────────
 
 describe("BUG-SEC5-B: public upload.document server-side size check", () => {
-  it("MAX_PUBLIC_UPLOAD_BYTES constant is defined at 10 MB", async () => {
+  it("MAX_PUBLIC_UPLOAD_BYTES constant is defined (3 MB for Vercel compatibility)", async () => {
     const fs = await import("fs");
     const src = fs.readFileSync(new URL("./routers.ts", import.meta.url).pathname, "utf8");
     expect(src).toContain("MAX_PUBLIC_UPLOAD_BYTES");
-    expect(src).toContain("10 * 1024 * 1024");
+    // Limit is 3 MB to stay under Vercel's 4.5 MB serverless body limit (base64 inflates ~33%)
+    expect(src).toContain("3 * 1024 * 1024");
   });
 
   it("upload.document rejects oversized payloads before S3 write", async () => {
@@ -97,22 +99,22 @@ describe("BUG-SEC5-B: public upload.document server-side size check", () => {
   });
 
   it("upload.document throws BAD_REQUEST for oversized files", () => {
-    // Simulate the size check logic inline
-    const MAX_PUBLIC_UPLOAD_BYTES = 10 * 1024 * 1024;
+    // Simulate the size check logic inline (3 MB limit)
+    const MAX_PUBLIC_UPLOAD_BYTES = 3 * 1024 * 1024;
     const oversizedBuffer = Buffer.alloc(MAX_PUBLIC_UPLOAD_BYTES + 1);
     const throws = oversizedBuffer.byteLength > MAX_PUBLIC_UPLOAD_BYTES;
     expect(throws).toBe(true);
   });
 
-  it("upload.document allows files exactly at the 10 MB limit", () => {
-    const MAX_PUBLIC_UPLOAD_BYTES = 10 * 1024 * 1024;
+  it("upload.document allows files exactly at the 3 MB limit", () => {
+    const MAX_PUBLIC_UPLOAD_BYTES = 3 * 1024 * 1024;
     const exactBuffer = Buffer.alloc(MAX_PUBLIC_UPLOAD_BYTES);
     const throws = exactBuffer.byteLength > MAX_PUBLIC_UPLOAD_BYTES;
     expect(throws).toBe(false);
   });
 
   it("upload.document allows files well under the limit", () => {
-    const MAX_PUBLIC_UPLOAD_BYTES = 10 * 1024 * 1024;
+    const MAX_PUBLIC_UPLOAD_BYTES = 3 * 1024 * 1024;
     const smallBuffer = Buffer.alloc(1024); // 1 KB
     const throws = smallBuffer.byteLength > MAX_PUBLIC_UPLOAD_BYTES;
     expect(throws).toBe(false);

@@ -76,11 +76,21 @@ app.post("/api/inbound-email", express.raw({ type: "*/*" }), async (req, res) =>
         else if (t && typeof t === "object" && "email" in t) toList.push((t as { email: string }).email);
       }
     }
-    // Try to extract submissionId from any of the To addresses
-    // Matches: reply-{id}@... or client-{id}@...
+    // Try to extract submissionId and optional blastId from any of the To addresses
+    // Matches: blast-{blastId}-{submissionId}@..., reply-{id}@..., or client-{id}@...
     let submissionId: number | null = null;
+    let blastId: number | null = null;
     let matchedTo = "";
     for (const addr of toList) {
+      // blast-specific reply-to: blast-{blastId}-{submissionId}@inbound.freshselectmeals.com
+      const blastMatch = addr.match(/blast-(\d+)-(\d+)@/);
+      if (blastMatch) {
+        blastId = parseInt(blastMatch[1], 10);
+        submissionId = parseInt(blastMatch[2], 10);
+        matchedTo = addr;
+        break;
+      }
+      // generic reply-to: reply-{submissionId}@... or client-{submissionId}@...
       const m = addr.match(/(?:reply|client)-(\d+)@/);
       if (m) { submissionId = parseInt(m[1], 10); matchedTo = addr; break; }
     }
@@ -138,8 +148,9 @@ app.post("/api/inbound-email", express.raw({ type: "*/*" }), async (req, res) =>
       toEmail: matchedTo,
       resendMessageId,
       inReplyTo: data.in_reply_to ?? null,
+      ...(blastId ? { blastId } : {}),
     });
-    console.log(`[Inbound Email] Stored reply from ${fromEmail} for client #${submissionId} (subject: "${subject}")`);
+    console.log(`[Inbound Email] Stored reply from ${fromEmail} for client #${submissionId}${blastId ? ` (blast #${blastId})` : ""} (subject: "${subject}")`);
     res.status(200).json({ ok: true });
   } catch (err) {
     console.error("[Inbound Email] Error processing webhook:", err);
@@ -201,7 +212,23 @@ app.get("/api/cron/send-blasts", async (req, res) => {
           <p style="margin-top:24px;font-size:12px;color:#888">FreshSelect Meals &mdash; freshselectmeals.com</p>
         </div>`;
         const ok = await sendEmail({ to: client.email, subject: blast.subject, html, replyTo });
-        if (ok) sentCount++; else failedCount++;
+        if (ok) {
+          sentCount++;
+          // Record the outbound blast email so replies can be linked back to this blast
+          try {
+            await createClientEmail({
+              submissionId: client.id,
+              direction: "outbound",
+              subject: blast.subject,
+              body: blast.body,
+              fromEmail: `noreply@freshselectmeals.com`,
+              toEmail: client.email,
+              blastId: blast.id,
+            });
+          } catch (dbErr) {
+            console.warn(`[CronBlast] Failed to record outbound email for client #${client.id}:`, dbErr);
+          }
+        } else { failedCount++; }
       }
       await updateEmailBlastStatus(blast.id, "sent", { sentCount, failedCount, sentAt: new Date() });
       console.log(`[CronBlast] Blast ${blast.id} sent: ${sentCount} ok, ${failedCount} failed`);

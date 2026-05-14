@@ -704,3 +704,9 @@
 ## Fifth-Pass Security Audit Fixes (May 2026)
 - [x] BUG-SEC5-A: passwordHash and passwordResetToken leaked in user list responses — listWorkers(), listStaffUsers(), listAllUsers() all used db.select() with no column projection, returning full user rows including passwordHash and passwordResetToken to any admin. Fixed by adding SAFE_USER_COLUMNS projection that explicitly excludes all sensitive fields. 5 regression tests confirm no sensitive fields are returned.
 - [x] BUG-SEC5-B: public upload.document missing server-side file size check — the public (no-auth) upload endpoint had no size validation on the decoded buffer, allowing an attacker to POST 10 MB base64 payloads repeatedly (20x per 15 min = 200 MB S3 writes per window per IP). Fixed by adding MAX_PUBLIC_UPLOAD_BYTES (10 MB) check before the storagePut call. 5 regression tests confirm boundary behavior. 199/200 tests pass (1 pre-existing Resend domain failure).
+
+## Email Blast Replies Inbox Fix (May 2026)
+- [x] Fix inbound webhook in src/index.ts to parse blast-{blastId}-{submissionId}@ reply-to addresses (was only parsing reply-{id}@ format)
+- [x] Fix cron endpoint to save outbound blast emails to clientEmails table with blastId set (was not recording sent emails)
+- [x] Update security-audit.test.ts and security-audit5.test.ts to reflect 3MB upload limit (reduced from 10MB for Vercel compatibility)
+- [x] 200/200 tests passing
