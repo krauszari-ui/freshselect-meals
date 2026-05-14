@@ -1511,11 +1511,11 @@ export const appRouter = router({
 
   // ─── Email Blast router ──────────────────────────────────────────────────
   emailBlast: router({
-    list: adminProcedure.query(async () => {
+    list: superAdminProcedure.query(async () => {
       return listEmailBlasts();
     }),
 
-    create: adminProcedure
+    create: superAdminProcedure
       .input(z.object({
         name: z.string().min(1),
         subject: z.string().min(1),
@@ -1552,7 +1552,7 @@ export const appRouter = router({
         return { id, taskUid };
       }),
 
-    cancel: adminProcedure
+    cancel: superAdminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const blast = await getEmailBlastById(input.id);

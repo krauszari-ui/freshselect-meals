@@ -21,10 +21,12 @@ const NAV_ITEMS = [
 
 const ADMIN_ONLY_NAV_ITEMS = [
   { path: "/admin/workers", label: "Staff Management", icon: UserCog },
-  { path: "/admin/email-blast", label: "Email Blast", icon: Mail },
   { path: "/admin/duplicates", label: "Duplicate Scan", icon: AlertTriangle },
   { path: "/admin/assessment-report", label: "Assessment Report", icon: BarChart3 },
   { path: "/admin/audit-log", label: "Audit Log", icon: ScrollText },
+];
+const SUPER_ADMIN_ONLY_NAV_ITEMS = [
+  { path: "/admin/email-blast", label: "Email Blast", icon: Mail },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -96,6 +98,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       return true;
     }),
     ...((["super_admin", "admin"].includes(user.role)) ? ADMIN_ONLY_NAV_ITEMS : []),
+    ...(user.role === "super_admin" ? SUPER_ADMIN_ONLY_NAV_ITEMS : []),
     ...(user.role === "assessor" ? [{ path: "/assessor", label: "Assessor Portal", icon: ClipboardList }] : []),
   ];
 
