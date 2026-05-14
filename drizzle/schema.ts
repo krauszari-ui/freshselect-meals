@@ -381,3 +381,36 @@ export const auditLogs = mysqlTable("auditLogs", {
   sessionId: varchar("sessionId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+/**
+ * Scheduled email blasts — admin-created one-time emails sent to all active clients.
+ */
+export const emailBlasts = mysqlTable("emailBlasts", {
+  id: int("id").primaryKey().autoincrement(),
+  /** Short name for the blast (admin reference only) */
+  name: varchar("name", { length: 256 }).notNull(),
+  /** Email subject line */
+  subject: varchar("subject", { length: 512 }).notNull(),
+  /** HTML/plain body of the email */
+  body: text("body").notNull(),
+  /** Optional filter: only send to clients with this status (null = all active) */
+  filterStatus: varchar("filterStatus", { length: 64 }),
+  /** Scheduled send time stored as UTC unix ms */
+  scheduledAt: timestamp("scheduledAt").notNull(),
+  /** Manus Heartbeat task UID for the scheduled job */
+  scheduleCronTaskUid: varchar("scheduleCronTaskUid", { length: 65 }),
+  /** Status of the blast */
+  blastStatus: mysqlEnum("blastStatus", ["scheduled", "sending", "sent", "cancelled", "failed"])
+    .notNull()
+    .default("scheduled"),
+  /** How many emails were sent */
+  sentCount: int("sentCount").default(0),
+  /** How many emails failed */
+  failedCount: int("failedCount").default(0),
+  /** ID of the admin who created this blast */
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  sentAt: timestamp("sentAt"),
+});
+export type EmailBlast = typeof emailBlasts.$inferSelect;
+export type InsertEmailBlast = typeof emailBlasts.$inferInsert;

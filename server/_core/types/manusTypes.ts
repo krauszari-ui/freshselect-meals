@@ -66,4 +66,6 @@ export interface GetUserInfoWithJwtResponse {
   email?: string | null;
   platform?: string | null;
   loginMethod?: string | null;
+  /** Cron-only field. Populated when openId starts with `cron_`. */
+  taskUid?: string | null;
 }

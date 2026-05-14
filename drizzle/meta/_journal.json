@@ -176,6 +176,13 @@
       "when": 1777531568352,
       "tag": "0024_natural_echo",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1778736701209,
+      "tag": "0025_chilly_mac_gargan",
+      "breakpoints": true
     }
   ]
 }

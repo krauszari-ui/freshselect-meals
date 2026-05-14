@@ -17,6 +17,36 @@ export type SessionPayload = {
   name: string;
 };
 
+const CRON_OPEN_ID_PREFIX = "cron_";
+
+export type AuthenticatedUser = User & {
+  taskUid?: string;
+  isCron?: boolean;
+};
+
+function buildCronUser(openId: string, name: string): AuthenticatedUser {
+  const now = new Date();
+  return {
+    id: -1,
+    openId,
+    name: name || "Manus Scheduled Task",
+    email: null,
+    loginMethod: null,
+    role: "user" as const,
+    permissions: null,
+    passwordHash: null,
+    passwordResetToken: null,
+    passwordResetExpires: null,
+    isActive: 1,
+    failedLoginAttempts: 0,
+    lockedUntil: null,
+    createdAt: now,
+    updatedAt: now,
+    lastSignedIn: now,
+    isCron: true,
+  } as AuthenticatedUser;
+}
+
 class SDKServer {
   private parseCookies(cookieHeader: string | undefined) {
     if (!cookieHeader) return new Map<string, string>();
@@ -89,13 +119,18 @@ class SDKServer {
     }
   }
 
-  async authenticateRequest(req: Request): Promise<User> {
+  async authenticateRequest(req: Request): Promise<AuthenticatedUser> {
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
     const session = await this.verifySession(sessionCookie);
 
     if (!session) {
       throw ForbiddenError("Invalid session cookie");
+    }
+
+    // Cron short-circuit: heartbeat jobs use a cron_ openId prefix
+    if (session.openId.startsWith(CRON_OPEN_ID_PREFIX)) {
+      return buildCronUser(session.openId, session.name);
     }
 
     const user = await db.getUserByOpenId(session.openId);
