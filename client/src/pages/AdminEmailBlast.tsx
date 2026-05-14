@@ -14,11 +14,17 @@ import { Link } from "wouter";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All Clients" },
-  { value: "active", label: "Active" },
-  { value: "pending", label: "Pending" },
-  { value: "approved", label: "Approved" },
-  { value: "denied", label: "Denied" },
-  { value: "completed", label: "Completed" },
+  { value: "referral", label: "Referral" },
+  { value: "assessment", label: "Assessment" },
+  { value: "assessment_recorded", label: "Assessment Recorded" },
+  { value: "missing_information", label: "Missing Information" },
+  { value: "not_eligible", label: "Not Eligible" },
+  { value: "level_one_only", label: "Level One Only" },
+  { value: "level_one_household", label: "Level One (household)" },
+  { value: "level_2_active", label: "Level 2 Active" },
+  { value: "ineligible", label: "Ineligible For SCN" },
+  { value: "provider_attestation_required", label: "Provider Attestation Required" },
+  { value: "flagged", label: "Flagged" },
 ];
 
 function statusBadge(status: string) {
