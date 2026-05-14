@@ -108,11 +108,21 @@ async function startServer() {
         }
       }
 
-      // Try to extract submissionId from any of the To addresses
-      // Matches: reply-{id}@... or client-{id}@...
+      // Try to extract submissionId and optional blastId from any of the To addresses
+      // Matches: reply-{id}@..., client-{id}@..., or blast-{blastId}-{submissionId}@...
       let submissionId: number | null = null;
+      let blastId: number | null = null;
       let matchedTo = "";
       for (const addr of toList) {
+        // blast-specific reply-to: blast-{blastId}-{submissionId}@inbound.freshselectmeals.com
+        const blastMatch = addr.match(/blast-(\d+)-(\d+)@/);
+        if (blastMatch) {
+          blastId = parseInt(blastMatch[1], 10);
+          submissionId = parseInt(blastMatch[2], 10);
+          matchedTo = addr;
+          break;
+        }
+        // generic reply-to: reply-{submissionId}@... or client-{submissionId}@...
         const m = addr.match(/(?:reply|client)-(\d+)@/);
         if (m) { submissionId = parseInt(m[1], 10); matchedTo = addr; break; }
       }
@@ -176,6 +186,7 @@ async function startServer() {
         toEmail: matchedTo,
         resendMessageId,
         inReplyTo: data.in_reply_to ?? null,
+        blastId: blastId ?? undefined,
       });
 
       console.log(`[Inbound Email] Stored reply from ${fromEmail} for client #${submissionId} (subject: "${subject}")`);
@@ -351,19 +362,22 @@ async function startServer() {
 
       await updateEmailBlastStatus(blastId, "sending");
 
-      const clients = await getClientEmailsForBlast(blast.filterStatus);
+       const clients = await getClientEmailsForBlast(blast.filterStatus);
       let sentCount = 0;
       let failedCount = 0;
-
+      const INBOUND_DOMAIN = process.env.RESEND_INBOUND_DOMAIN ?? "inbound.freshselectmeals.com";
       const escHtml = (s: string) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
       for (const client of clients) {
         if (!client.email) { failedCount++; continue; }
+        // Use a blast+client-specific reply-to so replies are linked to both the blast and the client
+        // Format: blast-{blastId}-{submissionId}@inbound.freshselectmeals.com
+        const replyTo = `blast-${blastId}-${client.id}@${INBOUND_DOMAIN}`;
         const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
           <p>Dear ${escHtml(client.firstName ?? "")} ${escHtml(client.lastName ?? "")},</p>
           <p>${escHtml(blast.body).replace(/\n/g, "<br/>")}</p>
           <p style="margin-top:24px;font-size:12px;color:#888">FreshSelect Meals &mdash; freshselectmeals.com</p>
         </div>`;
-        const ok = await sendEmail({ to: client.email, subject: blast.subject, html });
+        const ok = await sendEmail({ to: client.email, subject: blast.subject, html, replyTo });
         if (ok) sentCount++; else failedCount++;
       }
 

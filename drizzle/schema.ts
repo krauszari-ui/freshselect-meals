@@ -296,6 +296,8 @@ export const clientEmails = mysqlTable("clientEmails", {
   inReplyTo: varchar("inReplyTo", { length: 256 }),
   /** Staff member who sent (null for inbound) */
   sentBy: int("sentBy"),
+  /** If this reply came in response to an email blast, the blast ID */
+  blastId: int("blastId"),
   sentAt: timestamp("sentAt").defaultNow().notNull(),
 });
 export type ClientEmail = typeof clientEmails.$inferSelect;
