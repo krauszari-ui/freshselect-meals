@@ -422,8 +422,8 @@ function FileUploadField({
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      alert("File must be under 10MB");
+    if (file.size > 3 * 1024 * 1024) {
+      alert("File must be under 3MB. Please compress or reduce the file size and try again.");
       return;
     }
 
@@ -491,7 +491,7 @@ function FileUploadField({
           ) : (
             <>
               <Upload className="w-5 h-5 text-stone-400" />
-              <span className="text-sm text-stone-500">Click to upload (max 10MB)</span>
+              <span className="text-sm text-stone-500">Click to upload (max 3MB)</span>
             </>
           )}
         </div>

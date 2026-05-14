@@ -262,7 +262,7 @@ export const appRouter = router({
         const buffer = Buffer.from(input.fileData, "base64");
         // BUG-SEC5-B FIX: enforce server-side file size limit (10 MB decoded)
         // The public endpoint has no auth, so this prevents unauthenticated S3 flooding.
-        const MAX_PUBLIC_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+        const MAX_PUBLIC_UPLOAD_BYTES = 3 * 1024 * 1024; // 3 MB (Vercel 4.5 MB body limit; base64 inflates ~33%)
         if (buffer.byteLength > MAX_PUBLIC_UPLOAD_BYTES) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -797,7 +797,7 @@ export const appRouter = router({
         }
         const buffer = Buffer.from(input.fileData, "base64");
         // BUG-SEC-B FIX: enforce 10 MB server-side limit on decoded bytes
-        const MAX_ADMIN_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+        const MAX_ADMIN_UPLOAD_BYTES = 3 * 1024 * 1024; // 3 MB (Vercel 4.5 MB body limit; base64 inflates ~33%)
         if (buffer.length > MAX_ADMIN_UPLOAD_BYTES) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "File is too large. Maximum allowed size is 10 MB." });
         }
