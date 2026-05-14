@@ -161,6 +161,59 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", ts: Date.now() });
 });
 
+// ─── Vercel Cron: fire due email blasts ────────────────────────────────────
+// Vercel calls GET /api/cron/send-blasts every minute (configured in vercel.json).
+// Protected by CRON_SECRET env var. Finds all blasts due to send and fires them.
+app.get("/api/cron/send-blasts", async (req, res) => {
+  const secret = process.env.CRON_SECRET;
+  const authHeader = req.headers["authorization"];
+  if (secret && authHeader !== `Bearer ${secret}`) {
+    res.status(401).json({ ok: false, error: "Unauthorized" });
+    return;
+  }
+  try {
+    const { listEmailBlasts, updateEmailBlastStatus, getClientEmailsForBlast } = await import("../server/db");
+    const { sendEmail } = await import("../server/email");
+    const blasts = await listEmailBlasts();
+    const now = Date.now();
+    const due = blasts.filter(
+      (b: any) => b.blastStatus === "scheduled" && b.scheduledAt && new Date(b.scheduledAt).getTime() <= now
+    );
+    if (due.length === 0) {
+      res.json({ ok: true, fired: 0 });
+      return;
+    }
+    const escHtml = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    const INBOUND_DOMAIN = process.env.RESEND_INBOUND_DOMAIN ?? "inbound.freshselectmeals.com";
+    let totalFired = 0;
+    for (const blast of due) {
+      await updateEmailBlastStatus(blast.id, "sending");
+      const clients = await getClientEmailsForBlast(blast.filterStatus);
+      let sentCount = 0;
+      let failedCount = 0;
+      for (const client of clients) {
+        if (!client.email) { failedCount++; continue; }
+        const replyTo = `blast-${blast.id}-${client.id}@${INBOUND_DOMAIN}`;
+        const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <p>Dear ${escHtml(client.firstName ?? "")} ${escHtml(client.lastName ?? "")},</p>
+          <p>${escHtml(blast.body).replace(/\n/g, "<br/>")}</p>
+          <p style="margin-top:24px;font-size:12px;color:#888">FreshSelect Meals &mdash; freshselectmeals.com</p>
+        </div>`;
+        const ok = await sendEmail({ to: client.email, subject: blast.subject, html, replyTo });
+        if (ok) sentCount++; else failedCount++;
+      }
+      await updateEmailBlastStatus(blast.id, "sent", { sentCount, failedCount, sentAt: new Date() });
+      console.log(`[CronBlast] Blast ${blast.id} sent: ${sentCount} ok, ${failedCount} failed`);
+      totalFired++;
+    }
+    res.json({ ok: true, fired: totalFired });
+  } catch (err: any) {
+    console.error("[CronBlast] Error:", err);
+    res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+  }
+});
+
 // Per-route rate limiters applied before tRPC handles the request
 // tRPC procedure names are in the URL path: /api/trpc/submission.submit
 app.use("/api/trpc/submission.submit", submissionLimiter);
