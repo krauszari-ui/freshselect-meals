@@ -317,6 +317,75 @@ async function startServer() {
     })
   );
 
+  // ─── Scheduled email blast endpoint ────────────────────────────────────────
+  // Called by Manus Heartbeat at the scheduled time. Sends the email blast
+  // to all matching clients and marks the blast as sent.
+  app.post("/api/scheduled/email-blast", async (req, res) => {
+    try {
+      const user = await sdk.authenticateRequest(req).catch(() => null);
+      if (!user || !(user as any).isCron) {
+        res.status(401).json({ ok: false, error: "Unauthorized" });
+        return;
+      }
+    } catch {
+      res.status(401).json({ ok: false, error: "Unauthorized" });
+      return;
+    }
+    try {
+      const { blastId } = req.body as { blastId?: number };
+      if (!blastId) {
+        res.status(400).json({ ok: false, error: "Missing blastId" });
+        return;
+      }
+      const {
+        updateEmailBlastStatus, getClientEmailsForBlast, getEmailBlastById,
+      } = await import("../db");
+      const { sendEmail } = await import("../email");
+      const { deleteHeartbeatJob } = await import("./heartbeat");
+
+      const blast = await getEmailBlastById(blastId);
+      if (!blast || blast.blastStatus !== "scheduled") {
+        res.json({ ok: true, skipped: true, reason: "Blast not found or not scheduled" });
+        return;
+      }
+
+      await updateEmailBlastStatus(blastId, "sending");
+
+      const clients = await getClientEmailsForBlast(blast.filterStatus);
+      let sentCount = 0;
+      let failedCount = 0;
+
+      const escHtml = (s: string) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+      for (const client of clients) {
+        if (!client.email) { failedCount++; continue; }
+        const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <p>Dear ${escHtml(client.firstName ?? "")} ${escHtml(client.lastName ?? "")},</p>
+          <p>${escHtml(blast.body).replace(/\n/g, "<br/>")}</p>
+          <p style="margin-top:24px;font-size:12px;color:#888">FreshSelect Meals &mdash; freshselectmeals.com</p>
+        </div>`;
+        const ok = await sendEmail({ to: client.email, subject: blast.subject, html });
+        if (ok) sentCount++; else failedCount++;
+      }
+
+      await updateEmailBlastStatus(blastId, "sent", {
+        sentCount,
+        failedCount,
+        sentAt: new Date(),
+      });
+
+      // Clean up the one-time cron job
+      if (blast.scheduleCronTaskUid) {
+        await deleteHeartbeatJob(blast.scheduleCronTaskUid, "").catch(() => {});
+      }
+
+      console.log(`[EmailBlast] Blast ${blastId} sent: ${sentCount} ok, ${failedCount} failed`);
+      res.json({ ok: true, sentCount, failedCount });
+    } catch (err: any) {
+      console.error("[EmailBlast] Error:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

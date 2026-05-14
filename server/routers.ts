@@ -34,8 +34,11 @@ import {
   createNotification, listNotifications, getUnreadNotificationCount,
   markNotificationRead, markAllNotificationsRead,
   logAudit, getAuditLogs, getAuditLogsBySession,
+  createEmailBlast, updateEmailBlastCronUid, listEmailBlasts, cancelEmailBlast,
+  getEmailBlastById,
   type WorkerPermissions,
 } from "./db";
+import { createHeartbeatJob, deleteHeartbeatJob } from "./_core/heartbeat";
 import bcrypt from "bcryptjs";
 import { sdk } from "./_core/sdk";
 import { sendAdminNotification, sendApplicantConfirmation, sendEmail } from "./email";
@@ -1503,6 +1506,66 @@ export const appRouter = router({
       .input(z.object({ sessionId: z.string() }))
       .query(async ({ input }) => {
         return getAuditLogsBySession(input.sessionId);
+      }),
+  }),
+
+  // ─── Email Blast router ──────────────────────────────────────────────────
+  emailBlast: router({
+    list: adminProcedure.query(async () => {
+      return listEmailBlasts();
+    }),
+
+    create: adminProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        subject: z.string().min(1),
+        body: z.string().min(1),
+        filterStatus: z.string().optional().nullable(),
+        scheduledAt: z.date(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const id = await createEmailBlast({
+          name: input.name,
+          subject: input.subject,
+          body: input.body,
+          filterStatus: input.filterStatus ?? null,
+          scheduledAt: input.scheduledAt,
+          createdBy: ctx.user.id,
+        });
+
+        // Convert scheduledAt to a one-time cron expression (UTC)
+        const d = input.scheduledAt;
+        const cronExpr = `${d.getUTCMinutes()} ${d.getUTCHours()} ${d.getUTCDate()} ${d.getUTCMonth() + 1} *`;
+
+        const sessionCookie = (ctx.req as any).cookies?.app_session_id ?? "";
+        const { taskUid } = await createHeartbeatJob({
+          name: `email-blast-${id}`,
+          cron: cronExpr,
+          path: "/api/scheduled/email-blast",
+          method: "POST",
+          payload: { blastId: id },
+          description: `Email blast: ${input.name}`,
+        }, sessionCookie);
+
+        await updateEmailBlastCronUid(id, taskUid);
+
+        return { id, taskUid };
+      }),
+
+    cancel: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const blast = await getEmailBlastById(input.id);
+        if (!blast) throw new TRPCError({ code: "NOT_FOUND", message: "Blast not found" });
+        if (blast.blastStatus !== "scheduled") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Only scheduled blasts can be cancelled" });
+        }
+        if (blast.scheduleCronTaskUid) {
+          const sessionCookie = (ctx.req as any).cookies?.app_session_id ?? "";
+          await deleteHeartbeatJob(blast.scheduleCronTaskUid, sessionCookie).catch(() => {});
+        }
+        await cancelEmailBlast(input.id, blast.scheduleCronTaskUid ?? undefined);
+        return { success: true };
       }),
   }),
 });

@@ -25,6 +25,7 @@ import ReferrerPortal from "./pages/ReferrerPortal";
 import AssessorPortal from "./pages/AssessorPortal";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import AdminEmailBlast from "./pages/AdminEmailBlast";
 
 function Router() {
   usePageViewLogger();
@@ -52,6 +53,7 @@ function Router() {
       <Route path={"/admin/assessment-report"} component={AdminAssessmentReport} />
       <Route path={"/admin/notifications"} component={AdminNotifications} />
       <Route path={"/admin/audit-log"} component={AdminAuditLog} />
+      <Route path={"/admin/email-blast"} component={AdminEmailBlast} />
 
       {/* Referrer Portal */}
       <Route path={"/referrer"} component={ReferrerPortal} />

@@ -1,0 +1,280 @@
+import { useState } from "react";
+import AdminLayout from "@/components/AdminLayout";
+import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Mail, Send, X, Clock, CheckCircle2, XCircle, Loader2, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
+
+const STATUS_OPTIONS = [
+  { value: "all", label: "All Clients" },
+  { value: "active", label: "Active" },
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+  { value: "denied", label: "Denied" },
+  { value: "completed", label: "Completed" },
+];
+
+function statusBadge(status: string) {
+  const map: Record<string, { label: string; className: string }> = {
+    scheduled: { label: "Scheduled", className: "bg-blue-100 text-blue-800" },
+    sending: { label: "Sending…", className: "bg-yellow-100 text-yellow-800" },
+    sent: { label: "Sent", className: "bg-green-100 text-green-800" },
+    cancelled: { label: "Cancelled", className: "bg-gray-100 text-gray-600" },
+    failed: { label: "Failed", className: "bg-red-100 text-red-800" },
+  };
+  const s = map[status] ?? { label: status, className: "bg-gray-100 text-gray-600" };
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.className}`}>{s.label}</span>;
+}
+
+export default function AdminEmailBlast() {
+  const utils = trpc.useUtils();
+
+  const { data: blasts, isLoading } = trpc.emailBlast.list.useQuery();
+
+  const createMutation = trpc.emailBlast.create.useMutation({
+    onSuccess: () => {
+      toast.success("Email blast scheduled! It will be sent at the scheduled time.");
+      utils.emailBlast.list.invalidate();
+      setForm({ name: "", subject: "", body: "", filterStatus: "all", scheduledAt: "" });
+    },
+    onError: (err: { message: string }) => {
+      toast.error("Failed to schedule blast: " + err.message);
+    },
+  });
+
+  const cancelMutation = trpc.emailBlast.cancel.useMutation({
+    onSuccess: () => {
+      toast.success("Blast cancelled");
+      utils.emailBlast.list.invalidate();
+    },
+    onError: (err: { message: string }) => {
+      toast.error("Failed to cancel blast: " + err.message);
+    },
+  });
+
+  const [form, setForm] = useState({
+    name: "",
+    subject: "",
+    body: "",
+    filterStatus: "all",
+    scheduledAt: "",
+  });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.scheduledAt) {
+      toast.error("Please select a scheduled date/time");
+      return;
+    }
+    const scheduledAt = new Date(form.scheduledAt);
+    if (scheduledAt <= new Date()) {
+      toast.error("Scheduled time must be in the future");
+      return;
+    }
+    createMutation.mutate({
+      name: form.name,
+      subject: form.subject,
+      body: form.body,
+      filterStatus: form.filterStatus === "all" ? null : form.filterStatus,
+      scheduledAt,
+    });
+  }
+
+  // Default to tomorrow 11am local time for convenience
+  function setTomorrow11am() {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(11, 0, 0, 0);
+    // Format as YYYY-MM-DDTHH:mm for datetime-local input
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    setForm(f => ({ ...f, scheduledAt: local }));
+  }
+
+  return (
+    <AdminLayout>
+      <div className="p-6 max-w-4xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-green-100 rounded-lg">
+            <Mail className="h-6 w-6 text-green-700" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Email Blast</h1>
+            <p className="text-sm text-slate-500">Schedule a one-time email to all clients or a filtered group</p>
+          </div>
+        </div>
+
+        {/* Compose form */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Compose New Blast</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="blast-name">Blast Name (internal)</Label>
+                  <Input
+                    id="blast-name"
+                    placeholder="e.g. May Newsletter"
+                    value={form.name}
+                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="blast-filter">Send To</Label>
+                  <Select value={form.filterStatus} onValueChange={v => setForm(f => ({ ...f, filterStatus: v }))}>
+                    <SelectTrigger id="blast-filter">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUS_OPTIONS.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="blast-subject">Email Subject</Label>
+                <Input
+                  id="blast-subject"
+                  placeholder="e.g. Important update from FreshSelect Meals"
+                  value={form.subject}
+                  onChange={e => setForm(f => ({ ...f, subject: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="blast-body">Email Body</Label>
+                <Textarea
+                  id="blast-body"
+                  placeholder="Write your message here. Use plain text — line breaks will be preserved."
+                  rows={7}
+                  value={form.body}
+                  onChange={e => setForm(f => ({ ...f, body: e.target.value }))}
+                  required
+                  className="resize-y"
+                />
+                <p className="text-xs text-slate-400">
+                  The email will be addressed "Dear [First Name] [Last Name]," automatically.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="blast-time">Scheduled Date &amp; Time (your local time)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="blast-time"
+                    type="datetime-local"
+                    value={form.scheduledAt}
+                    onChange={e => setForm(f => ({ ...f, scheduledAt: e.target.value }))}
+                    required
+                    className="flex-1"
+                  />
+                  <Button type="button" variant="outline" onClick={setTomorrow11am} className="shrink-0 text-xs">
+                    Tomorrow 11am
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>Emails will be sent to all clients with a valid email address matching the selected filter. You can cancel a scheduled blast before it sends.</span>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={createMutation.isPending}
+                className="bg-green-700 hover:bg-green-800 text-white"
+              >
+                {createMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Scheduling…</>
+                ) : (
+                  <><Send className="h-4 w-4 mr-2" /> Schedule Blast</>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Blast history */}
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800 mb-3">Blast History</h2>
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-slate-500 py-8 justify-center">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>Loading…</span>
+            </div>
+          ) : !blasts?.length ? (
+            <div className="text-center py-12 text-slate-400">
+              <Mail className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p>No email blasts yet</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {blasts.map(blast => (
+                <Card key={blast.id} className="border border-slate-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-slate-900">{blast.name}</span>
+                          {statusBadge(blast.blastStatus)}
+                          {blast.filterStatus && blast.filterStatus !== "all" && (
+                            <Badge variant="outline" className="text-xs">{blast.filterStatus}</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-600 mt-0.5 truncate">Subject: {blast.subject}</p>
+                        <div className="flex items-center gap-4 mt-1.5 text-xs text-slate-400">
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            Scheduled: {new Date(blast.scheduledAt).toLocaleString()}
+                          </span>
+                          {blast.sentAt && (
+                            <span className="flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3 text-green-500" />
+                              Sent: {new Date(blast.sentAt).toLocaleString()}
+                            </span>
+                          )}
+                          {blast.blastStatus === "sent" && (
+                            <span className="flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3 text-green-500" />
+                              {blast.sentCount ?? 0} delivered, {blast.failedCount ?? 0} failed
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {blast.blastStatus === "scheduled" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0 text-red-600 border-red-200 hover:bg-red-50"
+                          disabled={cancelMutation.isPending}
+                          onClick={() => cancelMutation.mutate({ id: blast.id })}
+                        >
+                          <X className="h-3.5 w-3.5 mr-1" />
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </AdminLayout>
+  );
+}

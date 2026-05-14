@@ -12,6 +12,7 @@ import {
   notifications, InsertNotification, Notification,
   notificationReads,
   auditLogs,
+  emailBlasts,
 } from "../drizzle/schema";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1110,4 +1111,97 @@ export async function getAuditLogsBySession(sessionId: string): Promise<AuditLog
     .where(eq(auditLogs.sessionId, sessionId))
     .orderBy(asc(auditLogs.createdAt));
   return rows as AuditLogRow[];
+}
+
+// ─── Email Blasts ─────────────────────────────────────────────────────────────
+
+export async function createEmailBlast(data: {
+  name: string;
+  subject: string;
+  body: string;
+  filterStatus?: string | null;
+  scheduledAt: Date;
+  createdBy?: number;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(emailBlasts).values({
+    name: data.name,
+    subject: data.subject,
+    body: data.body,
+    filterStatus: data.filterStatus ?? null,
+    scheduledAt: data.scheduledAt,
+    createdBy: data.createdBy ?? null,
+    blastStatus: "scheduled",
+  });
+  return (result as any)[0]?.insertId ?? 0;
+}
+
+export async function updateEmailBlastCronUid(id: number, taskUid: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(emailBlasts).set({ scheduleCronTaskUid: taskUid }).where(eq(emailBlasts.id, id));
+}
+
+export async function updateEmailBlastStatus(
+  id: number,
+  status: "scheduled" | "sending" | "sent" | "cancelled" | "failed",
+  counts?: { sentCount?: number; failedCount?: number; sentAt?: Date }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(emailBlasts).set({
+    blastStatus: status,
+    ...(counts?.sentCount !== undefined ? { sentCount: counts.sentCount } : {}),
+    ...(counts?.failedCount !== undefined ? { failedCount: counts.failedCount } : {}),
+    ...(counts?.sentAt ? { sentAt: counts.sentAt } : {}),
+  }).where(eq(emailBlasts.id, id));
+}
+
+export async function listEmailBlasts(): Promise<typeof emailBlasts.$inferSelect[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(emailBlasts).orderBy(desc(emailBlasts.createdAt));
+}
+
+export async function getEmailBlastByTaskUid(taskUid: string): Promise<typeof emailBlasts.$inferSelect | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(emailBlasts).where(eq(emailBlasts.scheduleCronTaskUid, taskUid)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function cancelEmailBlast(id: number, taskUid?: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(emailBlasts).set({ blastStatus: "cancelled" }).where(eq(emailBlasts.id, id));
+}
+
+/** Get all client emails for a blast (optionally filtered by status) */
+export async function getClientEmailsForBlast(filterStatus?: string | null): Promise<{ email: string; firstName: string; lastName: string }[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: ReturnType<typeof eq>[] = [];
+  if (filterStatus && filterStatus !== "all") {
+    conditions.push(eq(submissions.status, filterStatus as any));
+  }
+  const rows = await db.select({
+    email: submissions.email,
+    firstName: submissions.firstName,
+    lastName: submissions.lastName,
+  }).from(submissions).where(conditions.length > 0 ? and(...conditions) : undefined);
+  // Deduplicate by email
+  const seen = new Set<string>();
+  return rows.filter(r => {
+    if (!r.email || seen.has(r.email)) return false;
+    seen.add(r.email);
+    return true;
+  });
+}
+
+export async function getEmailBlastById(id: number): Promise<typeof emailBlasts.$inferSelect | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(emailBlasts).where(eq(emailBlasts.id, id)).limit(1);
+  return rows[0] ?? null;
 }
