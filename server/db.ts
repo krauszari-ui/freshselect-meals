@@ -1183,7 +1183,9 @@ export async function getClientEmailsForBlast(filterStatus?: string | null): Pro
   if (!db) return [];
   const conditions: ReturnType<typeof eq>[] = [];
   if (filterStatus && filterStatus !== "all") {
-    conditions.push(eq(submissions.status, filterStatus as any));
+    // filterStatus is a stage value (e.g. 'not_eligible', 'level_2_active')
+    // Must filter by submissions.stage, not submissions.status
+    conditions.push(eq(submissions.stage, filterStatus as any));
   }
   const rows = await db.select({
     id: submissions.id,
