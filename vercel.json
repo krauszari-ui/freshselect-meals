@@ -2,12 +2,6 @@
   "version": 2,
   "buildCommand": "bash scripts/vercel-build.sh",
   "outputDirectory": ".vercel/output",
-  "functions": {
-    "api/**": {
-      "maxDuration": 30,
-      "memory": 1024
-    }
-  },
   "redirects": [
     {
       "source": "/:path*",
