@@ -34,11 +34,10 @@ import {
   createNotification, listNotifications, getUnreadNotificationCount,
   markNotificationRead, markAllNotificationsRead,
   logAudit, getAuditLogs, getAuditLogsBySession,
-  createEmailBlast, updateEmailBlastCronUid, listEmailBlasts, cancelEmailBlast,
+  createEmailBlast, listEmailBlasts, cancelEmailBlast,
   getEmailBlastById, getBlastReplies,
   type WorkerPermissions,
 } from "./db";
-import { createHeartbeatJob, deleteHeartbeatJob } from "./_core/heartbeat";
 import bcrypt from "bcryptjs";
 import { sdk } from "./_core/sdk";
 import { sendAdminNotification, sendApplicantConfirmation, sendEmail } from "./email";
@@ -1532,39 +1531,20 @@ export const appRouter = router({
           scheduledAt: input.scheduledAt,
           createdBy: ctx.user.id,
         });
-
-        // Convert scheduledAt to a one-time cron expression (UTC)
-        const d = input.scheduledAt;
-        const cronExpr = `${d.getUTCMinutes()} ${d.getUTCHours()} ${d.getUTCDate()} ${d.getUTCMonth() + 1} *`;
-
-        const sessionCookie = (ctx.req as any).cookies?.app_session_id ?? "";
-        const { taskUid } = await createHeartbeatJob({
-          name: `email-blast-${id}`,
-          cron: cronExpr,
-          path: "/api/scheduled/email-blast",
-          method: "POST",
-          payload: { blastId: id },
-          description: `Email blast: ${input.name}`,
-        }, sessionCookie);
-
-        await updateEmailBlastCronUid(id, taskUid);
-
-        return { id, taskUid };
+        // Blast is saved to DB with blastStatus='scheduled'.
+        // Vercel Cron calls /api/cron/send-blasts every minute to fire due blasts.
+        return { id };
       }),
 
     cancel: superAdminProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ ctx, input }) => {
+      .mutation(async ({ input }) => {
         const blast = await getEmailBlastById(input.id);
         if (!blast) throw new TRPCError({ code: "NOT_FOUND", message: "Blast not found" });
         if (blast.blastStatus !== "scheduled") {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Only scheduled blasts can be cancelled" });
         }
-        if (blast.scheduleCronTaskUid) {
-          const sessionCookie = (ctx.req as any).cookies?.app_session_id ?? "";
-          await deleteHeartbeatJob(blast.scheduleCronTaskUid, sessionCookie).catch(() => {});
-        }
-        await cancelEmailBlast(input.id, blast.scheduleCronTaskUid ?? undefined);
+        await cancelEmailBlast(input.id, undefined);
         return { success: true };
       }),
 
