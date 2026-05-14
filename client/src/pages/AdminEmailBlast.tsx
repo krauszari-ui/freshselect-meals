@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Send, X, Clock, CheckCircle2, XCircle, Loader2, AlertCircle } from "lucide-react";
+import { Mail, Send, X, Clock, CheckCircle2, Loader2, AlertCircle, MessageSquare, ChevronDown, ChevronUp, User } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "wouter";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All Clients" },
@@ -30,6 +31,98 @@ function statusBadge(status: string) {
   };
   const s = map[status] ?? { label: status, className: "bg-gray-100 text-gray-600" };
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.className}`}>{s.label}</span>;
+}
+
+/** Expandable replies inbox for a single blast */
+function BlastRepliesPanel({ blastId }: { blastId: number }) {
+  const [open, setOpen] = useState(false);
+  const { data: replies, isLoading } = trpc.emailBlast.getReplies.useQuery(
+    { blastId },
+    { enabled: open }
+  );
+
+  return (
+    <div className="mt-3 border-t border-slate-100 pt-3">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+      >
+        <MessageSquare className="h-3.5 w-3.5" />
+        <span>Replies inbox</span>
+        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+
+      {open && (
+        <div className="mt-3">
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-slate-400 py-4 justify-center text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Loading replies…</span>
+            </div>
+          ) : !replies?.length ? (
+            <div className="text-center py-6 text-slate-400 text-sm">
+              <MessageSquare className="h-7 w-7 mx-auto mb-2 opacity-30" />
+              <p>No replies yet</p>
+              <p className="text-xs mt-1">Client replies will appear here automatically</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              {replies.map(reply => (
+                <div key={reply.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="p-1.5 bg-green-100 rounded-full shrink-0">
+                        <User className="h-3 w-3 text-green-700" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {reply.submissionId ? (
+                            <Link
+                              href={`/admin/clients/${reply.submissionId}`}
+                              className="font-medium text-sm text-green-700 hover:underline"
+                            >
+                              {[reply.firstName, reply.lastName].filter(Boolean).join(" ") || reply.fromEmail}
+                            </Link>
+                          ) : (
+                            <span className="font-medium text-sm text-slate-800">
+                              {reply.fromEmail}
+                            </span>
+                          )}
+                          <span className="text-xs text-slate-400">{reply.fromEmail}</span>
+                        </div>
+                        <p className="text-xs font-medium text-slate-700 mt-0.5 truncate">
+                          {reply.subject}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs text-slate-400 shrink-0 whitespace-nowrap">
+                      {new Date(reply.sentAt).toLocaleString()}
+                    </span>
+                  </div>
+                  {reply.body && (
+                    <p className="mt-2 text-sm text-slate-600 whitespace-pre-wrap line-clamp-4 pl-8">
+                      {reply.body}
+                    </p>
+                  )}
+                  {reply.submissionId && (
+                    <div className="mt-2 pl-8">
+                      <Link
+                        href={`/admin/clients/${reply.submissionId}`}
+                        className="text-xs text-green-700 hover:underline"
+                      >
+                        View client record →
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AdminEmailBlast() {
@@ -91,7 +184,6 @@ export default function AdminEmailBlast() {
     const d = new Date();
     d.setDate(d.getDate() + 1);
     d.setHours(11, 0, 0, 0);
-    // Format as YYYY-MM-DDTHH:mm for datetime-local input
     const pad = (n: number) => String(n).padStart(2, "0");
     const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     setForm(f => ({ ...f, scheduledAt: local }));
@@ -223,7 +315,7 @@ export default function AdminEmailBlast() {
             </div>
           ) : (
             <div className="space-y-3">
-              {blasts.map(blast => (
+              {blasts.map((blast: any) => (
                 <Card key={blast.id} className="border border-slate-200">
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-4">
@@ -236,7 +328,7 @@ export default function AdminEmailBlast() {
                           )}
                         </div>
                         <p className="text-sm text-slate-600 mt-0.5 truncate">Subject: {blast.subject}</p>
-                        <div className="flex items-center gap-4 mt-1.5 text-xs text-slate-400">
+                        <div className="flex items-center gap-4 mt-1.5 text-xs text-slate-400 flex-wrap">
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
                             Scheduled: {new Date(blast.scheduledAt).toLocaleString()}
@@ -268,6 +360,11 @@ export default function AdminEmailBlast() {
                         </Button>
                       )}
                     </div>
+
+                    {/* Replies inbox — only shown for sent blasts */}
+                    {blast.blastStatus === "sent" && (
+                      <BlastRepliesPanel blastId={blast.id} />
+                    )}
                   </CardContent>
                 </Card>
               ))}

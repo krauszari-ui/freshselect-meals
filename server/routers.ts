@@ -35,7 +35,7 @@ import {
   markNotificationRead, markAllNotificationsRead,
   logAudit, getAuditLogs, getAuditLogsBySession,
   createEmailBlast, updateEmailBlastCronUid, listEmailBlasts, cancelEmailBlast,
-  getEmailBlastById,
+  getEmailBlastById, getBlastReplies,
   type WorkerPermissions,
 } from "./db";
 import { createHeartbeatJob, deleteHeartbeatJob } from "./_core/heartbeat";
@@ -1566,6 +1566,12 @@ export const appRouter = router({
         }
         await cancelEmailBlast(input.id, blast.scheduleCronTaskUid ?? undefined);
         return { success: true };
+      }),
+
+    getReplies: superAdminProcedure
+      .input(z.object({ blastId: z.number() }))
+      .query(async ({ input }) => {
+        return getBlastReplies(input.blastId);
       }),
   }),
 });

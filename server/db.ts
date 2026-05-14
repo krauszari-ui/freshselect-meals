@@ -1178,7 +1178,7 @@ export async function cancelEmailBlast(id: number, taskUid?: string | null): Pro
 }
 
 /** Get all client emails for a blast (optionally filtered by status) */
-export async function getClientEmailsForBlast(filterStatus?: string | null): Promise<{ email: string; firstName: string; lastName: string }[]> {
+export async function getClientEmailsForBlast(filterStatus?: string | null): Promise<{ id: number; email: string; firstName: string; lastName: string }[]> {
   const db = await getDb();
   if (!db) return [];
   const conditions: ReturnType<typeof eq>[] = [];
@@ -1186,6 +1186,7 @@ export async function getClientEmailsForBlast(filterStatus?: string | null): Pro
     conditions.push(eq(submissions.status, filterStatus as any));
   }
   const rows = await db.select({
+    id: submissions.id,
     email: submissions.email,
     firstName: submissions.firstName,
     lastName: submissions.lastName,
@@ -1197,6 +1198,29 @@ export async function getClientEmailsForBlast(filterStatus?: string | null): Pro
     seen.add(r.email);
     return true;
   });
+}
+
+/** Get all inbound replies linked to a specific email blast */
+export async function getBlastReplies(blastId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { clientEmails } = await import("../drizzle/schema");
+  const rows = await db
+    .select({
+      id: clientEmails.id,
+      submissionId: clientEmails.submissionId,
+      fromEmail: clientEmails.fromEmail,
+      subject: clientEmails.subject,
+      body: clientEmails.body,
+      sentAt: clientEmails.sentAt,
+      firstName: submissions.firstName,
+      lastName: submissions.lastName,
+    })
+    .from(clientEmails)
+    .leftJoin(submissions, eq(clientEmails.submissionId, submissions.id))
+    .where(eq(clientEmails.blastId, blastId))
+    .orderBy(desc(clientEmails.sentAt));
+  return rows;
 }
 
 export async function getEmailBlastById(id: number): Promise<typeof emailBlasts.$inferSelect | null> {
