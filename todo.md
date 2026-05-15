@@ -723,3 +723,12 @@
 ## Blast Retry Deduplication (May 2026)
 - [x] Add getBlastAlreadySentIds DB helper — returns set of submissionIds that already have an outbound clientEmails row for a given blastId
 - [x] Update cron send loop to skip clients already in that set (idempotent sends)
+
+## Security Audit Fixes (2026-05-15)
+
+- [x] Fix: 7 rate limiters missing from production src/index.ts (referrer login, referrer code endpoints, password reset, admin login hard-block)
+- [x] Fix: Atomic blast claim in cron to prevent concurrent double-send race condition
+- [x] Fix: dbStatus public endpoint exposed user count — now returns only connection health
+- [x] Fix: updatePriority and sendClientEmail used staffProcedure (viewer/assessor could mutate) — changed to editProcedure
+- [x] Fix: updateEmailBlastStatus now returns boolean for atomic claim support
+- [x] Doc: CRON_SECRET added to env.ts — must be set in Vercel env vars to protect cron endpoint

@@ -1146,16 +1146,26 @@ export async function updateEmailBlastCronUid(id: number, taskUid: string): Prom
 export async function updateEmailBlastStatus(
   id: number,
   status: "scheduled" | "sending" | "sent" | "cancelled" | "failed",
-  counts?: { sentCount?: number; failedCount?: number; sentAt?: Date }
-): Promise<void> {
+  counts?: { sentCount?: number; failedCount?: number; sentAt?: Date },
+  /** When set, the UPDATE only applies if the blast is currently in this state.
+   * Use this to atomically claim a blast (e.g. 'scheduled' -> 'sending') so
+   * two concurrent cron invocations cannot both process the same blast. */
+  fromStatus?: "scheduled" | "sending" | "sent" | "cancelled" | "failed"
+): Promise<boolean> {
   const db = await getDb();
-  if (!db) return;
-  await db.update(emailBlasts).set({
+  if (!db) return false;
+  const where = fromStatus
+    ? and(eq(emailBlasts.id, id), eq(emailBlasts.blastStatus, fromStatus))
+    : eq(emailBlasts.id, id);
+  const result = await db.update(emailBlasts).set({
     blastStatus: status,
     ...(counts?.sentCount !== undefined ? { sentCount: counts.sentCount } : {}),
     ...(counts?.failedCount !== undefined ? { failedCount: counts.failedCount } : {}),
     ...(counts?.sentAt ? { sentAt: counts.sentAt } : {}),
-  }).where(eq(emailBlasts.id, id));
+  }).where(where);
+  // mysql2 returns [ResultSetHeader, ...] — rowsAffected is in result[0]
+  const affected = (result as any)?.[0]?.affectedRows ?? (result as any)?.rowsAffected ?? 1;
+  return Number(affected) > 0;
 }
 
 export async function listEmailBlasts(): Promise<typeof emailBlasts.$inferSelect[]> {
