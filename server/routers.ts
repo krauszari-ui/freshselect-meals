@@ -165,20 +165,10 @@ export const appRouter = router({
       return { success: true } as const;
     }),
     dbStatus: publicProcedure.query(async () => {
+      // SECURITY: only expose connection health, never DB internals or counts
       const { getDb } = await import("./db");
       const db = await getDb();
-      const hasDbUrl = !!process.env.DATABASE_URL;
-      const dbConnected = !!db;
-      let userCount = 0;
-      if (db) {
-        try {
-          const { users } = await import("../drizzle/schema");
-          const { sql } = await import("drizzle-orm");
-          const result = await db.select({ count: sql<number>`count(*)` }).from(users);
-          userCount = Number(result[0]?.count ?? 0);
-        } catch (e) { userCount = -1; }
-      }
-      return { hasDbUrl, dbConnected, userCount };
+      return { dbConnected: !!db };
     }),
     adminLogin: publicProcedure
       .input(z.object({ email: z.string().email(), password: z.string().min(1) }))
@@ -470,7 +460,7 @@ export const appRouter = router({
       pageSize: z.number().min(1).max(100).optional(),
     })).query(async ({ input }) => listSubmissions(input)),
 
-    updatePriority: staffProcedure.input(z.object({
+    updatePriority: editProcedure.input(z.object({
       id: z.number(),
       priority: z.enum(["low", "normal", "high", "urgent"]),
     })).mutation(async ({ input, ctx }) => {
@@ -582,7 +572,7 @@ export const appRouter = router({
     }),
 
     // ─── Client Email Thread ──────────────────────────────────────────────
-    sendClientEmail: staffProcedure.input(z.object({
+    sendClientEmail: editProcedure.input(z.object({
       submissionId: z.number(),
       subject: z.string().max(512).optional(),
       body: z.string().min(1),

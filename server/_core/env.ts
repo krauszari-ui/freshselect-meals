@@ -28,6 +28,12 @@ export const ENV = {
   /** Optional: public CDN URL for the R2 bucket (e.g. https://docs.freshselectmeals.com) */
   r2PublicUrl: process.env.R2_PUBLIC_URL ?? "",
 
+  // ── Cron security ─────────────────────────────────────────────────────────
+  /** Secret token required to invoke /api/cron/send-blasts.
+   * Set CRON_SECRET in Vercel env vars. Vercel automatically sends this as
+   * Authorization: Bearer <secret> for cron jobs when configured. */
+  cronSecret: process.env.CRON_SECRET ?? "",
+
   // ── Manus Forge (local dev fallback only — not needed in production) ────────
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",

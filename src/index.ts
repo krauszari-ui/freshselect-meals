@@ -9,7 +9,12 @@ import {
   applySecurityMiddleware,
   submissionLimiter,
   loginLimiter,
+  loginHardLimiter,
   uploadLimiter,
+  referrerLoginLimiter,
+  referrerLoginHardLimiter,
+  passwordResetLimiter,
+  referrerCodeLimiter,
 } from "../server/_core/security";
 import { requestLogger } from "../server/_core/logger";
 import { createClientEmail, getSubmissionById } from "../server/db";
@@ -206,7 +211,15 @@ app.get("/api/cron/send-blasts", async (req, res) => {
     for (const blast of due) {
       // Wrap each blast in its own try/catch so one failure doesn't block others
       try {
-        await updateEmailBlastStatus(blast.id, "sending");
+        // Atomic claim: only proceed if the blast is still in its expected state.
+        // This prevents two concurrent Vercel cron invocations from both processing
+        // the same blast (race condition that caused the duplicate-send incident).
+        const fromStatus = blast.blastStatus as "scheduled" | "sending";
+        const claimed = await updateEmailBlastStatus(blast.id, "sending", undefined, fromStatus);
+        if (!claimed) {
+          console.log(`[CronBlast] Blast ${blast.id} already claimed by another invocation — skipping`);
+          continue;
+        }
         const [clients, alreadySentIds] = await Promise.all([
           getClientEmailsForBlast(blast.filterStatus),
           getBlastAlreadySentIds(blast.id),
@@ -261,8 +274,21 @@ app.get("/api/cron/send-blasts", async (req, res) => {
 // Per-route rate limiters applied before tRPC handles the request
 // tRPC procedure names are in the URL path: /api/trpc/submission.submit
 app.use("/api/trpc/submission.submit", submissionLimiter);
+// Admin login — Tier 1 (15-min block) + Tier 2 (24-hour hard block)
 app.use("/api/trpc/auth.adminLogin", loginLimiter);
-app.use("/api/trpc/referrer.login", loginLimiter);
+app.use("/api/trpc/auth.adminLogin", loginHardLimiter);
+// Referrer portal login — dedicated stricter limiters
+app.use("/api/trpc/admin.referrerPortal.login", referrerLoginLimiter);
+app.use("/api/trpc/admin.referrerPortal.login", referrerLoginHardLimiter);
+// Referrer portal code-gated endpoints — prevent code enumeration
+app.use("/api/trpc/admin.referrerPortal.myClients", referrerCodeLimiter);
+app.use("/api/trpc/admin.referrerPortal.myStats", referrerCodeLimiter);
+app.use("/api/trpc/admin.referrerPortal.myMessages", referrerCodeLimiter);
+app.use("/api/trpc/admin.referrerPortal.reply", referrerCodeLimiter);
+app.use("/api/trpc/admin.referrerPortal.markAllRead", referrerCodeLimiter);
+app.use("/api/trpc/admin.referrerPortal.deleteMessage", referrerCodeLimiter);
+// Password reset — prevent email bombing
+app.use("/api/trpc/passwordReset.forgotPassword", passwordResetLimiter);
 app.use("/api/trpc/upload.document", uploadLimiter);
 app.use("/api/trpc/admin.uploadDocument", uploadLimiter);
 
