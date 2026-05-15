@@ -1225,6 +1225,19 @@ export async function getBlastReplies(blastId: number) {
   return rows;
 }
 
+/** Returns the set of submissionIds that already have an outbound email recorded for this blast.
+ * Used during retry to skip clients who already received the blast. */
+export async function getBlastAlreadySentIds(blastId: number): Promise<Set<number>> {
+  const db = await getDb();
+  if (!db) return new Set();
+  const { clientEmails } = await import("../drizzle/schema");
+  const rows = await db
+    .select({ submissionId: clientEmails.submissionId })
+    .from(clientEmails)
+    .where(and(eq(clientEmails.blastId, blastId), eq(clientEmails.direction, "outbound")));
+  return new Set(rows.map(r => r.submissionId).filter((id): id is number => id !== null));
+}
+
 export async function getEmailBlastById(id: number): Promise<typeof emailBlasts.$inferSelect | null> {
   const db = await getDb();
   if (!db) return null;
