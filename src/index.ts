@@ -187,9 +187,14 @@ app.get("/api/cron/send-blasts", async (req, res) => {
     const { sendEmail } = await import("../server/email");
     const blasts = await listEmailBlasts();
     const now = Date.now();
-    const due = blasts.filter(
-      (b: any) => b.blastStatus === "scheduled" && b.scheduledAt && new Date(b.scheduledAt).getTime() <= now
-    );
+    // Pick up scheduled blasts that are due, PLUS any blasts stuck in 'sending' for >5 minutes
+    // (stuck 'sending' means the previous cron run crashed after setting the status)
+    const STALE_SENDING_MS = 5 * 60 * 1000; // 5 minutes
+    const due = blasts.filter((b: any) => {
+      if (b.blastStatus === "scheduled" && b.scheduledAt && new Date(b.scheduledAt).getTime() <= now) return true;
+      if (b.blastStatus === "sending" && b.scheduledAt && (now - new Date(b.scheduledAt).getTime()) > STALE_SENDING_MS) return true;
+      return false;
+    });
     if (due.length === 0) {
       res.json({ ok: true, fired: 0 });
       return;
@@ -199,40 +204,47 @@ app.get("/api/cron/send-blasts", async (req, res) => {
     const INBOUND_DOMAIN = process.env.RESEND_INBOUND_DOMAIN ?? "inbound.freshselectmeals.com";
     let totalFired = 0;
     for (const blast of due) {
-      await updateEmailBlastStatus(blast.id, "sending");
-      const clients = await getClientEmailsForBlast(blast.filterStatus);
-      let sentCount = 0;
-      let failedCount = 0;
-      for (const client of clients) {
-        if (!client.email) { failedCount++; continue; }
-        const replyTo = `blast-${blast.id}-${client.id}@${INBOUND_DOMAIN}`;
-        const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-          <p>Dear ${escHtml(client.firstName ?? "")} ${escHtml(client.lastName ?? "")},</p>
-          <p>${escHtml(blast.body).replace(/\n/g, "<br/>")}</p>
-          <p style="margin-top:24px;font-size:12px;color:#888">FreshSelect Meals &mdash; freshselectmeals.com</p>
-        </div>`;
-        const ok = await sendEmail({ to: client.email, subject: blast.subject, html, replyTo });
-        if (ok) {
-          sentCount++;
-          // Record the outbound blast email so replies can be linked back to this blast
-          try {
-            await createClientEmail({
-              submissionId: client.id,
-              direction: "outbound",
-              subject: blast.subject,
-              body: blast.body,
-              fromEmail: `noreply@freshselectmeals.com`,
-              toEmail: client.email,
-              blastId: blast.id,
-            });
-          } catch (dbErr) {
-            console.warn(`[CronBlast] Failed to record outbound email for client #${client.id}:`, dbErr);
-          }
-        } else { failedCount++; }
+      // Wrap each blast in its own try/catch so one failure doesn't block others
+      try {
+        await updateEmailBlastStatus(blast.id, "sending");
+        const clients = await getClientEmailsForBlast(blast.filterStatus);
+        let sentCount = 0;
+        let failedCount = 0;
+        for (const client of clients) {
+          if (!client.email) { failedCount++; continue; }
+          const replyTo = `blast-${blast.id}-${client.id}@${INBOUND_DOMAIN}`;
+          const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+            <p>Dear ${escHtml(client.firstName ?? "")} ${escHtml(client.lastName ?? "")},</p>
+            <p>${escHtml(blast.body).replace(/\n/g, "<br/>")}</p>
+            <p style="margin-top:24px;font-size:12px;color:#888">FreshSelect Meals &mdash; freshselectmeals.com</p>
+          </div>`;
+          const ok = await sendEmail({ to: client.email, subject: blast.subject, html, replyTo });
+          if (ok) {
+            sentCount++;
+            // Record the outbound blast email so replies can be linked back to this blast
+            try {
+              await createClientEmail({
+                submissionId: client.id,
+                direction: "outbound",
+                subject: blast.subject,
+                body: blast.body,
+                fromEmail: `noreply@freshselectmeals.com`,
+                toEmail: client.email,
+                blastId: blast.id,
+              });
+            } catch (dbErr) {
+              console.warn(`[CronBlast] Failed to record outbound email for client #${client.id}:`, dbErr);
+            }
+          } else { failedCount++; }
+        }
+        await updateEmailBlastStatus(blast.id, "sent", { sentCount, failedCount, sentAt: new Date() });
+        console.log(`[CronBlast] Blast ${blast.id} sent: ${sentCount} ok, ${failedCount} failed`);
+        totalFired++;
+      } catch (blastErr: any) {
+        // Mark as failed so it doesn't get stuck in 'sending' forever
+        console.error(`[CronBlast] Blast ${blast.id} failed:`, blastErr);
+        try { await updateEmailBlastStatus(blast.id, "failed"); } catch (_) { /* ignore */ }
       }
-      await updateEmailBlastStatus(blast.id, "sent", { sentCount, failedCount, sentAt: new Date() });
-      console.log(`[CronBlast] Blast ${blast.id} sent: ${sentCount} ok, ${failedCount} failed`);
-      totalFired++;
     }
     res.json({ ok: true, fired: totalFired });
   } catch (err: any) {

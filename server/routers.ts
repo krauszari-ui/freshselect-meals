@@ -35,7 +35,7 @@ import {
   markNotificationRead, markAllNotificationsRead,
   logAudit, getAuditLogs, getAuditLogsBySession,
   createEmailBlast, listEmailBlasts, cancelEmailBlast,
-  getEmailBlastById, getBlastReplies,
+  getEmailBlastById, getBlastReplies, updateEmailBlastStatus,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -1552,6 +1552,18 @@ export const appRouter = router({
       .input(z.object({ blastId: z.number() }))
       .query(async ({ input }) => {
         return getBlastReplies(input.blastId);
+      }),
+
+    retry: superAdminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const blast = await getEmailBlastById(input.id);
+        if (!blast) throw new TRPCError({ code: "NOT_FOUND", message: "Blast not found" });
+        if (blast.blastStatus !== "failed" && blast.blastStatus !== "sending") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Only failed or stuck blasts can be retried" });
+        }
+        await updateEmailBlastStatus(input.id, "scheduled");
+        return { success: true };
       }),
   }),
 });

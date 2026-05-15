@@ -710,3 +710,12 @@
 - [x] Fix cron endpoint to save outbound blast emails to clientEmails table with blastId set (was not recording sent emails)
 - [x] Update security-audit.test.ts and security-audit5.test.ts to reflect 3MB upload limit (reduced from 10MB for Vercel compatibility)
 - [x] 200/200 tests passing
+
+## Blast Stuck-in-Sending Fix (May 2026)
+- [x] Fix cron endpoint: wrap each blast in its own try/catch so one failure doesn't block others
+- [x] Fix cron endpoint: mark blast as "failed" (not leave as "sending") when an error occurs mid-send
+- [x] Fix cron endpoint: auto-recover stale "sending" blasts (stuck >5 min) on next cron tick
+- [x] Add emailBlast.retry tRPC procedure (super_admin only) to re-queue failed/stuck blasts
+- [x] Add Retry button in AdminEmailBlast UI for failed/sending blasts
+- [x] Add auto-refresh (every 30s) to blast list when any blast is in scheduled/sending state
+- [x] 199/200 tests passing (1 pre-existing live Resend network test fails in sandbox)

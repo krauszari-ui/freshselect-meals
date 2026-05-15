@@ -1,0 +1,48 @@
+{
+  "build_command": "pnpm run build",
+  "capabilities": [
+    "db",
+    "server",
+    "user"
+  ],
+  "dev_command": "pnpm run dev",
+  "env_vars": {
+    "DATABASE_URL": "mysql://e1gwTrcxzNkRAvq.27ee13ac78a5:OI823w1kbLK71oEaoJbD@gateway05.us-east-1.prod.aws.tidbcloud.com:4000/aXnNnkD6gAXcPtQ6Yw2PQJ?ssl={\"rejectUnauthorized\":true}"
+  },
+  "experiments": [
+    "no_db_push"
+  ],
+  "git_remote": {
+    "repo_url": "s3://vida-prod-gitrepo/webdev-git/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ",
+    "access_key_id": "ASIAZV3A2ECZBIZQQZKI",
+    "secret_access_key": "dgiVX8NJCaTmrFynLXhPDsrbN8GGO4ucu++UsgGS",
+    "session_token": "IQoJb3JpZ2luX2VjEKD//////////wEaCXVzLWVhc3QtMSJHMEUCIArpi3LKIeg6BOMO7u3mwSo5Jfs20HdEg1h70eWBYQ04AiEA9VMIJdCgDHvyraxv8VSJd28G+wNNcG37IWZ2N32OdZ8q9gMIaRAEGgw2NjUzODYwOTg4NjYiDMWnjGaVptiGKchzCCrTAyjA4gMkj0udgc1blEEZpJ+ulab5eqiuY8tYYm7Je2Xeuytc9NpC8CCliSQ8sx0PuQISxqtRB08DxUU/jNT24Q8R+ySdGPEYJH0DzYKnZEiCn6rQM4CBzsm6j+Mmnzke/452liT5GlXUS9Ny222M3YvqFbLKT5Mk2Ik1oO3uVlxwqJxfmFQm9aGyFakCC/OwGoeVqjE4059SmbyP79WGnII/PvXwdKRQ11nUig8/VzVKxqT60sxfHLhop/tbNRV5ceAlYm8wJrWUfd06RdeKL5RpKb15VoZJgYRDMl8aWxKa444OQRHjfXorI4MQI8oCco5QJSGsjF67tGSST2fCNq4J3EpEKmyPb90O+gB4p6bzSRWrNlQurt3pF3LEEXVnhdLBJCVLumi7HSY/pfDFtKaahdMhNMqHvsVy8R0n8pvCT9uUKaE27/as8ZPl7ZboHRpAM+LI1ni1bgENNcnA9G1T5F01em1NNij/KgpDNi+tVoZZFir2A7K2/EKx+leK/rD5LaeeuwG3+/fMYiTd55ntM70D4l/QL9wxnEa+TEBrHNmj9ucZldqgk2qrV52TJanjL/Gq5vrblqaPU0UJVgvlqtkhYPfCDvvLv108tzXTrTVZMJTEmdAGOp0BzJHYgnAU24yOmga6BmIpOBFGgl/QS+hUjQWiZN7s37uIc/HJegQHWt1BTXXlFUGyXE2QpIuM++OIrh35076EYtElrcMDpfyR6o83M+MOvHigrmAObMJ+2/CtLoX2NKB/fZXEhFBwuTfqAkyzusSW2XKUh7QkH0bBfyTq0lkGcQG1PglRN69NGHBirpP6Os59wNBXbwAQink2agzWuw==",
+    "expiration": "2026-05-15T12:00:20.000Z"
+  },
+  "name": "freshselect-meals",
+  "path": "/home/ubuntu/freshselect-meals",
+  "port": 3000,
+  "secrets": {
+    "BUILT_IN_FORGE_API_KEY": "Ed5jYXhynhn7V7ZYdk9jxT",
+    "BUILT_IN_FORGE_API_URL": "https://forge.manus.ai",
+    "CLICKUP_API_KEY": "pk_204004233_1W8BHBL9A7YNAM4V8J2QDVI9NTVLICFH",
+    "JWT_SECRET": "8Nozppwy5RT3DM98gN9zzK",
+    "OAUTH_SERVER_URL": "https://api.manus.im",
+    "OWNER_NAME": "Bed Of Roses Linen",
+    "OWNER_OPEN_ID": "8RwNK4fjH5nUJDWT9s2cjE",
+    "RESEND_API_KEY": "re_6kK7PodK_9xJ7REhVVwcdoQnXD4egc9u7",
+    "RESEND_FROM_EMAIL": "FreshSelect Meals \u003cadmin@freshselectmeals.com\u003e",
+    "RESEND_INBOUND_DOMAIN": "inbound.freshselectmeals.com",
+    "RESEND_WEBHOOK_SECRET": "whsec_1fbTxET/IpsXu2SgK8hieFjM7+k4tyfM",
+    "VITE_ANALYTICS_ENDPOINT": "https://manus-analytics.com",
+    "VITE_ANALYTICS_WEBSITE_ID": "2d4d3881-7a52-44a5-a3a1-f269e7b65fef",
+    "VITE_APP_ID": "aXnNnkD6gAXcPtQ6Yw2PQJ",
+    "VITE_APP_LOGO": "https://files.manuscdn.com/user_upload_by_module/web_dev_logo/310519663225242016/fDnIxFGQSsFPKSnD.png",
+    "VITE_APP_TITLE": "FreshSelect Meals",
+    "VITE_FRONTEND_FORGE_API_KEY": "eAPW2pBn5FZjRxfjLjJG9B",
+    "VITE_FRONTEND_FORGE_API_URL": "https://forge.manus.ai",
+    "VITE_OAUTH_PORTAL_URL": "https://manus.im"
+  },
+  "template_id": "web-db-user",
+  "test_command": "pnpm test"
+}

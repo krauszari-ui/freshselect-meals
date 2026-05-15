@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Send, X, Clock, CheckCircle2, Loader2, AlertCircle, MessageSquare, ChevronDown, ChevronUp, User } from "lucide-react";
+import { Mail, Send, X, Clock, CheckCircle2, Loader2, AlertCircle, MessageSquare, ChevronDown, ChevronUp, User, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 
@@ -134,7 +134,15 @@ function BlastRepliesPanel({ blastId }: { blastId: number }) {
 export default function AdminEmailBlast() {
   const utils = trpc.useUtils();
 
-  const { data: blasts, isLoading } = trpc.emailBlast.list.useQuery();
+  // Auto-refresh every 30s when any blast is in scheduled/sending state
+  const { data: blasts, isLoading } = trpc.emailBlast.list.useQuery(undefined, {
+    refetchInterval: (query) => {
+      const data = query.state.data as any[];
+      if (!data) return false;
+      const hasActive = data.some((b: any) => b.blastStatus === "scheduled" || b.blastStatus === "sending");
+      return hasActive ? 30_000 : false;
+    },
+  });
 
   const createMutation = trpc.emailBlast.create.useMutation({
     onSuccess: () => {
@@ -154,6 +162,16 @@ export default function AdminEmailBlast() {
     },
     onError: (err: { message: string }) => {
       toast.error("Failed to cancel blast: " + err.message);
+    },
+  });
+
+  const retryMutation = trpc.emailBlast.retry.useMutation({
+    onSuccess: () => {
+      toast.success("Blast re-queued — it will send on the next cron tick (within 1 minute)");
+      utils.emailBlast.list.invalidate();
+    },
+    onError: (err: { message: string }) => {
+      toast.error("Failed to retry blast: " + err.message);
     },
   });
 
@@ -353,18 +371,32 @@ export default function AdminEmailBlast() {
                           )}
                         </div>
                       </div>
-                      {blast.blastStatus === "scheduled" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="shrink-0 text-red-600 border-red-200 hover:bg-red-50"
-                          disabled={cancelMutation.isPending}
-                          onClick={() => cancelMutation.mutate({ id: blast.id })}
-                        >
-                          <X className="h-3.5 w-3.5 mr-1" />
-                          Cancel
-                        </Button>
-                      )}
+                      <div className="flex gap-2 shrink-0">
+                        {blast.blastStatus === "scheduled" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600 border-red-200 hover:bg-red-50"
+                            disabled={cancelMutation.isPending}
+                            onClick={() => cancelMutation.mutate({ id: blast.id })}
+                          >
+                            <X className="h-3.5 w-3.5 mr-1" />
+                            Cancel
+                          </Button>
+                        )}
+                        {(blast.blastStatus === "failed" || blast.blastStatus === "sending") && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                            disabled={retryMutation.isPending}
+                            onClick={() => retryMutation.mutate({ id: blast.id })}
+                          >
+                            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                            Retry
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Replies inbox — only shown for sent blasts */}
