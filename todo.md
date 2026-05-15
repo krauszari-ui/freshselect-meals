@@ -719,3 +719,7 @@
 - [x] Add Retry button in AdminEmailBlast UI for failed/sending blasts
 - [x] Add auto-refresh (every 30s) to blast list when any blast is in scheduled/sending state
 - [x] 199/200 tests passing (1 pre-existing live Resend network test fails in sandbox)
+
+## Blast Retry Deduplication (May 2026)
+- [x] Add getBlastAlreadySentIds DB helper — returns set of submissionIds that already have an outbound clientEmails row for a given blastId
+- [x] Update cron send loop to skip clients already in that set (idempotent sends)

@@ -183,7 +183,7 @@ app.get("/api/cron/send-blasts", async (req, res) => {
     return;
   }
   try {
-    const { listEmailBlasts, updateEmailBlastStatus, getClientEmailsForBlast } = await import("../server/db");
+    const { listEmailBlasts, updateEmailBlastStatus, getClientEmailsForBlast, getBlastAlreadySentIds } = await import("../server/db");
     const { sendEmail } = await import("../server/email");
     const blasts = await listEmailBlasts();
     const now = Date.now();
@@ -207,11 +207,16 @@ app.get("/api/cron/send-blasts", async (req, res) => {
       // Wrap each blast in its own try/catch so one failure doesn't block others
       try {
         await updateEmailBlastStatus(blast.id, "sending");
-        const clients = await getClientEmailsForBlast(blast.filterStatus);
+        const [clients, alreadySentIds] = await Promise.all([
+          getClientEmailsForBlast(blast.filterStatus),
+          getBlastAlreadySentIds(blast.id),
+        ]);
         let sentCount = 0;
         let failedCount = 0;
         for (const client of clients) {
           if (!client.email) { failedCount++; continue; }
+          // Skip clients who already received this blast (idempotent retry)
+          if (alreadySentIds.has(client.id)) { continue; }
           const replyTo = `blast-${blast.id}-${client.id}@${INBOUND_DOMAIN}`;
           const html = `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
             <p>Dear ${escHtml(client.firstName ?? "")} ${escHtml(client.lastName ?? "")},</p>
