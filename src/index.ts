@@ -164,10 +164,12 @@ app.post("/api/inbound-email", express.raw({ type: "*/*" }), async (req, res) =>
 });
 
 // Body parser — tight limits to prevent DoS.
-// Upload route uses base64 so 10mb covers large documents.
-// Registered AFTER the raw inbound-email route so Svix gets raw bytes.
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ limit: "10mb", extended: true }));
+// SECURITY: global limit is 256kb for all API/tRPC routes.
+// Upload routes use base64 so they get a separate 10mb limit applied per-path.
+app.use("/api/trpc/upload", express.json({ limit: "10mb" }));
+app.use("/api/trpc/admin.uploadDocument", express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "256kb" }));
+app.use(express.urlencoded({ limit: "256kb", extended: true }));
 
 // OAuth callback under /api/oauth/callback
 registerOAuthRoutes(app);
