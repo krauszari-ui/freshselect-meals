@@ -863,6 +863,13 @@ export async function getClientEmailBySubmissionAndSubject(submissionId: number,
   return rows[0];
 }
 
+export async function listClientEmailsById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select().from(clientEmails).where(eq(clientEmails.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
 export async function deleteClientEmailById(id: number): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

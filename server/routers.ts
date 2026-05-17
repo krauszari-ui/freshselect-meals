@@ -25,7 +25,7 @@ import {
   createStaffUser, setPasswordResetToken, getUserByResetToken, clearPasswordResetToken,
   createReferrerMessage, listReferrerMessages, listReferrerMessagesBySubmission, markReferrerMessageRead, getUnreadCountByReferrer,
   deleteReferrerMessage, deleteReferrerMessageById, markAllReferrerMessagesRead,
-  createClientEmail, listClientEmails, deleteClientEmailById,
+  createClientEmail, listClientEmails, listClientEmailsById, deleteClientEmailById,
   createStageHistoryEntry, getStageHistoryBySubmission,
   getFilterCounts,
   getAssessmentReport,
@@ -219,10 +219,13 @@ export const appRouter = router({
         const sessionId = randomUUID();
         // Log successful login
         await logAudit({ actorId: user.id, actorName: user.email ?? input.email, action: "login_success", details: { role: user.role, ip }, sessionId });
-        const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || "" });
+        // SECURITY: admin/worker sessions expire in 8 hours (not 1 year).
+        // Shorter sessions limit the blast radius of a stolen cookie.
+        const SESSION_8H_MS = 8 * 60 * 60 * 1000;
+        const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || "", expiresInMs: SESSION_8H_MS });
         const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
-        ctx.res.cookie(SESSION_ID_COOKIE, sessionId, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_8H_MS });
+        ctx.res.cookie(SESSION_ID_COOKIE, sessionId, { ...cookieOptions, maxAge: SESSION_8H_MS });
         return { success: true, role: user.role } as const;
       }),
   }),
@@ -626,6 +629,9 @@ export const appRouter = router({
     deleteClientEmail: deleteProcedure.input(z.object({
       id: z.number(),
     })).mutation(async ({ input, ctx }) => {
+      // SECURITY: verify the email record exists before deleting (prevents blind IDOR enumeration)
+      const emails = await listClientEmailsById(input.id);
+      if (!emails) throw new TRPCError({ code: "NOT_FOUND", message: "Email not found" });
       await deleteClientEmailById(input.id);
       await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "email_deleted", details: { emailId: input.id } });
       return { success: true };
@@ -1238,6 +1244,15 @@ export const appRouter = router({
       })).mutation(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        // SECURITY: verify the submissionId (if provided) actually belongs to this referrer.
+        // Without this check, any referrer with a valid code could tag a message to any
+        // client in the system, polluting another referrer's client thread.
+        if (input.submissionId != null) {
+          const sub = await getSubmissionById(input.submissionId);
+          if (!sub || sub.referralSource !== link.code) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "This client does not belong to your referral link" });
+          }
+        }
         // Validate attachment URL — only allow https:// to prevent javascript:/data: injection
         const safeAttachmentUrl = input.attachmentUrl && input.attachmentUrl.startsWith("https://")
           ? input.attachmentUrl
