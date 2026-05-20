@@ -13,6 +13,9 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
@@ -58,6 +61,8 @@ export default function AssessorPortal() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("pending");
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [newApplicantFilter, setNewApplicantFilter] = useState<string>("all");
 
   // Approve state
   const [confirmApproveId, setConfirmApproveId] = useState<number | null>(null);
@@ -81,11 +86,16 @@ export default function AssessorPortal() {
   const utils = trpc.useUtils();
 
   const { data: clients, isLoading, refetch } = trpc.admin.assessorList.useQuery(
-    { search: search || undefined, tab: activeTab },
+    {
+      search: search || undefined,
+      tab: activeTab,
+      priority: priorityFilter !== "all" ? (priorityFilter as any) : undefined,
+      newApplicant: newApplicantFilter !== "all" ? newApplicantFilter : undefined,
+    },
     { enabled: !!user }
   );
 
-  // Count badges for each tab
+  // Count badges for each tab (unfiltered — always show total counts)
   const { data: pendingData } = trpc.admin.assessorList.useQuery({ tab: "pending" }, { enabled: !!user });
   const { data: recordedData } = trpc.admin.assessorList.useQuery({ tab: "recorded" }, { enabled: !!user });
   const { data: missingData } = trpc.admin.assessorList.useQuery({ tab: "missing_information" }, { enabled: !!user });
@@ -177,7 +187,7 @@ export default function AssessorPortal() {
           {(Object.entries(TAB_CONFIG) as [Tab, typeof TAB_CONFIG[Tab]][]).map(([key, cfg]) => (
             <button
               key={key}
-              onClick={() => { setActiveTab(key); setSearch(""); }}
+              onClick={() => { setActiveTab(key); setSearch(""); setPriorityFilter("all"); setNewApplicantFilter("all"); }}
               className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                 activeTab === key
                   ? "bg-white text-slate-900 shadow-sm"
@@ -197,15 +207,70 @@ export default function AssessorPortal() {
           ))}
         </div>
 
-        {/* Search */}
-        <div className="relative mb-5 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            className="pl-9"
-            placeholder="Search by name or CIN..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        {/* Search + Filters */}
+        <div className="flex flex-wrap gap-3 mb-5">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              className="pl-9"
+              placeholder="Search by name or CIN..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {/* Priority filter */}
+          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+            <SelectTrigger className="w-[160px] bg-white">
+              <SelectValue placeholder="All Priorities" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priorities</SelectItem>
+              <SelectItem value="urgent">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+                  Urgent
+                </span>
+              </SelectItem>
+              <SelectItem value="high">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-orange-400" />
+                  High
+                </span>
+              </SelectItem>
+              <SelectItem value="normal">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-blue-400" />
+                  Normal
+                </span>
+              </SelectItem>
+              <SelectItem value="low">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-slate-300" />
+                  Low
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          {/* New / Transfer filter */}
+          <Select value={newApplicantFilter} onValueChange={setNewApplicantFilter}>
+            <SelectTrigger className="w-[160px] bg-white">
+              <SelectValue placeholder="New / Transfer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">New &amp; Transfer</SelectItem>
+              <SelectItem value="new">New</SelectItem>
+              <SelectItem value="transfer">Transfer</SelectItem>
+            </SelectContent>
+          </Select>
+          {/* Clear filters button — only shown when a filter is active */}
+          {(priorityFilter !== "all" || newApplicantFilter !== "all") && (
+            <button
+              onClick={() => { setPriorityFilter("all"); setNewApplicantFilter("all"); }}
+              className="text-xs text-slate-500 hover:text-slate-700 underline self-center"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
 
         {/* Table */}
@@ -331,6 +396,9 @@ export default function AssessorPortal() {
 
         <p className="text-xs text-slate-400 mt-4 text-center">
           Showing {rows.length} client{rows.length !== 1 ? "s" : ""} — {tabCfg.label}
+          {(priorityFilter !== "all" || newApplicantFilter !== "all") && (
+            <span className="ml-1 text-emerald-600 font-medium">(filtered)</span>
+          )}
         </p>
       </main>
 

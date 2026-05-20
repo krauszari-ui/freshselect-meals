@@ -732,3 +732,10 @@
 - [x] Fix: updatePriority and sendClientEmail used staffProcedure (viewer/assessor could mutate) — changed to editProcedure
 - [x] Fix: updateEmailBlastStatus now returns boolean for atomic claim support
 - [x] Doc: CRON_SECRET added to env.ts — must be set in Vercel env vars to protect cron endpoint
+
+## Assessor Portal Filters
+- [x] Add Priority filter (All / Urgent / High / Normal / Low) to /assessor
+- [x] Add New/Transfer filter to /assessor
+- [x] Filters reset when switching tabs
+- [x] "Clear filters" button shown when any filter is active
+- [x] Tab count badges remain unfiltered (always show total)

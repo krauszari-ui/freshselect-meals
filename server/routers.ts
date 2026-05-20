@@ -417,6 +417,8 @@ export const appRouter = router({
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(200).optional(),
       tab: z.enum(["pending", "recorded", "missing_information", "not_eligible"]).optional(),
+      priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
+      newApplicant: z.string().optional(),
     })).query(async ({ input }) => {
       const tab = input.tab ?? "pending";
       // "pending": assessment completed, not yet categorised into a terminal assessor stage
@@ -435,6 +437,8 @@ export const appRouter = router({
         pageSize: input.pageSize ?? 200,
         assessmentCompleted: true,
         stage: stageFilter,
+        priority: input.priority,
+        newApplicant: input.newApplicant,
         // For pending: exclude all terminal assessor stages so completed ones don't show
         ...(tab === "pending" ? { excludeStages: terminalStages } : {}),
       });
