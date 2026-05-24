@@ -412,6 +412,8 @@ export const emailBlasts = mysqlTable("emailBlasts", {
   /** ID of the admin who created this blast */
   createdBy: int("createdBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  /** Automatically updated whenever the row is modified (used for stale-sending detection) */
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
   sentAt: timestamp("sentAt"),
 });
 export type EmailBlast = typeof emailBlasts.$inferSelect;
