@@ -190,6 +190,13 @@
       "when": 1778738910247,
       "tag": "0026_motionless_molly_hayes",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1779610961007,
+      "tag": "0027_wild_jack_murdock",
+      "breakpoints": true
     }
   ]
 }

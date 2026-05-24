@@ -104,10 +104,21 @@ app.post("/api/inbound-email", express.raw({ type: "*/*" }), async (req, res) =>
       res.status(200).json({ ok: true, skipped: true, reason: "no_match" });
       return;
     }
+    const { getEmailBlastById } = await import("../server/db");
     const submission = await getSubmissionById(submissionId);
     if (!submission) {
       res.status(200).json({ ok: true, skipped: true, reason: "no_submission" });
       return;
+    }
+    // SECURITY: validate blastId exists in the DB before tagging the email.
+    // Without this check, a spoofed To address like blast-99999-1@inbound.freshselectmeals.com
+    // would store a phantom blastId on the email row, polluting blast reply counts.
+    if (blastId !== null) {
+      const blast = await getEmailBlastById(blastId);
+      if (!blast) {
+        console.warn(`[Inbound Email] blastId ${blastId} not found in DB — clearing blastId`);
+        blastId = null;
+      }
     }
     // ── Fetch full email content via Resend API ─────────────────────────────
     // The webhook payload does NOT include body text/html — must fetch separately
@@ -194,12 +205,20 @@ app.get("/api/cron/send-blasts", async (req, res) => {
     const { sendEmail } = await import("../server/email");
     const blasts = await listEmailBlasts();
     const now = Date.now();
-    // Pick up scheduled blasts that are due, PLUS any blasts stuck in 'sending' for >5 minutes
+    // Pick up scheduled blasts that are due, PLUS any blasts stuck in 'sending' for >30 minutes
     // (stuck 'sending' means the previous cron run crashed after setting the status)
-    const STALE_SENDING_MS = 5 * 60 * 1000; // 5 minutes
+    // IMPORTANT: use updatedAt (set when status changed to 'sending'), NOT scheduledAt.
+    // scheduledAt is the intended send time — a large blast can take >5 min to send,
+    // so comparing against scheduledAt would trigger a false stale-recovery and double-send.
+    const STALE_SENDING_MS = 30 * 60 * 1000; // 30 minutes — safely above Vercel's 180s timeout
     const due = blasts.filter((b: any) => {
       if (b.blastStatus === "scheduled" && b.scheduledAt && new Date(b.scheduledAt).getTime() <= now) return true;
-      if (b.blastStatus === "sending" && b.scheduledAt && (now - new Date(b.scheduledAt).getTime()) > STALE_SENDING_MS) return true;
+      // A blast is stale if it has been in 'sending' for longer than the Vercel timeout window.
+      // Use updatedAt (the timestamp of the last status change) as the reference point.
+      if (b.blastStatus === "sending") {
+        const sendingStarted = b.updatedAt ? new Date(b.updatedAt).getTime() : (b.scheduledAt ? new Date(b.scheduledAt).getTime() : 0);
+        if (now - sendingStarted > STALE_SENDING_MS) return true;
+      }
       return false;
     });
     if (due.length === 0) {
