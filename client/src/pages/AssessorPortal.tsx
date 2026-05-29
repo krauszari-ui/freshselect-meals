@@ -90,7 +90,7 @@ export default function AssessorPortal() {
       search: search || undefined,
       tab: activeTab,
       priority: priorityFilter !== "all" ? (priorityFilter as any) : undefined,
-      newApplicant: newApplicantFilter !== "all" ? newApplicantFilter : undefined,
+      newApplicant: newApplicantFilter !== "all" ? (newApplicantFilter as "new" | "transfer") : undefined,
     },
     { enabled: !!user }
   );

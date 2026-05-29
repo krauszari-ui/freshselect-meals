@@ -418,7 +418,7 @@ export const appRouter = router({
       pageSize: z.number().min(1).max(200).optional(),
       tab: z.enum(["pending", "recorded", "missing_information", "not_eligible"]).optional(),
       priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
-      newApplicant: z.string().optional(),
+      newApplicant: z.enum(["new", "transfer"]).optional(),
     })).query(async ({ input }) => {
       const tab = input.tab ?? "pending";
       // "pending": assessment completed, not yet categorised into a terminal assessor stage
@@ -453,7 +453,7 @@ export const appRouter = router({
       supermarket: z.string().optional(),
       neighborhood: z.string().optional(),
       program: z.string().optional(),
-      newApplicant: z.string().optional(),
+      newApplicant: z.enum(["new", "transfer"]).optional(),
       language: z.string().optional(),
       borough: z.string().optional(),
       assignedTo: z.number().optional(),
@@ -461,7 +461,7 @@ export const appRouter = router({
       referralSource: z.string().optional(),
       assessmentCompleted: z.boolean().optional(),
       zipcode: z.string().optional(),
-      priority: z.string().optional(),
+      priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
       sortDir: z.enum(["asc", "desc"]).optional(),
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional(),
@@ -1208,6 +1208,8 @@ export const appRouter = router({
       })).query(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        // SECURITY: reject deactivated referrer accounts — they should not be able to read client data
+        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This referral account has been deactivated" });
         const clients = await getClientsByReferralCode(link.code);
         return clients.map((c) => ({
           id: c.id,
@@ -1227,6 +1229,7 @@ export const appRouter = router({
       })).query(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This referral account has been deactivated" });
         const clients = await getClientsByReferralCode(link.code);
         const stages: Record<string, number> = {};
         clients.forEach((c) => { stages[c.stage] = (stages[c.stage] || 0) + 1; });
@@ -1238,6 +1241,7 @@ export const appRouter = router({
       })).query(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This referral account has been deactivated" });
         return listReferrerMessages(link.id);
       }),
       reply: publicProcedure.input(z.object({
@@ -1248,6 +1252,7 @@ export const appRouter = router({
       })).mutation(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This referral account has been deactivated" });
         // SECURITY: verify the submissionId (if provided) actually belongs to this referrer.
         // Without this check, any referrer with a valid code could tag a message to any
         // client in the system, polluting another referrer's client thread.
@@ -1284,6 +1289,7 @@ export const appRouter = router({
       })).mutation(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This referral account has been deactivated" });
         await markAllReferrerMessagesRead(link.id);
         return { success: true };
       }),
@@ -1293,6 +1299,7 @@ export const appRouter = router({
       })).mutation(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
         if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This referral account has been deactivated" });
         // Pass referralLinkId so the DB helper verifies ownership before deleting
         await deleteReferrerMessage(input.messageId, link.id);
         return { success: true };
