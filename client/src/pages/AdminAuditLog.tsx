@@ -273,14 +273,24 @@ const PAGE_SIZE = 25;
 export default function AdminAuditLog() {
   const [page, setPage] = useState(1);
   const [actionFilter, setActionFilter] = useState<string>("all");
+  const [staffFilter, setStaffFilter] = useState<string>("all");
   const [searchInput, setSearchInput] = useState("");
   const [searchText, setSearchText] = useState("");
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"flat" | "session">("flat");
 
+  // Load staff list for the filter dropdown
+  const staffQuery = trpc.admin.staffList.useQuery();
+  const staffList = (staffQuery.data ?? []) as any[];
+
   const { data, isLoading, refetch } = trpc.auditLog.list.useQuery(
-    { page, pageSize: PAGE_SIZE, action: actionFilter !== "all" ? actionFilter : undefined },
+    {
+      page,
+      pageSize: PAGE_SIZE,
+      action: actionFilter !== "all" ? actionFilter : undefined,
+      actorId: staffFilter !== "all" ? parseInt(staffFilter) : undefined,
+    },
     { keepPreviousData: true } as any
   );
 
@@ -319,6 +329,7 @@ export default function AdminAuditLog() {
 
   function handleSearch() { setSearchText(searchInput); setPage(1); }
   function handleActionChange(val: string) { setActionFilter(val); setPage(1); }
+  function handleStaffChange(val: string) { setStaffFilter(val); setPage(1); setSearchText(""); setSearchInput(""); }
   function toggleRow(id: number) {
     setExpandedRows((prev) => {
       const next = new Set(prev);
@@ -372,10 +383,11 @@ export default function AdminAuditLog() {
         <Card>
           <CardContent className="pt-4 pb-4">
             <div className="flex flex-wrap gap-3 items-end">
+              {/* Action Type filter */}
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-slate-600">Action Type</label>
                 <Select value={actionFilter} onValueChange={handleActionChange}>
-                  <SelectTrigger className="w-56"><SelectValue placeholder="All actions" /></SelectTrigger>
+                  <SelectTrigger className="w-52"><SelectValue placeholder="All actions" /></SelectTrigger>
                   <SelectContent className="max-h-80">
                     <SelectItem value="all">All Actions</SelectItem>
                     {Object.entries(ACTION_GROUPS).map(([group, keys]) => (
@@ -391,11 +403,34 @@ export default function AdminAuditLog() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
-                <label className="text-xs font-medium text-slate-600">Search Staff / Client</label>
+
+              {/* Staff Member filter */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-slate-600">Staff Member</label>
+                <Select value={staffFilter} onValueChange={handleStaffChange}>
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder="All staff" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    <SelectItem value="all">All Staff</SelectItem>
+                    {staffList.map((s: any) => (
+                      <SelectItem key={s.id} value={String(s.id)}>
+                        <span className="flex items-center gap-2">
+                          <span>{s.name || s.email}</span>
+                          <span className="text-xs text-slate-400 capitalize">{s.role}</span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Client name search (client-side within current page) */}
+              <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+                <label className="text-xs font-medium text-slate-600">Search Client Name</label>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Staff name or client name…"
+                    placeholder="Client name…"
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
@@ -406,8 +441,33 @@ export default function AdminAuditLog() {
                   </Button>
                 </div>
               </div>
-              <div className="text-sm text-slate-500 self-end pb-1">
-                {total.toLocaleString()} event{total !== 1 ? "s" : ""}
+
+              {/* Active filter indicator + clear */}
+              <div className="flex items-end gap-2 pb-0.5">
+                {(staffFilter !== "all" || actionFilter !== "all" || searchText) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-500 hover:text-slate-700 gap-1 text-xs"
+                    onClick={() => {
+                      setStaffFilter("all");
+                      setActionFilter("all");
+                      setSearchText("");
+                      setSearchInput("");
+                      setPage(1);
+                    }}
+                  >
+                    <span>✕</span> Clear filters
+                  </Button>
+                )}
+                <div className="text-sm text-slate-500">
+                  {total.toLocaleString()} event{total !== 1 ? "s" : ""}
+                  {staffFilter !== "all" && (
+                    <span className="ml-1 text-xs text-green-700 font-medium">
+                      · {staffList.find((s: any) => String(s.id) === staffFilter)?.name || "Staff"}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </CardContent>
