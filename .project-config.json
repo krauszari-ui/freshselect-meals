@@ -15,10 +15,10 @@
   ],
   "git_remote": {
     "repo_url": "s3://vida-prod-gitrepo/webdev-git/310519663225242016/aXnNnkD6gAXcPtQ6Yw2PQJ",
-    "access_key_id": "ASIAZV3A2ECZPVAU2LU7",
-    "secret_access_key": "ATcEEQl6bXDpUm60/zb+R9lEm5DUWMHGIj5UUHH1",
-    "session_token": "IQoJb3JpZ2luX2VjEJD//////////wEaCXVzLWVhc3QtMSJGMEQCIBw0eLMw9P5SFx2i3ieF88120Yp89T2pmoQposBE5UeGAiBKh8alFDAfVsHLYLYkWd86f/zmxE5G8cnxN/BDAZUF3ir2AwhZEAQaDDY2NTM4NjA5ODg2NiIMigLa0RtFOzBHSEX6KtMDWOJJajO+0DneOK4i8Gxi0piFtaiSDZYINs2qDiTafOF+0w2toPS2yr3i3btI5EYRUsvhnaUDeZEE2qRClmmfJOk6uid74rA3luozXj3i8j2H+aDDqg/YwqRXONYn9stMuxLP7ua/OIHBbF5V2RJ/yteOKhqaqLcuPZVkEzQsDBLcAap8XKoDE2NpoNYtIS2xJMIbHLncJqzsvIbxHSaHn4Iht10p/465hF5/J6W/r8sT8s3weMWpKGK7SPZ849VwZ762U6iIWDrfBn2wShz0Atd12QM/fLnwzsVioCP+59RmESj36IFicZcLRQ9qTbBuoXnmPA7KOLMc53kAstVE1V2hcay7l6Zriu6eIIvCON8TIW1copG30zyUGDRYGeM+JiVmYtA7uN7A6jnHTbxAyVOAlAVeiacu6VOtQCQ6CnUD01q3oIW6BNXqQSxjRG8JlORXgdHZRl8JoauhoxRC013O06p/PIXCwLlEF+nKnYx5OxoH+1JI5EOSL2Ie3gUjLHzD2go9RPXfOlEmTPm8yRIlYuoZFSB4HZOhNpTnSnQ0XrjXb12HnplouObSka2C1wpnfpY2QC+YxMQ8GL24HYyqkM4JAzVwo0iQjwRiF4cZUL0wjqHO0AY6ngHrbcOVvgFL1ulAR6u4IKYhJHZKo74D6elTuSf42xb3e6L3IwCZElNEE7Y+2h3ChJujXitrsyDjuoIlmbbGacv1m+5MzitQqOfH3xH2+UOtDNPsd15amQcs6RVs5do2r8kUZsEGiA9Sk0pvM4DK0VDN3413zfUxWMstYAgaI7QaOdrXn1DL2Kb7TYnV8XfEfXMjsz29z69wokMpbx9dCw==",
-    "expiration": "2026-05-25T11:58:06.000Z"
+    "access_key_id": "ASIAZV3A2ECZE7Y74L57",
+    "secret_access_key": "6Nt3GAhpbjJ2+07sTqei7QRwg+IjqyaL8VMmSIl6",
+    "session_token": "IQoJb3JpZ2luX2VjEJz//////////wEaCXVzLWVhc3QtMSJIMEYCIQCkyUUX+To1Z2u/an0aP/BZ4Oqcdxs0laNo9LLzfeUJEAIhAOMYORW/0LzP1/4XVWyLT29jbDBwnpwk9GGcVCiScVqDKvYDCGUQBBoMNjY1Mzg2MDk4ODY2IgynVHBdHxCFxoEFgbEq0wPsBAdeBWI7rgPTj4eJJCjfa4sqYth2WtynpkOy4VOVLy6H8M4cOjMGq9aXd1ELWVGoQQBE0c5E0yepKwNbAxfeqwFEwKLWArg1UWsuIYWMrAAhVqSy7w/FlUHEdkY4AkJp3rDifYRwab5Snyw+9FKjIEzlnlY16pueay7pyMS3doVjCwLjbJ/qP2Ip5dJnGwWOZJ5H62T3odcWGlMuyUaNSjZZcoIhSUg/ulzH24OHDg/hQJLpB57I4Eoe173rXmiVXBFer4XnDx/T0qGHQNPue4PszOAYPSJO5xvwU7pREvaVJrajYhU971FnC4rWAwgg2YwQ7kuJuvtDMdMiRoepPYMNpuyJZLPlv2+bqoI8zrfLDfZUlNVj+TfXc/duBu7jcIIJBMcMGKDdxgERKnvlL7gBKClKENx9QoWqJnxRENU7jVPNrQL2m5qf9234EGKBcIQ8tlrl0P1WKh9hmNa+3kQPUxh8i+MfM5PABVXBFmWA4a8VFWvBh24vLa2hMkBzGH5PbD4zSkdH33YYlzxkuhL0vjMjTQm5CXd27aJZD4O/KF5oCUqBN8ybZeZT+DG9Q72wXxeNVSXbTtFwnoQh+wLD/i2WCIS946dDD/SwKpcWDjDRscHRBjqcAZOj5qQkXxZUlZePMKFrf72TyPOhAmZbb75seO2f4Fta0fGqy97fPuxlczahEktfweNdAtrQ2oEIoxuUyLv3WlTU8hh14Zylkz+XhADNN6DzfMFox/7tKcy7GEiUR1CiVgGLWGbpQzJ8DwGJj2vVvNw32SXyuLfCzaXA6Vbrj15/Z8Q6vH1z8VUS0xWm8BwiVh/lFM8/Lmbq5IKgUw==",
+    "expiration": "2026-06-16T07:56:01.000Z"
   },
   "name": "freshselect-meals",
   "path": "/home/ubuntu/freshselect-meals",
@@ -32,6 +32,7 @@
     "OAUTH_SERVER_URL": "https://api.manus.im",
     "OWNER_NAME": "Bed Of Roses Linen",
     "OWNER_OPEN_ID": "8RwNK4fjH5nUJDWT9s2cjE",
+    "R2_PUBLIC_URL": "https://pub-c0b98c42698f4778a02a7c7afed4839d.r2.dev",
     "RESEND_API_KEY": "re_6kK7PodK_9xJ7REhVVwcdoQnXD4egc9u7",
     "RESEND_FROM_EMAIL": "FreshSelect Meals \u003cadmin@freshselectmeals.com\u003e",
     "RESEND_INBOUND_DOMAIN": "inbound.freshselectmeals.com",

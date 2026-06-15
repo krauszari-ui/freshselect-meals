@@ -299,7 +299,11 @@ export const clientEmails = mysqlTable("clientEmails", {
   /** If this reply came in response to an email blast, the blast ID */
   blastId: int("blastId"),
   sentAt: timestamp("sentAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  idx_clientEmails_submissionId: index("idx_clientEmails_submissionId").on(t.submissionId),
+  idx_clientEmails_blastId: index("idx_clientEmails_blastId").on(t.blastId),
+  idx_clientEmails_resendMessageId: index("idx_clientEmails_resendMessageId").on(t.resendMessageId),
+}));
 export type ClientEmail = typeof clientEmails.$inferSelect;
 export type InsertClientEmail = typeof clientEmails.$inferInsert;
 
@@ -323,7 +327,9 @@ export const stageHistory = mysqlTable("stageHistory", {
   /** Optional note about the change */
   note: text("note"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  idx_stageHistory_submissionId: index("idx_stageHistory_submissionId").on(t.submissionId),
+}));
 export type StageHistory = typeof stageHistory.$inferSelect;
 export type InsertStageHistory = typeof stageHistory.$inferInsert;
 
@@ -346,7 +352,10 @@ export const notifications = mysqlTable("notifications", {
   /** false = unread (bold), true = read */
   isRead: boolean("isRead").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  idx_notifications_isRead: index("idx_notifications_isRead").on(t.isRead),
+  idx_notifications_createdAt: index("idx_notifications_createdAt").on(t.createdAt),
+}));
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
 
@@ -359,7 +368,10 @@ export const notificationReads = mysqlTable("notificationReads", {
   notificationId: int("notificationId").notNull(),
   userId: int("userId").notNull(),
   readAt: timestamp("readAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  idx_notificationReads_notificationId: index("idx_notificationReads_notificationId").on(t.notificationId),
+  idx_notificationReads_userId: index("idx_notificationReads_userId").on(t.userId),
+}));
 export type NotificationRead = typeof notificationReads.$inferSelect;
 
 /**
@@ -382,7 +394,10 @@ export const auditLogs = mysqlTable("auditLogs", {
   /** Session UUID — groups all actions from a single login session */
   sessionId: varchar("sessionId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, (t) => ({
+  idx_auditLogs_actorId: index("idx_auditLogs_actorId").on(t.actorId),
+  idx_auditLogs_createdAt: index("idx_auditLogs_createdAt").on(t.createdAt),
+}));
 
 /**
  * Scheduled email blasts — admin-created one-time emails sent to all active clients.
