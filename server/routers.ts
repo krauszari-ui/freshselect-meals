@@ -546,19 +546,23 @@ export const appRouter = router({
     sendReferrerNote: staffProcedure.input(z.object({
       submissionId: z.number(),
       message: z.string().min(1).max(2000),
-      attachmentUrl: z.string().optional(),
+      attachmentUrl: z.string().url().startsWith("https://").optional(),
     })).mutation(async ({ ctx, input }) => {
       const submission = await getSubmissionById(input.submissionId);
       if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
       if (!submission.referralSource) throw new TRPCError({ code: "BAD_REQUEST", message: "This client has no referrer" });
       const link = await getReferralLinkByCode(submission.referralSource);
       if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+      // SECURITY: only allow https:// attachment URLs — prevents javascript:/data: injection
+      const safeAttachmentUrl = input.attachmentUrl && input.attachmentUrl.startsWith("https://")
+        ? input.attachmentUrl
+        : null;
       const id = await createReferrerMessage({
         referralLinkId: link.id,
         submissionId: input.submissionId,
         senderId: ctx.user.id,
         message: input.message,
-        attachmentUrl: input.attachmentUrl ?? null,
+        attachmentUrl: safeAttachmentUrl,
       });
       return { success: true, id };
     }),
@@ -1506,6 +1510,14 @@ export const appRouter = router({
         }
         timestamps.push(now);
         pageViewRateMap.set(userId, timestamps);
+        // Memory-leak guard: evict entries for users who have had no page views in the last
+        // 5 minutes. Without this, the Map grows unbounded as new user IDs accumulate.
+        if (pageViewRateMap.size > 500) {
+          const evictBefore = now - 5 * 60_000;
+          for (const [uid, ts] of Array.from(pageViewRateMap.entries())) {
+            if (ts.length === 0 || ts[ts.length - 1] < evictBefore) pageViewRateMap.delete(uid);
+          }
+        }
         const sessionId = (ctx.req as any).cookies?.[SESSION_ID_COOKIE] ?? null;
         await logAudit({
           actorId: ctx.user.id,

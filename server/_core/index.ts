@@ -205,7 +205,10 @@ async function startServer() {
 
     } catch (err) {
       console.error("[Inbound Email] Error processing webhook:", err);
-      res.status(200).json({ ok: true }); // Always 200 to prevent Resend retries
+      // Return 500 so Resend retries the delivery — a client reply must not be silently lost
+      // due to a transient DB error. Resend will retry with exponential backoff.
+      // Only return 200 for expected non-error skips (no submission match, wrong event type, etc.)
+      res.status(500).json({ ok: false, error: "internal_error" });
     }
   });
 
@@ -360,7 +363,15 @@ async function startServer() {
         return;
       }
 
-      await updateEmailBlastStatus(blastId, "sending");
+      // ATOMIC CLAIM: only proceed if we successfully transition scheduled->sending.
+      // If two cron invocations race, only the first UPDATE that finds blastStatus='scheduled'
+      // will get affectedRows=1. The second will get 0 and bail out, preventing a double-send.
+      const claimed = await updateEmailBlastStatus(blastId, "sending", undefined, "scheduled");
+      if (!claimed) {
+        console.log(`[EmailBlast] Blast ${blastId} already claimed by another invocation — skipping`);
+        res.json({ ok: true, skipped: true, reason: "Already claimed" });
+        return;
+      }
 
        const clients = await getClientEmailsForBlast(blast.filterStatus);
       let sentCount = 0;
