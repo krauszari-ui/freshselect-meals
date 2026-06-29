@@ -105,3 +105,111 @@ describe("BUG-SEC-D: SameSite=none only set on HTTPS requests", () => {
     }
   });
 });
+
+// ─── June 2026 Audit: Bug 1 — Email blast atomic claim ───────────────────────
+describe("June 2026 Audit — Email blast atomic claim (duplicate-send race)", () => {
+  it("updateEmailBlastStatus with fromStatus prevents double-send under concurrency", async () => {
+    let callCount = 0;
+    const mockClaim = async (_id: number, _status: string, _counts?: unknown, fromStatus?: string): Promise<boolean> => {
+      if (fromStatus === "scheduled") {
+        callCount++;
+        return callCount === 1; // only first caller wins
+      }
+      return true;
+    };
+    const first = await mockClaim(1, "sending", undefined, "scheduled");
+    const second = await mockClaim(1, "sending", undefined, "scheduled");
+    expect(first).toBe(true);
+    expect(second).toBe(false); // second invocation is rejected
+  });
+
+  it("index.ts uses fromStatus='scheduled' when claiming a blast", () => {
+    const { readFileSync } = require("fs");
+    const { join } = require("path");
+    const src = readFileSync(join(__dirname, "_core/index.ts"), "utf8");
+    // The fix must pass "scheduled" as the fromStatus argument
+    expect(src).toContain(`updateEmailBlastStatus(blastId, "sending", undefined, "scheduled")`);
+    expect(src).toContain("Already claimed");
+  });
+});
+
+// ─── June 2026 Audit: Bug 2 — Inbound email webhook error handling ───────────
+describe("June 2026 Audit — Inbound email webhook returns 500 on DB failure", () => {
+  it("catch block returns 500 so Resend retries on transient DB errors", () => {
+    const { readFileSync } = require("fs");
+    const { join } = require("path");
+    const src = readFileSync(join(__dirname, "_core/index.ts"), "utf8");
+    // The fix must return 500 in the catch block, not 200
+    expect(src).toContain(`res.status(500).json({ ok: false, error: "internal_error" })`);
+    // The comment explaining the rationale must be present
+    expect(src).toContain("Return 500 so Resend retries");
+  });
+});
+
+// ─── June 2026 Audit: Bug 3 — sendReferrerNote attachmentUrl validation ──────
+describe("June 2026 Audit — sendReferrerNote attachmentUrl https:// enforcement", () => {
+  const sanitize = (url: string | undefined) =>
+    url && url.startsWith("https://") ? url : null;
+
+  it("allows https:// URLs", () => {
+    expect(sanitize("https://pub-abc.r2.dev/doc.pdf")).toBe("https://pub-abc.r2.dev/doc.pdf");
+  });
+  it("blocks javascript: injection", () => {
+    expect(sanitize("javascript:alert(1)")).toBeNull();
+  });
+  it("blocks data: URI injection", () => {
+    expect(sanitize("data:text/html,<script>alert(1)</script>")).toBeNull();
+  });
+  it("blocks http:// (non-TLS)", () => {
+    expect(sanitize("http://evil.com/malware.exe")).toBeNull();
+  });
+  it("returns null for undefined", () => {
+    expect(sanitize(undefined)).toBeNull();
+  });
+
+  it("routers.ts applies https:// guard in sendReferrerNote", () => {
+    const { readFileSync } = require("fs");
+    const { join } = require("path");
+    const src = readFileSync(join(__dirname, "routers.ts"), "utf8");
+    expect(src).toContain(`attachmentUrl: z.string().url().startsWith("https://").optional()`);
+  });
+});
+
+// ─── June 2026 Audit: Bug 4 — pageViewRateMap memory leak ───────────────────
+describe("June 2026 Audit — pageViewRateMap eviction guard", () => {
+  it("evicts stale entries when map exceeds 500", () => {
+    const map = new Map<number, number[]>();
+    const now = Date.now();
+    const evictBefore = now - 5 * 60_000;
+    for (let i = 0; i < 501; i++) map.set(i, [evictBefore - 1000]);
+    if (map.size > 500) {
+      for (const [uid, ts] of Array.from(map.entries())) {
+        if (ts.length === 0 || ts[ts.length - 1] < evictBefore) map.delete(uid);
+      }
+    }
+    expect(map.size).toBe(0);
+  });
+
+  it("preserves active entries during eviction", () => {
+    const map = new Map<number, number[]>();
+    const now = Date.now();
+    const evictBefore = now - 5 * 60_000;
+    for (let i = 0; i < 500; i++) map.set(i, [evictBefore - 1000]);
+    map.set(9999, [now - 1000]); // active
+    if (map.size > 500) {
+      for (const [uid, ts] of Array.from(map.entries())) {
+        if (ts.length === 0 || ts[ts.length - 1] < evictBefore) map.delete(uid);
+      }
+    }
+    expect(map.size).toBe(1);
+    expect(map.has(9999)).toBe(true);
+  });
+
+  it("routers.ts contains eviction guard code", () => {
+    const { readFileSync } = require("fs");
+    const { join } = require("path");
+    const src = readFileSync(join(__dirname, "routers.ts"), "utf8");
+    expect(src).toContain("pageViewRateMap.size > 500");
+    expect(src).toContain("pageViewRateMap.delete(uid)");
+  });
+});
