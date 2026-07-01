@@ -46,6 +46,7 @@ import { sendAdminNotification, sendApplicantConfirmation, sendEmail } from "./e
 import { generateAttestationPdf } from "./generateAttestationPdf";
 import { storagePut } from "./storage";
 import { z } from "zod";
+import { parse as parseCookieHeader } from "cookie";
 
 // Admin-only guard middleware
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -162,7 +163,7 @@ export const appRouter = router({
       ctx.res.clearCookie(SESSION_ID_COOKIE, { ...cookieOptions, maxAge: -1 });
       if (ctx.user) {
         const ip = (ctx.req as any).ip ?? ctx.req.socket?.remoteAddress ?? "unknown";
-        const sessionId = (ctx.req as any).cookies?.[SESSION_ID_COOKIE] ?? null;
+        const sessionId = parseCookieHeader(ctx.req.headers.cookie ?? "")?.[SESSION_ID_COOKIE] ?? null;
         await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "logout", details: { ip }, sessionId });
       }
       return { success: true } as const;
@@ -1557,7 +1558,7 @@ export const appRouter = router({
             if (ts.length === 0 || ts[ts.length - 1] < evictBefore) pageViewRateMap.delete(uid);
           }
         }
-        const sessionId = (ctx.req as any).cookies?.[SESSION_ID_COOKIE] ?? null;
+        const sessionId = parseCookieHeader(ctx.req.headers.cookie ?? "")?.[SESSION_ID_COOKIE] ?? null;
         await logAudit({
           actorId: ctx.user.id,
           actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
@@ -1586,8 +1587,8 @@ export const appRouter = router({
         if (target.role === "super_admin") throw new TRPCError({ code: "FORBIDDEN", message: "Cannot impersonate a super admin" });
         if (!target.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "Cannot impersonate a deactivated account" });
         // Save the current admin's session token into the impersonation cookie
-        const cookies = (ctx.req as any).cookies ?? {};
-        const originalToken = cookies[COOKIE_NAME];
+        const parsedCookies = parseCookieHeader(ctx.req.headers.cookie ?? "");
+        const originalToken = parsedCookies[COOKIE_NAME];
         if (!originalToken) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "No active session to preserve" });
         const cookieOptions = getSessionCookieOptions(ctx.req);
         const SESSION_2H_MS = 2 * 60 * 60 * 1000;
@@ -1608,8 +1609,8 @@ export const appRouter = router({
     // Stop impersonation and restore original admin session
     stop: protectedProcedure
       .mutation(async ({ ctx }) => {
-        const cookies = (ctx.req as any).cookies ?? {};
-        const originalToken = cookies[IMPERSONATION_COOKIE];
+        const parsedCookies = parseCookieHeader(ctx.req.headers.cookie ?? "");
+        const originalToken = parsedCookies[IMPERSONATION_COOKIE];
         if (!originalToken) throw new TRPCError({ code: "BAD_REQUEST", message: "No active impersonation session" });
         // Verify the original token is still valid
         const originalSession = await sdk.verifySession(originalToken);
@@ -1631,8 +1632,8 @@ export const appRouter = router({
     // Check if current session is an impersonation
     status: protectedProcedure
       .query(async ({ ctx }) => {
-        const cookies = (ctx.req as any).cookies ?? {};
-        const originalToken = cookies[IMPERSONATION_COOKIE];
+        const parsedCookies = parseCookieHeader(ctx.req.headers.cookie ?? "");
+        const originalToken = parsedCookies[IMPERSONATION_COOKIE];
         if (!originalToken) return { isImpersonating: false, originalAdminName: null };
         const originalSession = await sdk.verifySession(originalToken);
         if (!originalSession) return { isImpersonating: false, originalAdminName: null };
