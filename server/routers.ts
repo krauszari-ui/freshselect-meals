@@ -418,19 +418,20 @@ export const appRouter = router({
     // Assessor: list only assessment-completed clients
     assessorStats: assessorProcedure.query(async ({ ctx }) => {
       // Returns scoped stats for the logged-in assessor (admins see all)
+      // listSubmissions returns { rows, total, ... } — use .total for accurate counts
       const assessorFilter = (ctx.user.role === "admin" || ctx.user.role === "super_admin") ? undefined : ctx.user.id;
       const terminalStages = ["assessment_recorded", "missing_information", "not_eligible"];
-      const [pendingRows, recordedRows, missingRows, notEligibleRows] = await Promise.all([
-        listSubmissions({ assessmentCompleted: true, excludeStages: terminalStages, assessorId: assessorFilter, pageSize: 1000 }),
-        listSubmissions({ assessmentCompleted: true, stage: "assessment_recorded", assessorId: assessorFilter, pageSize: 1000 }),
-        listSubmissions({ assessmentCompleted: true, stage: "missing_information", assessorId: assessorFilter, pageSize: 1000 }),
-        listSubmissions({ assessmentCompleted: true, stage: "not_eligible", assessorId: assessorFilter, pageSize: 1000 }),
+      const [pendingResult, recordedResult, missingResult, notEligibleResult] = await Promise.all([
+        listSubmissions({ assessmentCompleted: true, excludeStages: terminalStages, assessorId: assessorFilter, pageSize: 1, page: 1 }),
+        listSubmissions({ assessmentCompleted: true, stage: "assessment_recorded", assessorId: assessorFilter, pageSize: 1, page: 1 }),
+        listSubmissions({ assessmentCompleted: true, stage: "missing_information", assessorId: assessorFilter, pageSize: 1, page: 1 }),
+        listSubmissions({ assessmentCompleted: true, stage: "not_eligible", assessorId: assessorFilter, pageSize: 1, page: 1 }),
       ]);
-      const toArr = (r: any) => Array.isArray(r) ? r : (r as any).rows ?? [];
-      const pending = toArr(pendingRows).length;
-      const recorded = toArr(recordedRows).length;
-      const missing = toArr(missingRows).length;
-      const notEligible = toArr(notEligibleRows).length;
+      const getTotal = (r: any) => typeof r?.total === "number" ? r.total : (Array.isArray(r) ? r.length : 0);
+      const pending = getTotal(pendingResult);
+      const recorded = getTotal(recordedResult);
+      const missing = getTotal(missingResult);
+      const notEligible = getTotal(notEligibleResult);
       return { total: pending + recorded + missing + notEligible, pending, recorded, missing, notEligible };
     }),
 
