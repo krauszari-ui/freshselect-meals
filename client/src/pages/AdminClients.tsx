@@ -416,6 +416,13 @@ export default function AdminClients() {
   const searchParams = useSearch();
   const [, navigate] = useLocation();
 
+  // SECURITY: Redirect assessors away from the full client list to their scoped portal
+  useEffect(() => {
+    if (user && user.role === "assessor") {
+      navigate("/assessor", { replace: true });
+    }
+  }, [user, navigate]);
+
   // ─── URL-backed filter helpers ────────────────────────────────────────────
   // All filter state lives in the URL query string so the browser back button
   // naturally restores the exact filter state when returning from a client page.
