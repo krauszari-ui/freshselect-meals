@@ -473,7 +473,14 @@ export const appRouter = router({
       sortDir: z.enum(["asc", "desc"]).optional(),
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional(),
-    })).query(async ({ input }) => listSubmissions(input)),
+    })).query(async ({ input, ctx }) => {
+      // SECURITY: Assessors can only see clients assigned to them — enforce server-side
+      // regardless of what the frontend passes. This cannot be bypassed via API.
+      if (ctx.user.role === "assessor") {
+        return listSubmissions({ ...input, assessorId: ctx.user.id });
+      }
+      return listSubmissions(input);
+    }),
 
     updatePriority: editProcedure.input(z.object({
       id: z.number(),
@@ -545,9 +552,13 @@ export const appRouter = router({
       return getSubmissionsByIds(input.ids);
     }),
 
-    getById: staffProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    getById: staffProcedure.input(z.object({ id: z.number() })).query(async ({ input, ctx }) => {
       const submission = await getSubmissionById(input.id);
       if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      // SECURITY: Assessors can only view clients assigned to them
+      if (ctx.user.role === "assessor" && submission.assessorId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+      }
       return submission;
     }),
     // ─── Referrer Notes (per client) ──────────────────────────────────────
