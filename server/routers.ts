@@ -36,6 +36,7 @@ import {
   logAudit, getAuditLogs, getAuditLogsBySession,
   createEmailBlast, listEmailBlasts, cancelEmailBlast,
   getEmailBlastById, getBlastReplies, updateEmailBlastStatus,
+  listAssessors, updateSubmissionAssessor,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -419,7 +420,7 @@ export const appRouter = router({
       tab: z.enum(["pending", "recorded", "missing_information", "not_eligible"]).optional(),
       priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
       newApplicant: z.enum(["new", "transfer"]).optional(),
-    })).query(async ({ input }) => {
+    })).query(async ({ input, ctx }) => {
       const tab = input.tab ?? "pending";
       // "pending": assessment completed, not yet categorised into a terminal assessor stage
       // "recorded": stage = assessment_recorded
@@ -431,6 +432,8 @@ export const appRouter = router({
         tab === "recorded" ? "assessment_recorded" :
         tab === "missing_information" ? "missing_information" :
         "not_eligible";
+      // Scope to only clients assigned to this assessor (admins see all)
+      const assessorFilter = (ctx.user.role === "admin" || ctx.user.role === "super_admin") ? undefined : ctx.user.id;
       const result = await listSubmissions({
         search: input.search,
         page: input.page,
@@ -439,6 +442,7 @@ export const appRouter = router({
         stage: stageFilter,
         priority: input.priority,
         newApplicant: input.newApplicant,
+        assessorId: assessorFilter,
         // For pending: exclude all terminal assessor stages so completed ones don't show
         ...(tab === "pending" ? { excludeStages: terminalStages } : {}),
       });
@@ -458,6 +462,7 @@ export const appRouter = router({
       borough: z.string().optional(),
       assignedTo: z.number().optional(),
       intakeRep: z.number().optional(),
+      assessorId: z.number().optional(),
       referralSource: z.string().optional(),
       assessmentCompleted: z.boolean().optional(),
       zipcode: z.string().optional(),
@@ -692,6 +697,38 @@ export const appRouter = router({
       const existing = await getSubmissionById(input.id);
       await updateSubmissionAssignment(input.id, input.assignedTo, input.intakeRep);
       await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "assignment_changed", clientId: input.id, clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined, details: { assignedTo: input.assignedTo, intakeRep: input.intakeRep } });
+      return { success: true };
+    }),
+    // ─── Assessor Assignment ─────────────────────────────────────────────────
+    listAssessors: staffProcedure.query(async () => {
+      return listAssessors();
+    }),
+    assignAssessor: editProcedure.input(z.object({
+      submissionId: z.number(),
+      assessorId: z.number().nullable(),
+    })).mutation(async ({ input, ctx }) => {
+      const existing = await getSubmissionById(input.submissionId);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      const previousAssessorId = (existing as any).assessorId ?? null;
+      await updateSubmissionAssessor(input.submissionId, input.assessorId);
+      await logAudit({
+        actorId: ctx.user.id,
+        actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
+        action: "assessor_assigned",
+        clientId: input.submissionId,
+        clientName: `${existing.firstName} ${existing.lastName}`,
+        details: { previousAssessorId, newAssessorId: input.assessorId },
+      });
+      // Notify the newly assigned assessor (if assigning, not unassigning)
+      if (input.assessorId) {
+        await createNotification({
+          type: "assessor_assigned",
+          title: "New client assigned to you",
+          body: `${existing.firstName} ${existing.lastName} (${existing.medicaidId}) has been assigned to you for assessment.`,
+          link: `/assessor`,
+          submissionId: input.submissionId,
+        });
+      }
       return { success: true };
     }),
 

@@ -739,3 +739,16 @@
 - [x] Filters reset when switching tabs
 - [x] "Clear filters" button shown when any filter is active
 - [x] Tab count badges remain unfiltered (always show total)
+
+## Assessor Assignment Feature
+- [x] DB migration: add assessorId (nullable FK to users) column to submissions table
+- [x] Backend: add admin.assignAssessor tRPC procedure (editProcedure, validates assessor role)
+- [x] Backend: add admin.listAssessors procedure to fetch all active assessor-role users
+- [x] Backend: update assessor portal myClients query to filter by assessorId = ctx.user.id
+- [x] Backend: send in-app notification to assessor when assigned a client
+- [x] Backend: audit log entry for assessor assignment/reassignment
+- [x] Frontend: assessor dropdown on client detail page assignment section
+- [x] Frontend: reassignment warning dialog when client already has an assessor assigned
+- [x] Frontend: assessor column on admin client list table
+- [x] Frontend: filter by assessor on admin client list
+- [x] Frontend: assessor portal scoped to only show assigned clients

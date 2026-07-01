@@ -444,6 +444,7 @@ export default function AdminClients() {
   const programFilter = getParam("program");
   const workerFilter = getParam("worker");
   const repFilter = getParam("rep");
+  const assessorFilter = getParam("assessor");
   const referralFilter = getParam("referral");
   const applicantTypeFilter = getParam("applicantType");
   const assessmentCompletedFilter = getParam("assessmentCompleted");
@@ -468,6 +469,7 @@ export default function AdminClients() {
   const setProgramFilter = (v: string) => setParam("program", v);
   const setWorkerFilter = (v: string) => setParam("worker", v);
   const setRepFilter = (v: string) => setParam("rep", v);
+  const setAssessorFilter = (v: string) => setParam("assessor", v);
   const setReferralFilter = (v: string) => setParam("referral", v);
   const setApplicantTypeFilter = (v: string) => setParam("applicantType", v);
   const setAssessmentCompletedFilter = (v: string) => setParam("assessmentCompleted", v);
@@ -567,6 +569,7 @@ export default function AdminClients() {
     newApplicant: applicantTypeFilter !== "all" ? (applicantTypeFilter as "new" | "transfer") : undefined,
     assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
     intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
+    assessorId: assessorFilter !== "all" ? parseInt(assessorFilter) : undefined,
     referralSource: referralFilter !== "all" ? referralFilter : undefined,
       assessmentCompleted: dbAssessmentCompleted,
       zipcode: zipcodeFilter !== "all" ? zipcodeFilter : undefined,
@@ -583,6 +586,7 @@ export default function AdminClients() {
   const fc = filterCountsQuery.data as any;
 
   const staffQuery = trpc.admin.staffList.useQuery();
+  const { data: assessorList } = trpc.admin.listAssessors.useQuery();
   const referralLinksQuery = trpc.admin.referrals.list.useQuery();
   const referralLinks = (referralLinksQuery.data ?? []) as any[];
 
@@ -768,7 +772,7 @@ export default function AdminClients() {
   const totalPages = listData?.totalPages ?? 1;
   const totalCount = listData?.total ?? 0;
   const totalMembers = listData?.totalMembers ?? 0;
-  const hasActiveFilter = stageFilter !== "all" || neighborhoodFilter !== "all" || vendorFilter !== "all" || programFilter !== "all" || applicantTypeFilter !== "all" || languageFilter !== "all" || boroughFilter !== "all" || workerFilter !== "all" || repFilter !== "all" || referralFilter !== "all" || assessmentCompletedFilter !== "all" || zipcodeFilter !== "all" || priorityFilter !== "all" || debouncedSearch.trim() !== "";
+  const hasActiveFilter = stageFilter !== "all" || neighborhoodFilter !== "all" || vendorFilter !== "all" || programFilter !== "all" || applicantTypeFilter !== "all" || languageFilter !== "all" || boroughFilter !== "all" || workerFilter !== "all" || repFilter !== "all" || assessorFilter !== "all" || referralFilter !== "all" || assessmentCompletedFilter !== "all" || zipcodeFilter !== "all" || priorityFilter !== "all" || debouncedSearch.trim() !== "";
 
   const clearAllFilters = () => {
     setSearchInput("");
@@ -1021,6 +1025,20 @@ export default function AdminClients() {
                 ))}
               </SelectContent>
             </Select>
+            {/* Assessor */}
+            {(assessorList ?? []).length > 0 && (
+              <Select value={assessorFilter} onValueChange={(v) => { setAssessorFilter(v); }}>
+                <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-indigo-200 text-indigo-700">
+                  <SelectValue placeholder="Assessor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Assessors</SelectItem>
+                  {(assessorList ?? []).map((a: any) => (
+                    <SelectItem key={a.id} value={String(a.id)}>{a.name || a.email}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             {/* Referral Source */}
             <Select value={referralFilter} onValueChange={(v) => { setReferralFilter(v); }}>
@@ -1169,6 +1187,7 @@ export default function AdminClients() {
                     </th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Priority</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Type</th>
+                    <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Assessor</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Stage</th>
                   </tr>
                 </thead>
@@ -1248,6 +1267,11 @@ export default function AdminClients() {
                             const { label, cls } = cfg[p] ?? cfg.normal;
                             return <Badge className={`${cls} text-[11px] font-medium border-0`}>{label}</Badge>;
                           })()}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-indigo-700">
+                          {client.assessorId
+                            ? ((assessorList ?? []).find((a: any) => a.id === client.assessorId)?.name || `#${client.assessorId}`)
+                            : <span className="text-slate-300">—</span>}
                         </td>
                         <td className="px-4 py-3">
                           <Badge className={`${stageInfo.bg} ${stageInfo.text} text-[11px] font-medium border-0`}>

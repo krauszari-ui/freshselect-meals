@@ -137,6 +137,7 @@ export interface ListSubmissionsOptions {
   assessmentCompleted?: boolean;
   zipcode?: string;
   priority?: string;
+  assessorId?: number;
   sortDir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
@@ -145,7 +146,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, excludeStage, excludeStages, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, sortDir = "desc", page = 1, pageSize = 20 } = opts;
+  const { search, status, stage, excludeStage, excludeStages, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, assessorId, sortDir = "desc", page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -174,6 +175,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   else if (assessmentCompleted === false) conditions.push(sql`${submissions.assessmentCompletedAt} IS NULL`);
   if (zipcode && zipcode !== "all") conditions.push(eq(submissions.zipcode, zipcode));
   if (priority && priority !== "all") conditions.push(eq(submissions.priority, priority as Submission["priority"]));
+  if (assessorId) conditions.push(eq(submissions.assessorId, assessorId));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const [rows, countResult, membersResult] = await Promise.all([
@@ -185,6 +187,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
       zipcode: submissions.zipcode, newApplicant: submissions.newApplicant, program: submissions.program,
       language: submissions.language, additionalMembersCount: submissions.additionalMembersCount,
       assignedTo: submissions.assignedTo, intakeRep: submissions.intakeRep, referralSource: submissions.referralSource,
+      assessorId: submissions.assessorId,
       createdAt: submissions.createdAt, updatedAt: submissions.updatedAt,
       assessmentCompletedAt: submissions.assessmentCompletedAt,
       transferAgencyName: submissions.transferAgencyName,
@@ -1260,4 +1263,25 @@ export async function getEmailBlastById(id: number): Promise<typeof emailBlasts.
   if (!db) return null;
   const rows = await db.select().from(emailBlasts).where(eq(emailBlasts.id, id)).limit(1);
   return rows[0] ?? null;
+}
+
+// ─── Assessor Assignment helpers ──────────────────────────────────────────────
+/** Returns all active users with the assessor role (for dropdown population). */
+export async function listAssessors() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select({
+    id: users.id,
+    name: users.name,
+    email: users.email,
+    role: users.role,
+    isActive: users.isActive,
+  }).from(users).where(and(eq(users.role, "assessor"), eq(users.isActive, 1))).orderBy(users.name);
+}
+
+/** Assign (or unassign) an assessor to a client. Pass null to remove assignment. */
+export async function updateSubmissionAssessor(submissionId: number, assessorId: number | null): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(submissions).set({ assessorId: assessorId ?? undefined }).where(eq(submissions.id, submissionId));
 }
