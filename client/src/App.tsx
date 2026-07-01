@@ -26,6 +26,7 @@ import AssessorPortal from "./pages/AssessorPortal";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import AdminEmailBlast from "./pages/AdminEmailBlast";
+import { ImpersonationBanner } from "./components/ImpersonationBanner";
 
 function Router() {
   usePageViewLogger();
@@ -75,6 +76,7 @@ function App() {
       <ThemeProvider defaultTheme="light" switchable={true}>
         <TooltipProvider>
           <Toaster />
+          <ImpersonationBanner />
           <Router />
         </TooltipProvider>
       </ThemeProvider>

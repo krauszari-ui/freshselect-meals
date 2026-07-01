@@ -37,6 +37,7 @@ import {
   createEmailBlast, listEmailBlasts, cancelEmailBlast,
   getEmailBlastById, getBlastReplies, updateEmailBlastStatus,
   listAssessors, updateSubmissionAssessor,
+  getUserById,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -149,6 +150,7 @@ const submissionInputSchema = z.object({
 }).passthrough();
 
 const SESSION_ID_COOKIE = "admin_session_id";
+const IMPERSONATION_COOKIE = "impersonation_original_session";
 
 export const appRouter = router({
   system: systemRouter,
@@ -1573,6 +1575,75 @@ export const appRouter = router({
       }),
   }),
 
+  // ─── Impersonation router ─────────────────────────────────────────────────
+  impersonate: router({
+    // Start impersonating a staff member — super_admin only
+    start: superAdminProcedure
+      .input(z.object({ targetUserId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const target = await getUserById(input.targetUserId);
+        if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+        if (target.role === "super_admin") throw new TRPCError({ code: "FORBIDDEN", message: "Cannot impersonate a super admin" });
+        if (!target.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "Cannot impersonate a deactivated account" });
+        // Save the current admin's session token into the impersonation cookie
+        const cookies = (ctx.req as any).cookies ?? {};
+        const originalToken = cookies[COOKIE_NAME];
+        if (!originalToken) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "No active session to preserve" });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        const SESSION_2H_MS = 2 * 60 * 60 * 1000;
+        // Issue a short-lived session token for the target user
+        const impersonationToken = await sdk.createSessionToken(target.openId, { name: target.name || target.email || "", expiresInMs: SESSION_2H_MS });
+        // Store original admin session in impersonation cookie
+        ctx.res.cookie(IMPERSONATION_COOKIE, originalToken, { ...cookieOptions, maxAge: SESSION_2H_MS });
+        // Replace main session with impersonation session
+        ctx.res.cookie(COOKIE_NAME, impersonationToken, { ...cookieOptions, maxAge: SESSION_2H_MS });
+        await logAudit({
+          actorId: ctx.user.id,
+          actorName: ctx.user.name ?? ctx.user.email ?? `User #${ctx.user.id}`,
+          action: "impersonation_start",
+          details: { targetUserId: target.id, targetName: target.name, targetEmail: target.email, targetRole: target.role },
+        });
+        return { success: true, targetName: target.name || target.email, targetRole: target.role };
+      }),
+    // Stop impersonation and restore original admin session
+    stop: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        const cookies = (ctx.req as any).cookies ?? {};
+        const originalToken = cookies[IMPERSONATION_COOKIE];
+        if (!originalToken) throw new TRPCError({ code: "BAD_REQUEST", message: "No active impersonation session" });
+        // Verify the original token is still valid
+        const originalSession = await sdk.verifySession(originalToken);
+        if (!originalSession) throw new TRPCError({ code: "UNAUTHORIZED", message: "Original admin session has expired. Please log in again." });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        const SESSION_8H_MS = 8 * 60 * 60 * 1000;
+        // Restore original admin session
+        ctx.res.cookie(COOKIE_NAME, originalToken, { ...cookieOptions, maxAge: SESSION_8H_MS });
+        // Clear the impersonation cookie
+        ctx.res.clearCookie(IMPERSONATION_COOKIE, { ...cookieOptions, maxAge: -1 });
+        await logAudit({
+          actorId: ctx.user.id,
+          actorName: ctx.user.name ?? ctx.user.email ?? `User #${ctx.user.id}`,
+          action: "impersonation_stop",
+          details: { impersonatedUserId: ctx.user.id },
+        });
+        return { success: true };
+      }),
+    // Check if current session is an impersonation
+    status: protectedProcedure
+      .query(async ({ ctx }) => {
+        const cookies = (ctx.req as any).cookies ?? {};
+        const originalToken = cookies[IMPERSONATION_COOKIE];
+        if (!originalToken) return { isImpersonating: false, originalAdminName: null };
+        const originalSession = await sdk.verifySession(originalToken);
+        if (!originalSession) return { isImpersonating: false, originalAdminName: null };
+        return {
+          isImpersonating: true,
+          originalAdminName: originalSession.name || "Admin",
+          currentUserName: ctx.user.name || ctx.user.email,
+          currentUserRole: ctx.user.role,
+        };
+      }),
+  }),
   // ─── Email Blast router ──────────────────────────────────────────────────
   emailBlast: router({
     list: superAdminProcedure.query(async () => {
