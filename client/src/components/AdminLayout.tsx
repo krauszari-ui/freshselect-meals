@@ -146,7 +146,7 @@ function SidebarContent({ navItems, location, user, unreadCount, onClose, onLogo
 // ─── Main Layout ──────────────────────────────────────────────────────────────
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, loading, isAuthenticated, logout } = useAuth();
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Close sidebar on route change (mobile nav)
@@ -173,7 +173,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return () => { document.body.style.overflow = ""; };
   }, [sidebarOpen]);
 
-  // Poll unread notification count every 30 seconds (assessors don't see the bell)
+  // Redirect assessors to their own portal — useEffect avoids render-phase navigation blink
+  useEffect(() => {
+    if (!loading && user && user.role === "assessor") {
+      navigate("/assessor");
+    }
+  }, [loading, user, navigate]);
+
+  // Poll unread notification count every 30 seconds
   const { data: unreadData } = trpc.notifications.unreadCount.useQuery(undefined, {
     refetchInterval: 30_000,
     enabled: !!user && user.role !== "assessor",
@@ -193,11 +200,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return null;
   }
 
-  // Assessors must never see the admin panel — redirect them to their own portal
-  if (user.role === "assessor") {
-    window.location.replace("/assessor");
-    return null;
-  }
+  // Assessors: return null while the useEffect redirect fires
+  if (user.role === "assessor") return null;
 
   const staffRoles = ["super_admin", "admin", "worker", "viewer", "assessor"];
   if (!staffRoles.includes(user.role)) {
