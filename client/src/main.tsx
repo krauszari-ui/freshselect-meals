@@ -8,7 +8,20 @@ import App from "./App";
 import { getLoginUrl } from "./const";
 import "./index.css";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Disable refetch on window focus — prevents UI flash when switching tabs or
+      // clicking back to the browser window, which was a primary cause of blinking.
+      refetchOnWindowFocus: false,
+      // Keep data fresh for 30 seconds before considering it stale.
+      // Prevents unnecessary re-fetches on every render/mount.
+      staleTime: 30_000,
+      // Retry failed queries only once to avoid hammering the server.
+      retry: 1,
+    },
+  },
+});
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;

@@ -9,7 +9,7 @@ import {
   Loader2, CheckCircle2, XCircle, Search, LogOut, ClipboardList,
   Clock, FolderCheck, AlertCircle, Ban, Users, TrendingUp, BarChart3,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import {
@@ -63,7 +63,8 @@ const TAB_CONFIG: Record<Tab, { label: string; icon: React.ReactNode; emptyTitle
 export default function AssessorPortal() {
   const { user, loading, logout } = useAuth();
   const [, navigate] = useLocation();
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState(""); // debounced value used for API calls
   const [activeTab, setActiveTab] = useState<Tab>("pending");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [newApplicantFilter, setNewApplicantFilter] = useState<string>("all");
@@ -88,6 +89,12 @@ export default function AssessorPortal() {
   const [notEligibleReason, setNotEligibleReason] = useState("");
 
   const utils = trpc.useUtils();
+
+  // Debounce search input — wait 400ms after typing stops before firing API call
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   // Scoped stats for this assessor
   const { data: stats } = trpc.admin.assessorStats.useQuery(undefined, { enabled: !!user });
@@ -298,7 +305,7 @@ export default function AssessorPortal() {
             {(Object.entries(TAB_CONFIG) as [Tab, typeof TAB_CONFIG[Tab]][]).map(([key, cfg]) => (
               <button
                 key={key}
-                onClick={() => { setActiveTab(key); setSearch(""); setPriorityFilter("all"); setNewApplicantFilter("all"); }}
+                onClick={() => { setActiveTab(key); setSearchInput(""); setSearch(""); setPriorityFilter("all"); setNewApplicantFilter("all"); }}
                 className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                   activeTab === key
                     ? "bg-white text-slate-900 shadow-sm"
@@ -325,8 +332,8 @@ export default function AssessorPortal() {
               <Input
                 className="pl-9"
                 placeholder="Search by name or CIN..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
               />
             </div>
             <Select value={priorityFilter} onValueChange={setPriorityFilter}>
