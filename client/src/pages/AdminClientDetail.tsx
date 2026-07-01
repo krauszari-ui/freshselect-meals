@@ -178,6 +178,7 @@ export default function AdminClientDetail() {
   const { data: clientServices } = trpc.admin.services.byClient.useQuery({ submissionId: id }, { enabled: id > 0 });
   const { data: clientDocs } = trpc.admin.documents.byClient.useQuery({ submissionId: id }, { enabled: id > 0 });
   const staffQuery = trpc.admin.staffList.useQuery();
+  const { data: assessorList } = trpc.admin.listAssessors.useQuery();
   const { data: stageHistoryData } = trpc.admin.stageHistory.useQuery({ id }, { enabled: id > 0 });
 
   const [activeTab, setActiveTab] = useState<"overview" | "assessment" | "services" | "activity">("overview");
@@ -202,6 +203,9 @@ export default function AdminClientDetail() {
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddService, setShowAddService] = useState(false);
   const [taskArea, setTaskArea] = useState<"intake_rep" | "assigned_worker">("intake_rep");
+  // Assessor assignment state
+  const [showReassignWarning, setShowReassignWarning] = useState(false);
+  const [pendingAssessorId, setPendingAssessorId] = useState<number | null>(null);
 
   // Edit/delete state for household members
   const [editHouseholdIdx, setEditHouseholdIdx] = useState<number | null>(null);
@@ -271,6 +275,10 @@ export default function AdminClientDetail() {
   });
   const updateAssignmentMutation = trpc.admin.updateAssignment.useMutation({
     onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Assignment updated"); },
+  });
+  const assignAssessorMutation = trpc.admin.assignAssessor.useMutation({
+    onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Assessor assigned"); setShowReassignWarning(false); setPendingAssessorId(null); },
+    onError: (err) => toast.error(err.message),
   });
   const updatePriorityMutation = trpc.admin.updatePriority.useMutation({
     onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Priority updated"); },
@@ -905,6 +913,31 @@ export default function AdminClientDetail() {
                     </SelectContent>
                   </Select>
                 </span>
+                {(assessorList ?? []).length > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    Assessor:
+                    <Select
+                      value={(client as any).assessorId ? String((client as any).assessorId) : "unassigned"}
+                      onValueChange={(v) => {
+                        const newId = v === "unassigned" ? null : parseInt(v);
+                        const currentId = (client as any).assessorId ?? null;
+                        if (currentId && newId && currentId !== newId) {
+                          // Already has an assessor — show warning before reassigning
+                          setPendingAssessorId(newId);
+                          setShowReassignWarning(true);
+                        } else {
+                          assignAssessorMutation.mutate({ submissionId: id, assessorId: newId });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-7 w-[140px] text-xs border-indigo-300 text-indigo-700"><SelectValue placeholder="Assign Assessor" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {(assessorList ?? []).map((a: any) => <SelectItem key={a.id} value={String(a.id)}>{a.name || a.email}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -2678,7 +2711,27 @@ export default function AdminClientDetail() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-
+        {/* Reassign Assessor Warning */}
+        <AlertDialog open={showReassignWarning} onOpenChange={setShowReassignWarning}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reassign Assessor?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This client is already assigned to an assessor. Reassigning will remove the current assessor and assign the new one. Do you want to continue?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => { setShowReassignWarning(false); setPendingAssessorId(null); }}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-indigo-600 hover:bg-indigo-700"
+                onClick={() => { if (pendingAssessorId !== null) assignAssessorMutation.mutate({ submissionId: id, assessorId: pendingAssessorId }); }}
+                disabled={assignAssessorMutation.isPending}
+              >
+                {assignAssessorMutation.isPending ? "Reassigning..." : "Yes, Reassign"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         {/* Add Household Member Dialog */}
         <Dialog open={showAddHousehold} onOpenChange={setShowAddHousehold}>
           <DialogContent className="max-w-sm">

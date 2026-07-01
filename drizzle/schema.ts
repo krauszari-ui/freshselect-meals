@@ -109,6 +109,8 @@ export const submissions = mysqlTable("submissions", {
   missingInfoNote: text("missingInfoNote"),
   /** Reason from assessor why client is not eligible */
   notEligibleReason: text("notEligibleReason"),
+  /** Assessor user ID assigned to review this client (separate from assignedTo worker) */
+  assessorId: int("assessorId"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({
   idx_submissions_medicaidId: uniqueIndex("idx_submissions_medicaidId").on(t.medicaidId),
