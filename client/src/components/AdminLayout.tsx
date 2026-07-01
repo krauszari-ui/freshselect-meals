@@ -193,6 +193,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return null;
   }
 
+  // Assessors must never see the admin panel — redirect them to their own portal
+  if (user.role === "assessor") {
+    window.location.replace("/assessor");
+    return null;
+  }
+
   const staffRoles = ["super_admin", "admin", "worker", "viewer", "assessor"];
   if (!staffRoles.includes(user.role)) {
     return (
@@ -217,12 +223,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         const perms = (user.permissions as any) || {};
         return perms.showReferralLinks !== false;
       }
-      if (user.role === "assessor" && item.path !== "/admin/clients") return false;
       return true;
     }),
-    ...((["super_admin", "admin"].includes(user.role)) ? ADMIN_ONLY_NAV_ITEMS : []),
+    ...(["super_admin", "admin"].includes(user.role) ? ADMIN_ONLY_NAV_ITEMS : []),
     ...(user.role === "super_admin" ? SUPER_ADMIN_ONLY_NAV_ITEMS : []),
-    ...(user.role === "assessor" ? [{ path: "/assessor", label: "Assessor Portal", icon: ClipboardList }] : []),
   ];
 
   return (
@@ -273,7 +277,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </div>
             <span className="font-semibold text-sm">FreshSelect</span>
           </div>
-          {unreadCount > 0 && user.role !== "assessor" && (
+          {unreadCount > 0 && (
             <Link href="/admin/notifications">
               <button className="ml-auto relative p-1.5 rounded-lg hover:bg-green-800">
                 <Bell className="h-5 w-5" />
