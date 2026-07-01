@@ -22,8 +22,9 @@ import {
   Crown,
   Link2,
   ClipboardList,
+  LogIn,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useState } from "react";
 
 type Role = "admin" | "worker" | "viewer" | "assessor";
@@ -84,6 +85,16 @@ export default function AdminWorkers() {
   });
   const updateMutation = trpc.admin.workers.updateStaff.useMutation({
     onSuccess: () => { toast.success("Staff member updated"); utils.admin.workers.listStaff.invalidate(); setShowEditModal(false); },
+    onError: (err) => toast.error(err.message),
+  });
+  const [, navigate] = useLocation();
+  const impersonateMutation = trpc.impersonate.start.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Now logged in as ${data.targetName}`);
+      utils.auth.me.invalidate();
+      navigate("/admin/dashboard");
+      window.location.reload();
+    },
     onError: (err) => toast.error(err.message),
   });
 
@@ -209,6 +220,18 @@ export default function AdminWorkers() {
                     </div>
                     {isSuperAdmin && !isSelf && !isMemberSuperAdmin && (
                       <div className="flex items-center gap-2 shrink-0">
+                        {member.isActive && (
+                          <button
+                            title={`Login as ${member.name || member.email}`}
+                            onClick={() => {
+                              if (confirm(`Log in as ${member.name || member.email}? You will see the app from their perspective. Click OK to continue.`))
+                                impersonateMutation.mutate({ targetUserId: member.id });
+                            }}
+                            className="p-2 hover:bg-indigo-50 rounded-lg text-stone-400 hover:text-indigo-600 transition-colors"
+                          >
+                            <LogIn className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           title={member.isActive ? "Deactivate" : "Activate"}
                           onClick={() => toggleActiveMutation.mutate({ userId: member.id, isActive: !member.isActive })}

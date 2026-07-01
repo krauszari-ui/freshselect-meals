@@ -752,3 +752,15 @@
 - [x] Frontend: assessor column on admin client list table
 - [x] Frontend: filter by assessor on admin client list
 - [x] Frontend: assessor portal scoped to only show assigned clients
+
+## Staff Impersonation Feature
+- [x] Backend: IMPERSONATION_COOKIE constant added to routers.ts
+- [x] Backend: getUserById helper added to db.ts
+- [x] Backend: impersonate.start procedure (super_admin only, cannot impersonate super_admin or inactive accounts)
+- [x] Backend: impersonate.stop procedure (restores original admin session from cookie)
+- [x] Backend: impersonate.status procedure (checks if current session is impersonation)
+- [x] Backend: audit log entries for impersonation start/stop
+- [x] Frontend: Login As button (indigo, LogIn icon) on each active staff row in AdminWorkers
+- [x] Frontend: ImpersonationBanner component (fixed top, indigo, shows current user + Exit button)
+- [x] Frontend: ImpersonationBanner rendered globally in App.tsx
+- [x] Tests: 10 impersonation business rule tests passing
