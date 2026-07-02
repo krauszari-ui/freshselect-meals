@@ -1421,9 +1421,30 @@ export const appRouter = router({
         origin: z.string().url().optional(),
       })).mutation(async ({ ctx, input }) => {
         const existing = await getUserByEmail(input.email);
-        if (existing) throw new TRPCError({ code: "CONFLICT", message: "A user with this email already exists" });
-        // Create account with no password — they must set it via the invite link
-        const id = await createStaffUser({ email: input.email, name: input.name, passwordHash: null, role: input.role, permissions: input.permissions });
+        const STAFF_ROLES = ["admin", "worker", "viewer", "assessor", "super_admin"];
+        if (existing && STAFF_ROLES.includes(existing.role ?? "")) {
+          throw new TRPCError({ code: "CONFLICT", message: "A staff account with this email already exists" });
+        }
+        let id: number;
+        if (existing) {
+          // Existing non-staff user (e.g. role='user') — upgrade to staff role instead of creating a duplicate
+          const { getDb } = await import("./db");
+          const { users } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          const db = await getDb();
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+          await db.update(users).set({
+            role: input.role as any,
+            name: input.name || existing.name,
+            loginMethod: "password",
+            permissions: (input.permissions ?? { canView: true, canEdit: false, canExport: false, canDelete: false }) as unknown as null,
+            isActive: 1,
+          }).where(eq(users.id, existing.id));
+          id = existing.id;
+        } else {
+          // Create account with no password — they must set it via the invite link
+          id = await createStaffUser({ email: input.email, name: input.name, passwordHash: null, role: input.role, permissions: input.permissions });
+        }
         // Generate a 24-hour invite/setup token (same mechanism as forgot-password)
         const token = randomBytes(32).toString("hex");
         const tokenHash = createHash("sha256").update(token).digest("hex");
