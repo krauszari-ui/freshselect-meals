@@ -522,9 +522,11 @@ export async function listWorkers() {
 export async function listStaffUsers() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.select(SAFE_USER_COLUMNS).from(users).where(
+  const rows = await db.select({ ...SAFE_USER_COLUMNS, passwordHash: users.passwordHash }).from(users).where(
     or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"), eq(users.role, "assessor"))
   ).orderBy(desc(users.createdAt));
+  // Return hasPassword boolean instead of raw hash for security
+  return rows.map(({ passwordHash, ...rest }) => ({ ...rest, hasPassword: !!passwordHash }));
 }
 
 export async function createStaffUser(data: {

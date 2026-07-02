@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes, createHash } from "crypto";
 import { getSessionCookieOptions } from "./_core/cookies";
 
 import { systemRouter } from "./_core/systemRouter";
@@ -269,7 +269,7 @@ export const appRouter = router({
           });
         }
         // BUG-SEC3-C FIX: use cryptographically random suffix (128-bit) instead of Math.random() (6 base-36 chars)
-        const suffix = require("crypto").randomBytes(16).toString("hex");
+        const suffix = randomBytes(16).toString("hex");
         // FIX: sanitize category to alphanumeric + hyphens only to prevent S3 path traversal
         const safeCategory = input.category.replace(/[^a-zA-Z0-9-_]/g, "").slice(0, 50) || "doc";
         const key = `documents/${safeCategory}-${suffix}.${safeExt}`;
@@ -878,7 +878,7 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "File is too large. Maximum allowed size is 10 MB." });
         }
         // BUG-SEC3-C FIX: use cryptographically random suffix (128-bit) instead of Math.random()
-        const suffix = require("crypto").randomBytes(16).toString("hex");
+        const suffix = randomBytes(16).toString("hex");
         // BUG-SEC-C FIX: derive extension from MIME type, not user-supplied filename
         // Prevents name="evil.php" with contentType=image/jpeg from storing a .php key in S3
         const MIME_TO_EXT: Record<string, string> = {
@@ -1425,9 +1425,8 @@ export const appRouter = router({
         // Create account with no password — they must set it via the invite link
         const id = await createStaffUser({ email: input.email, name: input.name, passwordHash: null, role: input.role, permissions: input.permissions });
         // Generate a 24-hour invite/setup token (same mechanism as forgot-password)
-        const crypto = require("crypto");
-        const token = crypto.randomBytes(32).toString("hex");
-        const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+        const token = randomBytes(32).toString("hex");
+        const tokenHash = createHash("sha256").update(token).digest("hex");
         const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
         await setPasswordResetToken(id, tokenHash, expires);
         // Determine the safe origin for the setup URL
@@ -1489,6 +1488,41 @@ export const appRouter = router({
       }),
       // List all staff (super_admin, admin, worker, viewer)
       listStaff: adminProcedure.query(async () => listStaffUsers()),
+      // Resend invite email to a staff member who hasn't set their password yet
+      resendInvite: superAdminProcedure.input(z.object({
+        userId: z.number(),
+        origin: z.string().url().optional(),
+      })).mutation(async ({ ctx, input }) => {
+        const user = await getUserById(input.userId);
+        if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+        if (!user.email) throw new TRPCError({ code: "BAD_REQUEST", message: "User has no email address" });
+        // Generate a fresh 24-hour invite token
+        const token = randomBytes(32).toString("hex");
+        const tokenHash = createHash("sha256").update(token).digest("hex");
+        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await setPasswordResetToken(user.id, tokenHash, expires);
+        const originToUse = input.origin ?? "https://freshselectmeals.com";
+        const setupUrl = `${originToUse}/admin/reset-password?token=${token}`;
+        const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        const safeName = escHtml(user.name || "there");
+        const isNewAccount = !user.passwordHash;
+        await sendEmail({
+          to: user.email,
+          subject: isNewAccount ? "You've been invited to FreshSelect Meals" : "Reset your FreshSelect Meals password",
+          html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+  <h2 style="color:#2d6a4f">${isNewAccount ? "Welcome to FreshSelect Meals" : "Password Setup Link"}</h2>
+  <p>Hi ${safeName},</p>
+  <p>${isNewAccount ? "An admin has created a staff account for you. Click the button below to set your password and get started." : "Here is a new link to set up your FreshSelect Meals account password."}</p>
+  <p style="margin:24px 0">
+    <a href="${setupUrl}" style="background:#2d6a4f;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Set Up My Password</a>
+  </p>
+  <p style="color:#666;font-size:13px">This link expires in 24 hours.</p>
+  <p style="color:#666;font-size:13px">Or copy this link: ${setupUrl}</p>
+</div>`,
+        });
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "staff_invite_resent", details: { targetEmail: user.email, targetId: user.id } });
+        return { success: true };
+      }),
     }),
   }),
 
@@ -1509,10 +1543,10 @@ export const appRouter = router({
         typeof o === "string" ? o === input.origin : o.test(input.origin)
       );
       if (!originAllowed) return { success: true }; // silently ignore — don't reveal allowlist
-      const token = require("crypto").randomBytes(32).toString("hex");
+      const token = randomBytes(32).toString("hex");
       // Store SHA-256 hash of the token so a DB leak doesn't expose usable tokens.
       // The raw token is sent in the email link; the hash is what lives in the DB.
-      const tokenHash = require("crypto").createHash("sha256").update(token).digest("hex");
+      const tokenHash = createHash("sha256").update(token).digest("hex");
       const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
       await setPasswordResetToken(user.id, tokenHash, expires);
       const resetUrl = `${input.origin}/admin/reset-password?token=${token}`;
@@ -1540,7 +1574,7 @@ export const appRouter = router({
       newPassword: z.string().min(8, "Password must be at least 8 characters"),
     })).mutation(async ({ input }) => {
       // Hash the incoming token before DB lookup — the DB stores the hash, not the raw token
-      const tokenHash = require("crypto").createHash("sha256").update(input.token).digest("hex");
+      const tokenHash = createHash("sha256").update(input.token).digest("hex");
       const user = await getUserByResetToken(tokenHash);
       if (!user) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired reset link" });
       if (!user.passwordResetExpires || new Date() > user.passwordResetExpires)
@@ -1551,7 +1585,7 @@ export const appRouter = router({
       return { success: true };
     }),
     validateToken: publicProcedure.input(z.object({ token: z.string() })).query(async ({ input }) => {
-      const tokenHash = require("crypto").createHash("sha256").update(input.token).digest("hex");
+      const tokenHash = createHash("sha256").update(input.token).digest("hex");
       const user = await getUserByResetToken(tokenHash);
       if (!user || !user.passwordResetExpires || new Date() > user.passwordResetExpires)
         return { valid: false };

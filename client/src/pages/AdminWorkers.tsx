@@ -88,6 +88,10 @@ export default function AdminWorkers() {
     onSuccess: () => { toast.success("Staff member updated"); utils.admin.workers.listStaff.invalidate(); setShowEditModal(false); },
     onError: (err) => toast.error(err.message),
   });
+  const resendInviteMutation = trpc.admin.workers.resendInvite.useMutation({
+    onSuccess: () => toast.success("Invite email resent successfully!"),
+    onError: (err) => toast.error(err.message),
+  });
   const [, navigate] = useLocation();
   const impersonateMutation = trpc.impersonate.start.useMutation({
     onSuccess: (data) => {
@@ -240,6 +244,15 @@ export default function AdminWorkers() {
                         >
                           {member.isActive ? <ToggleRight className="w-5 h-5 text-green-600" /> : <ToggleLeft className="w-5 h-5" />}
                         </button>
+                        {!member.hasPassword && (
+                          <button
+                            title="Resend invite email"
+                            onClick={() => resendInviteMutation.mutate({ userId: member.id, origin: window.location.origin })}
+                            className="p-2 hover:bg-amber-50 rounded-lg text-stone-400 hover:text-amber-600 transition-colors"
+                          >
+                            <Mail className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           title="Edit"
                           onClick={() => openEdit(member)}
