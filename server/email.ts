@@ -39,9 +39,13 @@ function getResend(): Resend {
  * Until then, the fallback uses Resend's shared testing address which only
  * delivers to the account owner's email (scn@levelupresources.org).
  */
-// Read FROM_EMAIL dynamically so env var updates are picked up without restart
+// Read FROM_EMAIL dynamically so env var updates are picked up without restart.
+// Some deployment platforms (Vercel) store angle brackets as \u003c / \u003e —
+// we decode those so Resend receives a valid RFC 5322 address.
 function getFromEmail(): string {
-  return process.env.RESEND_FROM_EMAIL ?? "FreshSelect Meals <admin@freshselectmeals.com>";
+  const raw = process.env.RESEND_FROM_EMAIL ?? "FreshSelect Meals <admin@freshselectmeals.com>";
+  // Decode \uXXXX sequences that Vercel/some env stores may inject
+  return raw.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 }
 
 const ADMIN_EMAIL = "info@freshselectmeals.com";
