@@ -23,6 +23,7 @@ import {
   Link2,
   ClipboardList,
   LogIn,
+  Mail,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
@@ -52,7 +53,7 @@ export default function AdminWorkers() {
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({
-    email: "", name: "", password: "", role: "worker" as Role,
+    email: "", name: "", role: "worker" as Role,
     permissions: { ...DEFAULT_PERMISSIONS },
   });
 
@@ -76,10 +77,10 @@ export default function AdminWorkers() {
   });
   const createMutation = trpc.admin.workers.createStaff.useMutation({
     onSuccess: () => {
-      toast.success("Staff account created");
+      toast.success("Invite email sent! Staff member can now set their password.");
       utils.admin.workers.listStaff.invalidate();
       setShowCreateModal(false);
-      setCreateForm({ email: "", name: "", password: "", role: "worker", permissions: { ...DEFAULT_PERMISSIONS } });
+      setCreateForm({ email: "", name: "", role: "worker", permissions: { ...DEFAULT_PERMISSIONS } });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -300,10 +301,12 @@ export default function AdminWorkers() {
                 <Label>Email Address</Label>
                 <Input type="email" placeholder="jane@example.com" value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} />
               </div>
-              <div className="space-y-1">
-                <Label>Temporary Password</Label>
-                <Input type="password" placeholder="Min. 8 characters" value={createForm.password} onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))} />
-                <p className="text-xs text-stone-500">Staff can reset this via "Forgot Password" on first login.</p>
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                <Mail className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Invite email will be sent</p>
+                  <p className="text-xs text-blue-700 mt-0.5">The staff member will receive an email with a link to set their own password. The link expires in 24 hours.</p>
+                </div>
               </div>
               <div className="space-y-1">
                 <Label>Role</Label>
@@ -348,11 +351,11 @@ export default function AdminWorkers() {
             <div className="flex gap-3 mt-6">
               <Button variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">Cancel</Button>
               <Button
-                onClick={() => createMutation.mutate(createForm)}
-                disabled={createMutation.isPending || !createForm.email || !createForm.name || !createForm.password}
+                onClick={() => createMutation.mutate({ ...createForm, origin: window.location.origin })}
+                disabled={createMutation.isPending || !createForm.email || !createForm.name}
                 className="flex-1 bg-green-700 hover:bg-green-800 text-white"
               >
-                {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Account"}
+                {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Invite"}
               </Button>
             </div>
           </div>

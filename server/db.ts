@@ -530,7 +530,7 @@ export async function listStaffUsers() {
 export async function createStaffUser(data: {
   email: string;
   name: string;
-  passwordHash: string;
+  passwordHash: string | null;
   role: "admin" | "worker" | "viewer" | "assessor";
   permissions?: WorkerPermissions;
 }): Promise<number> {

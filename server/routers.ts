@@ -1411,18 +1411,56 @@ export const appRouter = router({
           await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "worker_demoted", details: { userId: input.userId } });
           return { success: true };
         }),
-      // Create a new staff account directly (no OAuth needed)
+      // Create a new staff account and send an invite email with a password-setup link.
+      // No temporary password — the new staff member sets their own password via the link.
       createStaff: superAdminProcedure.input(z.object({
         email: z.string().email(),
         name: z.string().min(1),
-        password: z.string().min(8, "Password must be at least 8 characters"),
         role: z.enum(["admin", "worker", "viewer", "assessor"]),
         permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean(), showReferralLinks: z.boolean().default(true) }).optional(),
-      })).mutation(async ({ input }) => {
+        origin: z.string().url().optional(),
+      })).mutation(async ({ ctx, input }) => {
         const existing = await getUserByEmail(input.email);
         if (existing) throw new TRPCError({ code: "CONFLICT", message: "A user with this email already exists" });
-        const passwordHash = await bcrypt.hash(input.password, 12);
-        const id = await createStaffUser({ email: input.email, name: input.name, passwordHash, role: input.role, permissions: input.permissions });
+        // Create account with no password — they must set it via the invite link
+        const id = await createStaffUser({ email: input.email, name: input.name, passwordHash: null, role: input.role, permissions: input.permissions });
+        // Generate a 24-hour invite/setup token (same mechanism as forgot-password)
+        const crypto = require("crypto");
+        const token = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        await setPasswordResetToken(id, tokenHash, expires);
+        // Determine the safe origin for the setup URL
+        const { ALLOWED_ORIGINS } = await import("./_core/security");
+        const reqOrigin = ctx.req.headers.origin as string | undefined;
+        const originToUse = (() => {
+          for (const candidate of [input.origin, reqOrigin]) {
+            if (!candidate) continue;
+            const allowed = ALLOWED_ORIGINS.some((o: string | RegExp) =>
+              typeof o === "string" ? o === candidate : o.test(candidate)
+            );
+            if (allowed) return candidate;
+          }
+          return "https://freshselectmeals.com";
+        })();
+        const setupUrl = `${originToUse}/admin/reset-password?token=${token}`;
+        const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        const safeName = escHtml(input.name || "there");
+        await sendEmail({
+          to: input.email,
+          subject: "You've been invited to FreshSelect Meals",
+          html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+  <h2 style="color:#2d6a4f">Welcome to FreshSelect Meals</h2>
+  <p>Hi ${safeName},</p>
+  <p>An admin has created a staff account for you on the FreshSelect Meals portal. Click the button below to set your password and get started.</p>
+  <p style="margin:24px 0">
+    <a href="${setupUrl}" style="background:#2d6a4f;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Set Up My Password</a>
+  </p>
+  <p style="color:#666;font-size:13px">This link expires in 24 hours. If you weren't expecting this invitation, you can safely ignore this email.</p>
+  <p style="color:#666;font-size:13px">Or copy this link: ${setupUrl}</p>
+</div>`,
+        });
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "staff_invite_sent", details: { targetEmail: input.email, role: input.role } });
         return { success: true, id };
       }),
       // Update an existing staff member's name, role, or permissions
