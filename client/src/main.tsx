@@ -28,8 +28,14 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (typeof window === "undefined") return;
 
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
-
   if (!isUnauthorized) return;
+
+  // Guard: don't redirect if already on a login/public page.
+  // Without this, unauthenticated queries (e.g. ImpersonationBanner) that fire
+  // on the login page trigger an infinite reload loop.
+  const path = window.location.pathname;
+  const noRedirectPaths = ["/admin", "/admin/login", "/admin/forgot-password", "/admin/reset-password", "/", "/privacy"];
+  if (noRedirectPaths.includes(path)) return;
 
   window.location.href = getLoginUrl();
 };

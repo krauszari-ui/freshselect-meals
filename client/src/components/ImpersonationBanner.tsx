@@ -1,10 +1,20 @@
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { LogOut, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 
 export function ImpersonationBanner() {
+  const { user, loading } = useAuth();
   const utils = trpc.useUtils();
+
+  // Only query impersonation status when a staff user is authenticated.
+  // Without this guard, the query fires on the login page (unauthenticated),
+  // throws UNAUTHED_ERR_MSG, and the global error handler in main.tsx
+  // redirects to /admin — creating an infinite blink/reload loop.
+  const isStaff = !loading && !!user && ["admin", "super_admin", "worker", "viewer", "assessor"].includes(user.role);
+
   const statusQuery = trpc.impersonate.status.useQuery(undefined, {
+    enabled: isStaff,
     refetchOnWindowFocus: false,
     retry: false,
   });
