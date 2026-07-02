@@ -173,12 +173,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return () => { document.body.style.overflow = ""; };
   }, [sidebarOpen]);
 
-  // Redirect assessors to their own portal — useEffect avoids render-phase navigation blink
+  // Redirect assessors to their own portal via full page navigation
+  // window.location.replace avoids React error #300 that occurs when
+  // navigate() fires while the component tree is mid-render
   useEffect(() => {
     if (!loading && user && user.role === "assessor") {
-      navigate("/assessor");
+      window.location.replace("/assessor");
     }
-  }, [loading, user, navigate]);
+  }, [loading, user]);
 
   // Poll unread notification count every 30 seconds
   const { data: unreadData } = trpc.notifications.unreadCount.useQuery(undefined, {
@@ -200,8 +202,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return null;
   }
 
-  // Assessors: return null while the useEffect redirect fires
-  if (user.role === "assessor") return null;
+  // Assessors: show a spinner while window.location.replace fires
+  // Never return null from a component — React error #300
+  if (user.role === "assessor") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-green-900">
+        <Loader2 className="h-8 w-8 animate-spin text-green-300" />
+      </div>
+    );
+  }
 
   const staffRoles = ["super_admin", "admin", "worker", "viewer", "assessor"];
   if (!staffRoles.includes(user.role)) {
