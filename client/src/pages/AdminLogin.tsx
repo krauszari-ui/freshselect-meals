@@ -6,27 +6,24 @@ import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { Loader2, ShieldCheck, Lock } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
 import { toast } from "sonner";
 
 export default function AdminLogin() {
   const { user, loading } = useAuth();
-  const [, navigate] = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  // Use window.location for all redirects — avoids React error #300 race condition
+  // that occurs when navigate() and window.location.href fire simultaneously
   useEffect(() => {
     if (!loading && user) {
-      if (user.role === "assessor") {
-        navigate("/assessor");
-      } else {
-        const staffRoles = ["admin", "worker", "super_admin", "viewer"];
-        if (staffRoles.includes(user.role)) {
-          navigate("/admin/dashboard");
-        }
+      const staffRoles = ["admin", "worker", "super_admin", "viewer", "assessor"];
+      if (staffRoles.includes(user.role)) {
+        const dest = user.role === "assessor" ? "/assessor" : "/admin/dashboard";
+        window.location.replace(dest);
       }
     }
-  }, [user, loading, navigate]);
+  }, [user, loading]);
 
   const loginMutation = trpc.auth.adminLogin.useMutation({
     onSuccess: (data) => {

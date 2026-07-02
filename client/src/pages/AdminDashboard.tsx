@@ -5,7 +5,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import {
   Users, ClipboardCheck, CheckCircle2, Loader2, ArrowRight, UserCheck,
 } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { useEffect } from "react";
 
 const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
@@ -49,17 +49,21 @@ function getAvatarColor(name: string) {
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const [, navigate] = useLocation();
 
   // Assessors must not see the admin dashboard — redirect them to their own portal
-  // IMPORTANT: use useEffect, never call navigate() in the render phase (causes blink)
   useEffect(() => {
     if (user && user.role === "assessor") {
-      navigate("/assessor");
+      window.location.replace("/assessor");
     }
-  }, [user, navigate]);
+  }, [user]);
 
-  if (user && user.role === "assessor") return null;
+  if (user && user.role === "assessor") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-green-900">
+        <Loader2 className="h-8 w-8 animate-spin text-green-300" />
+      </div>
+    );
+  }
   const { data: stats, isLoading: statsLoading } = trpc.admin.stats.useQuery();
   const { data: taskStats } = trpc.admin.taskStats.useQuery();
   const { data: recentClients } = trpc.admin.recentClients.useQuery({ days: 30, limit: 5 });
