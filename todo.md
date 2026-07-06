@@ -782,3 +782,14 @@
 - [x] Add canMarkNotInterested to PERM_LIST and DEFAULT_PERMISSIONS in AdminWorkers.tsx
 - [x] Add EyeOff icon to AdminWorkers.tsx imports
 - [x] Fix listStaffUsers to use SAFE_USER_COLUMNS projection (security test compliance)
+
+## Self-Service Password Reset (July 2026)
+- [x] Add passwordResetToken and passwordResetExpiry columns to users table, run migration
+- [x] Add requestPasswordReset and resetPassword db helpers
+- [x] Add auth.requestPasswordReset and auth.resetPassword tRPC procedures
+- [x] Build ForgotPassword page (email input, success message)
+- [x] Build ResetPassword page (token from URL, new password + confirm)
+- [x] Add "Forgot password?" link to admin/worker login page
+- [x] Wire routes in App.tsx
+- [x] Write e2e tests for the full reset flow
+- [x] Add "Send Reset Link" button (KeyRound icon) to Staff Management page per staff member
