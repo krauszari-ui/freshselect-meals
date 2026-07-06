@@ -211,6 +211,13 @@
       "when": 1782923663630,
       "tag": "0029_good_bug",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1783354538370,
+      "tag": "0030_lumpy_riptide",
+      "breakpoints": true
     }
   ]
 }

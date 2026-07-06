@@ -145,6 +145,8 @@ export interface ListSubmissionsOptions {
   zipcode?: string;
   priority?: string;
   assessorId?: number;
+  /** If true, only return notInterested clients. If false, exclude notInterested clients. If undefined, return all. */
+  notInterested?: boolean;
   sortDir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
@@ -153,7 +155,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, excludeStage, excludeStages, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, assessorId, sortDir = "desc", page = 1, pageSize = 20 } = opts;
+  const { search, status, stage, excludeStage, excludeStages, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, assessorId, notInterested, sortDir = "desc", page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -183,6 +185,9 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   if (zipcode && zipcode !== "all") conditions.push(eq(submissions.zipcode, zipcode));
   if (priority && priority !== "all") conditions.push(eq(submissions.priority, priority as Submission["priority"]));
   if (assessorId) conditions.push(eq(submissions.assessorId, assessorId));
+  if (notInterested === true) conditions.push(eq(submissions.notInterested, true));
+  else if (notInterested === false) conditions.push(eq(submissions.notInterested, false));
+  else conditions.push(eq(submissions.notInterested, false)); // default: exclude not-interested
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const [rows, countResult, membersResult] = await Promise.all([
@@ -203,6 +208,9 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
       rejectedBy: submissions.rejectedBy,
       missingInfoNote: submissions.missingInfoNote,
       notEligibleReason: submissions.notEligibleReason,
+      notInterested: submissions.notInterested,
+      notInterestedAt: submissions.notInterestedAt,
+      notInterestedBy: submissions.notInterestedBy,
     }).from(submissions).where(where).orderBy(sortDir === "asc" ? asc(submissions.createdAt) : desc(submissions.createdAt)).limit(pageSize).offset(offset),
     db.select({ count: sql<number>`count(*)` }).from(submissions).where(where),
     db.select({ totalAdditional: sql<number>`COALESCE(SUM(additionalMembersCount), 0)`, totalClients: sql<number>`count(*)` }).from(submissions).where(where),
@@ -496,7 +504,7 @@ export async function updateServiceStatus(id: number, status: Service["status"])
 
 // ─── Worker management helpers ────────────────────────────────────────────
 
-export interface WorkerPermissions { canView: boolean; canEdit: boolean; canExport: boolean; canDelete: boolean; }
+export interface WorkerPermissions { canView: boolean; canEdit: boolean; canExport: boolean; canDelete: boolean; canMarkNotInterested?: boolean; showReferralLinks?: boolean; }
 
 // Safe user columns — never include passwordHash or passwordResetToken in list responses
 const SAFE_USER_COLUMNS = {
@@ -522,11 +530,16 @@ export async function listWorkers() {
 export async function listStaffUsers() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const rows = await db.select({ ...SAFE_USER_COLUMNS, passwordHash: users.passwordHash }).from(users).where(
+  // SAFE_USER_COLUMNS projection — never exposes hash
+  const rows = await db.select(SAFE_USER_COLUMNS).from(users).where(
     or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"), eq(users.role, "assessor"))
   ).orderBy(desc(users.createdAt));
-  // Return hasPassword boolean instead of raw hash for security
-  return rows.map(({ passwordHash, ...rest }) => ({ ...rest, hasPassword: !!passwordHash }));
+  // Fetch hasPassword separately to avoid exposing the hash
+  const hashRows = await db.select({ id: users.id, passwordHash: users.passwordHash }).from(users).where(
+    or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"), eq(users.role, "assessor"))
+  );
+  const hashMap = new Map(hashRows.map(r => [r.id, !!r.passwordHash]));
+  return rows.map(row => ({ ...row, hasPassword: hashMap.get(row.id) ?? false }));
 }
 
 export async function createStaffUser(data: {

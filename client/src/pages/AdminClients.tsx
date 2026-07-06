@@ -12,7 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText, Trash2, Users, FileDown, FilterX,
+  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText, Trash2, Users, FileDown, FilterX, EyeOff, RotateCcw,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -496,6 +496,19 @@ export default function AdminClients() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
 
+  // Not Interested tab
+  const activeTab = (up.get("tab") as "active" | "not_interested") || "active";
+  const setActiveTab = (t: "active" | "not_interested") => {
+    const next = new URLSearchParams();
+    if (t !== "active") next.set("tab", t);
+    navigate("/admin/clients" + (next.toString() ? "?" + next.toString() : ""), { replace: true });
+  };
+  const isNotInterestedTab = activeTab === "not_interested";
+
+  // Permission check: can current user mark/restore Not Interested?
+  const canMarkNotInterested = user?.role === "admin" || user?.role === "super_admin" ||
+    (user?.role === "worker" && (user as any)?.permissions?.canMarkNotInterested === true);
+
   // ─── Scroll restoration ───────────────────────────────────────────────────
   // The scrollable element is AdminLayout's <main> (overflow-auto), not window.
   const getScrollContainer = () =>
@@ -584,6 +597,8 @@ export default function AdminClients() {
       sortDir,
       page,
       pageSize: 25,
+      // Pass notInterested filter based on active tab
+      notInterested: isNotInterestedTab ? true : false,
     });
 
   // Filter counts — loaded once, used to show per-option counts in dropdowns
@@ -774,6 +789,22 @@ export default function AdminClients() {
     onError: () => toast.error("Failed to delete selected clients"),
   });
 
+  const markNotInterestedMutation = trpc.admin.markNotInterested.useMutation({
+    onSuccess: () => {
+      toast.success("Client moved to Not Interested");
+      utils.admin.list.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to mark as Not Interested"),
+  });
+
+  const restoreClientMutation = trpc.admin.restoreClient.useMutation({
+    onSuccess: () => {
+      toast.success("Client restored to main list");
+      utils.admin.list.invalidate();
+    },
+    onError: (err) => toast.error(err.message || "Failed to restore client"),
+  });
+
   const listData = listQuery.data as any;
   const rows = listData?.rows ?? [];
   const totalPages = listData?.totalPages ?? 1;
@@ -844,6 +875,33 @@ export default function AdminClients() {
             )}
           </div>
         </div>
+
+        {/* Tab Switcher: Active Clients / Not Interested */}
+        {!isAssessor && (
+          <div className="flex gap-1 border-b border-slate-200">
+            <button
+              onClick={() => setActiveTab("active")}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                !isNotInterestedTab
+                  ? "border-green-600 text-green-700"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Active Clients
+            </button>
+            <button
+              onClick={() => setActiveTab("not_interested")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                isNotInterestedTab
+                  ? "border-slate-500 text-slate-700"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+              Not Interested
+            </button>
+          </div>
+        )}
 
         {/* Search */}
         <div className="relative">
@@ -1149,6 +1207,17 @@ export default function AdminClients() {
           )}
         </div>
 
+        {/* Not Interested tab info banner */}
+        {isNotInterestedTab && (
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+            <EyeOff className="h-4 w-4 text-slate-400 shrink-0" />
+            <span className="text-sm text-slate-600">
+              These clients have been marked as <strong>Not Interested</strong> and are hidden from the main client list.
+              Use the <strong>Restore</strong> button to move them back.
+            </span>
+          </div>
+        )}
+
         {/* Table */}
         <div className="bg-white rounded-lg border border-slate-200 overflow-hidden admin-table-wrap">
           {listQuery.isLoading ? (
@@ -1157,7 +1226,15 @@ export default function AdminClients() {
             </div>
           ) : sortedRows.length === 0 ? (
             <div className="text-center py-20 text-slate-500">
-              <p className="text-sm">No clients found</p>
+              {isNotInterestedTab ? (
+                <>
+                  <EyeOff className="h-8 w-8 mx-auto mb-3 text-slate-300" />
+                  <p className="text-sm font-medium">No clients marked as Not Interested</p>
+                  <p className="text-xs text-slate-400 mt-1">Clients you mark as Not Interested will appear here.</p>
+                </>
+              ) : (
+                <p className="text-sm">No clients found</p>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -1196,6 +1273,9 @@ export default function AdminClients() {
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Type</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Assessor</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Stage</th>
+                    {canMarkNotInterested && (
+                      <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -1285,6 +1365,33 @@ export default function AdminClients() {
                             {stageInfo.label}
                           </Badge>
                         </td>
+                        {canMarkNotInterested && (
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            {isNotInterestedTab ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50 bg-white"
+                                disabled={restoreClientMutation.isPending}
+                                onClick={() => restoreClientMutation.mutate({ id: client.id })}
+                              >
+                                {restoreClientMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                                Restore
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1 text-xs border-slate-300 text-slate-600 hover:bg-slate-100 bg-white"
+                                disabled={markNotInterestedMutation.isPending}
+                                onClick={() => markNotInterestedMutation.mutate({ id: client.id })}
+                              >
+                                {markNotInterestedMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
+                                Not Interested
+                              </Button>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     );
                   })}

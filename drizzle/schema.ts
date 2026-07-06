@@ -111,6 +111,12 @@ export const submissions = mysqlTable("submissions", {
   notEligibleReason: text("notEligibleReason"),
   /** Assessor user ID assigned to review this client (separate from assignedTo worker) */
   assessorId: int("assessorId"),
+  /** Soft-delete: true = client marked as 'Not Interested', hidden from main list */
+  notInterested: boolean("notInterested").default(false).notNull(),
+  /** When the client was marked as Not Interested */
+  notInterestedAt: timestamp("notInterestedAt"),
+  /** User ID of the staff member who marked this client as Not Interested */
+  notInterestedBy: int("notInterestedBy"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({
   idx_submissions_medicaidId: uniqueIndex("idx_submissions_medicaidId").on(t.medicaidId),
