@@ -922,8 +922,12 @@ export default function AdminClientDetail() {
                         const newId = v === "unassigned" ? null : parseInt(v);
                         const currentId = (client as any).assessorId ?? null;
                         if (currentId && newId && currentId !== newId) {
-                          // Already has an assessor — show warning before reassigning
+                          // Switching from one assessor to another — show warning
                           setPendingAssessorId(newId);
+                          setShowReassignWarning(true);
+                        } else if (currentId && newId === null) {
+                          // Removing assessor — confirm before unassigning
+                          setPendingAssessorId(null);
                           setShowReassignWarning(true);
                         } else {
                           assignAssessorMutation.mutate({ submissionId: id, assessorId: newId });
@@ -2711,23 +2715,30 @@ export default function AdminClientDetail() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        {/* Reassign Assessor Warning */}
+        {/* Reassign / Remove Assessor Warning */}
         <AlertDialog open={showReassignWarning} onOpenChange={setShowReassignWarning}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Reassign Assessor?</AlertDialogTitle>
+              <AlertDialogTitle>{pendingAssessorId === null ? "Remove Assessor?" : "Reassign Assessor?"}</AlertDialogTitle>
               <AlertDialogDescription>
-                This client is already assigned to an assessor. Reassigning will remove the current assessor and assign the new one. Do you want to continue?
+                {pendingAssessorId === null
+                  ? "This will remove the current assessor from this client. The client will appear as unassigned. Do you want to continue?"
+                  : "This client is already assigned to an assessor. Reassigning will remove the current assessor and assign the new one. Do you want to continue?"}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { setShowReassignWarning(false); setPendingAssessorId(null); }}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel onClick={() => { setShowReassignWarning(false); setPendingAssessorId(undefined as any); }}>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                className="bg-indigo-600 hover:bg-indigo-700"
-                onClick={() => { if (pendingAssessorId !== null) assignAssessorMutation.mutate({ submissionId: id, assessorId: pendingAssessorId }); }}
+                className={pendingAssessorId === null ? "bg-red-600 hover:bg-red-700" : "bg-indigo-600 hover:bg-indigo-700"}
+                onClick={() => {
+                  assignAssessorMutation.mutate({ submissionId: id, assessorId: pendingAssessorId });
+                  setShowReassignWarning(false);
+                }}
                 disabled={assignAssessorMutation.isPending}
               >
-                {assignAssessorMutation.isPending ? "Reassigning..." : "Yes, Reassign"}
+                {assignAssessorMutation.isPending
+                  ? (pendingAssessorId === null ? "Removing..." : "Reassigning...")
+                  : (pendingAssessorId === null ? "Yes, Remove Assessor" : "Yes, Reassign")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
