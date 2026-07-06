@@ -87,7 +87,7 @@ export default function AdminWorkers() {
     onError: (err) => toast.error(err.message),
   });
   const updateMutation = trpc.admin.workers.updateStaff.useMutation({
-    onSuccess: () => { toast.success("Staff member updated"); utils.admin.workers.listStaff.invalidate(); setShowEditModal(false); },
+    onSuccess: () => { toast.success("Staff member updated"); utils.admin.workers.listStaff.invalidate(); utils.auth.me.invalidate(); setShowEditModal(false); },
     onError: (err) => toast.error(err.message),
   });
   const resendInviteMutation = trpc.admin.workers.resendInvite.useMutation({
