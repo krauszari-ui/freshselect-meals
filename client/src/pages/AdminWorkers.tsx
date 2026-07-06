@@ -24,6 +24,7 @@ import {
   ClipboardList,
   LogIn,
   Mail,
+  EyeOff,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
@@ -38,7 +39,7 @@ const ROLE_LABELS: Record<string, { label: string; color: string; icon: React.El
   assessor: { label: "Assessor", color: "bg-amber-100 text-amber-800", icon: ClipboardList },
 };
 
-const DEFAULT_PERMISSIONS = { canView: true, canEdit: false, canExport: false, canDelete: false, showReferralLinks: true };
+const DEFAULT_PERMISSIONS = { canView: true, canEdit: false, canExport: false, canDelete: false, showReferralLinks: true, canMarkNotInterested: false };
 
 const PERM_LIST = [
   { key: "canView" as const, label: "View Applications", icon: Eye },
@@ -46,6 +47,7 @@ const PERM_LIST = [
   { key: "canExport" as const, label: "Export CSV Reports", icon: Download },
   { key: "canDelete" as const, label: "Delete Records", icon: Trash2 },
   { key: "showReferralLinks" as const, label: "Show Referral Links in Sidebar", icon: Link2 },
+  { key: "canMarkNotInterested" as const, label: "Mark Clients as Not Interested", icon: EyeOff },
 ];
 
 export default function AdminWorkers() {
@@ -123,6 +125,7 @@ export default function AdminWorkers() {
         canExport: perms.canExport ?? false,
         canDelete: perms.canDelete ?? false,
         showReferralLinks: perms.showReferralLinks ?? true,
+        canMarkNotInterested: perms.canMarkNotInterested ?? false,
       },
     });
     setShowEditModal(true);

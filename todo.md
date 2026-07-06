@@ -764,3 +764,21 @@
 - [x] Frontend: ImpersonationBanner component (fixed top, indigo, shows current user + Exit button)
 - [x] Frontend: ImpersonationBanner rendered globally in App.tsx
 - [x] Tests: 10 impersonation business rule tests passing
+
+## Not Interested Soft-Delete Feature (July 2026)
+- [x] Add notInterested, notInterestedAt, notInterestedBy columns to submissions table
+- [x] Run migration for new columns
+- [x] Add canMarkNotInterested to WorkerPermissions type in db.ts
+- [x] Add notInterested filter to listSubmissions in db.ts
+- [x] Add markNotInterested procedure (permission-gated: admin/super_admin always; worker if canMarkNotInterested)
+- [x] Add restoreClient procedure (same permission gate)
+- [x] Add notInterested param to admin.list query schema
+- [x] Add canMarkNotInterested to all worker permission schemas in routers.ts
+- [x] Add tab switcher (Active Clients / Not Interested) to AdminClients.tsx
+- [x] Add Not Interested button per row (visible only to permitted users)
+- [x] Add Restore button on Not Interested tab
+- [x] Add info banner on Not Interested tab
+- [x] Context-aware empty state for Not Interested tab
+- [x] Add canMarkNotInterested to PERM_LIST and DEFAULT_PERMISSIONS in AdminWorkers.tsx
+- [x] Add EyeOff icon to AdminWorkers.tsx imports
+- [x] Fix listStaffUsers to use SAFE_USER_COLUMNS projection (security test compliance)

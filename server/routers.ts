@@ -492,6 +492,7 @@ export const appRouter = router({
       sortDir: z.enum(["asc", "desc"]).optional(),
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional(),
+      notInterested: z.boolean().optional(),
     })).query(async ({ input, ctx }) => {
       // SECURITY: Assessors can only see clients assigned to them — enforce server-side
       // regardless of what the frontend passes. This cannot be bypassed via API.
@@ -1003,6 +1004,60 @@ export const appRouter = router({
       return { success: true, deleted: input.ids.length };
     }),
 
+    // ─── Not Interested (soft-delete) ─────────────────────────────────────────
+    // Permission: admin, super_admin always; worker only if canMarkNotInterested
+    markNotInterested: protectedProcedure.input(z.object({
+      id: z.number(),
+    })).mutation(async ({ input, ctx }) => {
+      const role = ctx.user.role;
+      if (role !== "admin" && role !== "super_admin") {
+        if (role !== "worker") throw new TRPCError({ code: "FORBIDDEN", message: "Permission denied" });
+        const perms = (ctx.user as any).permissions;
+        if (!perms?.canMarkNotInterested) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to mark clients as Not Interested" });
+      }
+      const existing = await getSubmissionById(input.id);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      await updateSubmissionFields(input.id, {
+        notInterested: true,
+        notInterestedAt: new Date(),
+        notInterestedBy: ctx.user.id,
+      } as any);
+      await logAudit({
+        actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
+        action: "marked_not_interested",
+        clientId: input.id,
+        clientName: `${existing.firstName} ${existing.lastName}`,
+      });
+      return { success: true };
+    }),
+
+    // Restore a Not Interested client back to the main list
+    // Permission: admin, super_admin always; worker only if canMarkNotInterested
+    restoreClient: protectedProcedure.input(z.object({
+      id: z.number(),
+    })).mutation(async ({ input, ctx }) => {
+      const role = ctx.user.role;
+      if (role !== "admin" && role !== "super_admin") {
+        if (role !== "worker") throw new TRPCError({ code: "FORBIDDEN", message: "Permission denied" });
+        const perms = (ctx.user as any).permissions;
+        if (!perms?.canMarkNotInterested) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to restore clients" });
+      }
+      const existing = await getSubmissionById(input.id);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      await updateSubmissionFields(input.id, {
+        notInterested: false,
+        notInterestedAt: null,
+        notInterestedBy: null,
+      } as any);
+      await logAudit({
+        actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
+        action: "restored_from_not_interested",
+        clientId: input.id,
+        clientName: `${existing.firstName} ${existing.lastName}`,
+      });
+      return { success: true };
+    }),
+
     // ─── Update admin notes (assessment) ──────────────────────────────────
     updateAdminNotes: editProcedure.input(z.object({
       id: z.number(),
@@ -1385,7 +1440,7 @@ export const appRouter = router({
       list: adminProcedure.query(async () => listWorkers()),
       allUsers: adminProcedure.query(async () => listAllUsers()),
       promote: adminProcedure.input(z.object({
-        userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean().default(false), showReferralLinks: z.boolean().default(true) }),
+        userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean().default(false), showReferralLinks: z.boolean().default(true), canMarkNotInterested: z.boolean().default(false) }),
       })).mutation(async ({ input, ctx }) => {
         await setUserRole(input.userId, "worker");
         await updateWorkerPermissions(input.userId, input.permissions);
@@ -1393,7 +1448,7 @@ export const appRouter = router({
         return { success: true };
       }),
       updatePermissions: adminProcedure.input(z.object({
-        userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean().default(false), showReferralLinks: z.boolean().default(true) }),
+        userId: z.number(), permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean().default(false), showReferralLinks: z.boolean().default(true), canMarkNotInterested: z.boolean().default(false) }),
       })).mutation(async ({ input, ctx }) => {
         await updateWorkerPermissions(input.userId, input.permissions);
         await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "worker_permissions_updated", details: { userId: input.userId, permissions: input.permissions } });
@@ -1417,7 +1472,7 @@ export const appRouter = router({
         email: z.string().email(),
         name: z.string().min(1),
         role: z.enum(["admin", "worker", "viewer", "assessor"]),
-        permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean(), showReferralLinks: z.boolean().default(true) }).optional(),
+        permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean(), showReferralLinks: z.boolean().default(true), canMarkNotInterested: z.boolean().default(false) }).optional(),
         origin: z.string().url().optional(),
       })).mutation(async ({ ctx, input }) => {
         const existing = await getUserByEmail(input.email);
@@ -1488,7 +1543,7 @@ export const appRouter = router({
         userId: z.number(),
         name: z.string().min(1).optional(),
         role: z.enum(["admin", "worker", "viewer", "assessor"]).optional(),
-        permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean(), showReferralLinks: z.boolean().default(true) }).optional(),
+        permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean(), showReferralLinks: z.boolean().default(true), canMarkNotInterested: z.boolean().default(false) }).optional(),
         newPassword: z.string().min(8).optional(),
       })).mutation(async ({ input }) => {
         const { userId, name, role, permissions, newPassword } = input;
