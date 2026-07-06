@@ -1273,9 +1273,7 @@ export default function AdminClients() {
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Type</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Assessor</th>
                     <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Stage</th>
-                    {canMarkNotInterested && (
-                      <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Actions</th>
-                    )}
+
                   </tr>
                 </thead>
                 <tbody>
@@ -1304,16 +1302,42 @@ export default function AdminClients() {
                           />
                         </td>
                         <td className="px-4 py-3">
-                          <div
-                            className="flex items-center gap-3 cursor-pointer"
-                            onClick={() => saveScrollAndNavigate(`/admin/clients/${client.id}`)}
-                          >
-                            <div className={`h-9 w-9 rounded-full ${avatarColor} flex items-center justify-center text-white font-medium text-xs shrink-0`}>
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`h-9 w-9 rounded-full ${avatarColor} flex items-center justify-center text-white font-medium text-xs shrink-0 cursor-pointer`}
+                              onClick={() => saveScrollAndNavigate(`/admin/clients/${client.id}`)}
+                            >
                               {initials}
                             </div>
                             <div>
-                              <p className="text-sm font-medium text-green-700 hover:text-green-800">{client.firstName} {client.lastName}</p>
+                              <p
+                                className="text-sm font-medium text-green-700 hover:text-green-800 cursor-pointer"
+                                onClick={() => saveScrollAndNavigate(`/admin/clients/${client.id}`)}
+                              >{client.firstName} {client.lastName}</p>
                               <p className="text-xs text-slate-400">{workerName}</p>
+                              {canMarkNotInterested && (
+                                <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                                  {isNotInterestedTab ? (
+                                    <button
+                                      className="inline-flex items-center gap-1 text-[11px] text-emerald-600 hover:text-emerald-800 disabled:opacity-50"
+                                      disabled={restoreClientMutation.isPending}
+                                      onClick={() => restoreClientMutation.mutate({ id: client.id })}
+                                    >
+                                      {restoreClientMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                                      Restore
+                                    </button>
+                                  ) : (
+                                    <button
+                                      className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-red-500 disabled:opacity-50"
+                                      disabled={markNotInterestedMutation.isPending}
+                                      onClick={() => markNotInterestedMutation.mutate({ id: client.id })}
+                                    >
+                                      {markNotInterestedMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
+                                      Not Interested
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -1365,33 +1389,7 @@ export default function AdminClients() {
                             {stageInfo.label}
                           </Badge>
                         </td>
-                        {canMarkNotInterested && (
-                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                            {isNotInterestedTab ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 gap-1 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50 bg-white"
-                                disabled={restoreClientMutation.isPending}
-                                onClick={() => restoreClientMutation.mutate({ id: client.id })}
-                              >
-                                {restoreClientMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
-                                Restore
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 gap-1 text-xs border-slate-300 text-slate-600 hover:bg-slate-100 bg-white"
-                                disabled={markNotInterestedMutation.isPending}
-                                onClick={() => markNotInterestedMutation.mutate({ id: client.id })}
-                              >
-                                {markNotInterestedMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <EyeOff className="h-3 w-3" />}
-                                Not Interested
-                              </Button>
-                            )}
-                          </td>
-                        )}
+
                       </tr>
                     );
                   })}
