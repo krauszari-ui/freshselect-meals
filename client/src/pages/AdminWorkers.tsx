@@ -95,6 +95,10 @@ export default function AdminWorkers() {
     onError: (err) => toast.error(err.message),
   });
   const [, navigate] = useLocation();
+  const sendResetLinkMutation = trpc.passwordReset.forgotPassword.useMutation({
+    onSuccess: () => toast.success("Password reset link sent!"),
+    onError: (err: any) => toast.error(err.message),
+  });
   const impersonateMutation = trpc.impersonate.start.useMutation({
     onSuccess: (data) => {
       toast.success(`Now logged in as ${data.targetName}`);
@@ -254,6 +258,18 @@ export default function AdminWorkers() {
                             className="p-2 hover:bg-amber-50 rounded-lg text-stone-400 hover:text-amber-600 transition-colors"
                           >
                             <Mail className="w-4 h-4" />
+                          </button>
+                        )}
+                        {member.hasPassword && member.email && (
+                          <button
+                            title="Send password reset link"
+                            onClick={() => {
+                              if (confirm(`Send a password reset email to ${member.email}?`))
+                                sendResetLinkMutation.mutate({ email: member.email!, origin: window.location.origin });
+                            }}
+                            className="p-2 hover:bg-indigo-50 rounded-lg text-stone-400 hover:text-indigo-600 transition-colors"
+                          >
+                            <KeyRound className="w-4 h-4" />
                           </button>
                         )}
                         <button
