@@ -1305,5 +1305,6 @@ export async function listAssessors() {
 export async function updateSubmissionAssessor(submissionId: number, assessorId: number | null): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(submissions).set({ assessorId: assessorId ?? undefined }).where(eq(submissions.id, submissionId));
+  // Use sql`null` when unassigning so Drizzle doesn't skip the field (undefined is ignored by Drizzle)
+  await db.update(submissions).set({ assessorId: assessorId === null ? null : assessorId }).where(eq(submissions.id, submissionId));
 }

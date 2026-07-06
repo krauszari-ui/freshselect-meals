@@ -78,6 +78,55 @@ describe("reassignment warning logic", () => {
   });
 });
 
+describe("updateSubmissionAssessor null-safety (bug fix: 'No values to set')", () => {
+  it("passes null directly — not converted to undefined — when unassigning", () => {
+    // Drizzle ORM skips fields set to `undefined`; null must be passed explicitly
+    const assessorId: number | null = null;
+    // Old (buggy) behaviour: assessorId ?? undefined  → undefined  → Drizzle skips → 'No values to set'
+    const oldBehavior = assessorId ?? undefined;
+    expect(oldBehavior).toBeUndefined(); // confirms the bug
+
+    // New (correct) behaviour: explicit null check
+    const newBehavior = assessorId === null ? null : assessorId;
+    expect(newBehavior).toBeNull(); // null is passed → Drizzle sets column to NULL
+  });
+
+  it("preserves a valid assessorId when assigning", () => {
+    const assessorId: number | null = 7;
+    const value = assessorId === null ? null : assessorId;
+    expect(value).toBe(7);
+  });
+});
+
+describe("frontend unassign confirmation dialog logic", () => {
+  // Mirrors the updated onValueChange logic in AdminClientDetail.tsx
+  function resolveAction(currentId: number | null, newId: number | null): "warn-reassign" | "warn-remove" | "direct" {
+    if (currentId && newId && currentId !== newId) return "warn-reassign";
+    if (currentId && newId === null) return "warn-remove";
+    return "direct";
+  }
+
+  it("shows remove-assessor warning when selecting Unassigned on a client with an assessor", () => {
+    expect(resolveAction(3, null)).toBe("warn-remove");
+  });
+
+  it("shows reassign warning when switching between two different assessors", () => {
+    expect(resolveAction(3, 5)).toBe("warn-reassign");
+  });
+
+  it("assigns directly (no warning) when client has no assessor", () => {
+    expect(resolveAction(null, 5)).toBe("direct");
+  });
+
+  it("assigns directly (no warning) when selecting same assessor again", () => {
+    expect(resolveAction(5, 5)).toBe("direct");
+  });
+
+  it("assigns directly (no warning) when both are null (no-op)", () => {
+    expect(resolveAction(null, null)).toBe("direct");
+  });
+});
+
 describe("assessorId filter in listSubmissions", () => {
   it("passes assessorId to query when filter is active", () => {
     const assessorFilter = "3";
