@@ -199,7 +199,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   if (!isAuthenticated || !user) {
     window.location.href = getLoginUrl();
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-green-900">
+        <Loader2 className="h-8 w-8 animate-spin text-green-300" />
+      </div>
+    );
   }
 
   // Assessors: show a spinner while window.location.replace fires
