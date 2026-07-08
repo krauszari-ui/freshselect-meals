@@ -415,17 +415,17 @@ export const appRouter = router({
     addedCount: staffProcedure.input(z.object({ days: z.number().int().min(1).max(365).optional() }).optional()).query(async ({ input }) => getAddedCount(input?.days ?? 7)),
     staffList: staffProcedure.query(async () => listStaffUsers()),
 
-    // Assessor: list only assessment-completed clients
+    // Assessor: list all clients assigned to this assessor (no assessment-completion filter)
     assessorStats: assessorProcedure.query(async ({ ctx }) => {
       // Returns scoped stats for the logged-in assessor (admins see all)
       // listSubmissions returns { rows, total, ... } — use .total for accurate counts
       const assessorFilter = (ctx.user.role === "admin" || ctx.user.role === "super_admin") ? undefined : ctx.user.id;
       const terminalStages = ["assessment_recorded", "missing_information", "not_eligible"];
       const [pendingResult, recordedResult, missingResult, notEligibleResult] = await Promise.all([
-        listSubmissions({ assessmentCompleted: true, excludeStages: terminalStages, assessorId: assessorFilter, pageSize: 1, page: 1 }),
-        listSubmissions({ assessmentCompleted: true, stage: "assessment_recorded", assessorId: assessorFilter, pageSize: 1, page: 1 }),
-        listSubmissions({ assessmentCompleted: true, stage: "missing_information", assessorId: assessorFilter, pageSize: 1, page: 1 }),
-        listSubmissions({ assessmentCompleted: true, stage: "not_eligible", assessorId: assessorFilter, pageSize: 1, page: 1 }),
+        listSubmissions({ excludeStages: terminalStages, assessorId: assessorFilter, pageSize: 1, page: 1 }),
+        listSubmissions({ stage: "assessment_recorded", assessorId: assessorFilter, pageSize: 1, page: 1 }),
+        listSubmissions({ stage: "missing_information", assessorId: assessorFilter, pageSize: 1, page: 1 }),
+        listSubmissions({ stage: "not_eligible", assessorId: assessorFilter, pageSize: 1, page: 1 }),
       ]);
       const getTotal = (r: any) => typeof r?.total === "number" ? r.total : (Array.isArray(r) ? r.length : 0);
       const pending = getTotal(pendingResult);
@@ -460,7 +460,6 @@ export const appRouter = router({
         search: input.search,
         page: input.page,
         pageSize: input.pageSize ?? 200,
-        assessmentCompleted: true,
         stage: stageFilter,
         priority: input.priority,
         newApplicant: input.newApplicant,
