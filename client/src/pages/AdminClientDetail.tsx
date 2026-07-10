@@ -29,6 +29,7 @@ import { useState, useRef, useEffect } from "react";
 import { formatLocalDate, formatLocalDateShort } from "@/lib/utils";
 import { Link, useParams, useLocation } from "wouter";
 import { toast } from "sonner";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
   referral: { label: "Referral", bg: "bg-emerald-100", text: "text-emerald-700" },
@@ -166,11 +167,31 @@ function CollapsibleSection({ title, defaultOpen = true, children }: {
   );
 }
 
+// Lightweight wrapper for assessors — no sidebar, no redirect
+function AssessorDetailLayout({ children, backHref }: { children: React.ReactNode; backHref: string }) {
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3">
+        <Link href={backHref}>
+          <button className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900">
+            <ArrowLeft className="h-4 w-4" /> Back to My Clients
+          </button>
+        </Link>
+        <span className="text-slate-300">|</span>
+        <span className="text-sm font-medium text-slate-700">FreshSelect Meals — Client Detail</span>
+      </div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
 export default function AdminClientDetail() {
   const params = useParams<{ id: string }>();
   const id = parseInt(params.id || "0");
   const utils = trpc.useUtils();
   const [, navigate] = useLocation();
+  const { user } = useAuth();
+  const isAssessor = user?.role === "assessor";
 
   const { data: client, isLoading } = trpc.admin.getById.useQuery({ id }, { enabled: id > 0 });
   const { data: notes } = trpc.admin.notes.byClient.useQuery({ submissionId: id }, { enabled: id > 0 });
@@ -505,9 +526,11 @@ export default function AdminClientDetail() {
   };
 
   if (isLoading) {
+    if (isAssessor) return <AssessorDetailLayout backHref="/assessor"><div className="flex justify-center items-center h-96"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div></AssessorDetailLayout>;
     return <AdminLayout><div className="flex justify-center items-center h-96"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div></AdminLayout>;
   }
   if (!client) {
+    if (isAssessor) return <AssessorDetailLayout backHref="/assessor"><div className="p-6 text-center"><p className="text-slate-500">Client not found</p></div></AssessorDetailLayout>;
     return <AdminLayout><div className="p-6 text-center"><p className="text-slate-500">Client not found</p><Link href="/admin/clients"><Button variant="outline" className="mt-4">Back to Clients</Button></Link></div></AdminLayout>;
   }
 
@@ -822,8 +845,13 @@ export default function AdminClientDetail() {
     updateTaskStatusMutation.mutate({ id: taskId, status: next as any });
   };
 
+  // Use AssessorDetailLayout for assessors (no sidebar redirect), AdminLayout for everyone else
+  const PageWrapper = isAssessor
+    ? ({ children }: { children: React.ReactNode }) => <AssessorDetailLayout backHref="/assessor">{children}</AssessorDetailLayout>
+    : ({ children }: { children: React.ReactNode }) => <AdminLayout>{children}</AdminLayout>;
+
   return (
-    <AdminLayout>
+    <PageWrapper>
       <div className="p-3 sm:p-6 space-y-4 sm:space-y-5">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -2935,6 +2963,6 @@ export default function AdminClientDetail() {
           </DialogContent>
         </Dialog>
       </div>
-    </AdminLayout>
+    </PageWrapper>
   );
 }

@@ -415,7 +415,7 @@ export default function AssessorPortal() {
                   {rows.map((client: any) => (
                     <tr key={client.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-5 py-3.5">
-                        <Link href={`/admin/clients/${client.id}`}>
+                        <Link href={`/assessor/clients/${client.id}`}>
                           <span className="font-medium text-slate-900 hover:text-emerald-600 cursor-pointer">
                             {client.firstName} {client.lastName}
                           </span>
