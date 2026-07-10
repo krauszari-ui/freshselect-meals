@@ -61,7 +61,7 @@ function Router() {
 
       {/* Assessor Portal */}
       <Route path={"/assessor"} component={AssessorPortal} />
-
+      <Route path={"/assessor/clients/:id"} component={AdminClientDetail} />
 
       {/* Fallback */}
       <Route path={"/404"} component={NotFound} />
