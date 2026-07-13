@@ -1308,3 +1308,12 @@ export async function updateSubmissionAssessor(submissionId: number, assessorId:
   // Use sql`null` when unassigning so Drizzle doesn't skip the field (undefined is ignored by Drizzle)
   await db.update(submissions).set({ assessorId: assessorId === null ? null : assessorId }).where(eq(submissions.id, submissionId));
 }
+
+/** Get a single referrer message by ID (for existence check before deletion). */
+export async function getReferrerMessageById(messageId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select({ id: referrerMessages.id, submissionId: referrerMessages.submissionId })
+    .from(referrerMessages).where(eq(referrerMessages.id, messageId)).limit(1);
+  return rows[0] ?? null;
+}

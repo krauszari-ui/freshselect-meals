@@ -588,6 +588,8 @@ export const appRouter = router({
     })).mutation(async ({ ctx, input }) => {
       const submission = await getSubmissionById(input.submissionId);
       if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      // SECURITY: Assessors can only send notes for their assigned clients
+      if (ctx.user.role === "assessor" && submission.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
       if (!submission.referralSource) throw new TRPCError({ code: "BAD_REQUEST", message: "This client has no referrer" });
       const link = await getReferralLinkByCode(submission.referralSource);
       if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
@@ -606,17 +608,24 @@ export const appRouter = router({
     }),
     listReferrerNotes: staffProcedure.input(z.object({
       submissionId: z.number(),
-    })).query(async ({ input }) => {
+    })).query(async ({ input, ctx }) => {
       const submission = await getSubmissionById(input.submissionId);
       if (!submission || !submission.referralSource) return [];
+      // SECURITY: Assessors can only view referrer notes for their assigned clients
+      if (ctx.user.role === "assessor" && submission.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
       const link = await getReferralLinkByCode(submission.referralSource);
       if (!link) return [];
       return listReferrerMessagesBySubmission(input.submissionId);
     }),
     deleteReferrerNote: deleteProcedure.input(z.object({
       messageId: z.number(),
-    })).mutation(async ({ input }) => {
+    })).mutation(async ({ input, ctx }) => {
+      // SECURITY: verify message exists before deleting (prevents blind IDOR enumeration)
+      const { getReferrerMessageById } = await import("./db");
+      const msg = await getReferrerMessageById(input.messageId);
+      if (!msg) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
       await deleteReferrerMessageById(input.messageId);
+      await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "referrer_note_deleted", details: { messageId: input.messageId } });
       return { success: true };
     }),
 
@@ -629,6 +638,8 @@ export const appRouter = router({
     })).mutation(async ({ ctx, input }) => {
       const submission = await getSubmissionById(input.submissionId);
       if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      // SECURITY: Assessors can only email their assigned clients
+      if (ctx.user.role === "assessor" && submission.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
       if (!submission.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Client has no email address" });
       // Use a client-specific reply-to so inbound replies are automatically matched to this client.
       // Format: reply-{submissionId}@freshselectmeals.com
@@ -669,7 +680,12 @@ export const appRouter = router({
     }),
     listClientEmails: staffProcedure.input(z.object({
       submissionId: z.number(),
-    })).query(async ({ input }) => {
+    })).query(async ({ input, ctx }) => {
+      // SECURITY: Assessors can only view emails for their assigned clients
+      if (ctx.user.role === "assessor") {
+        const sub = await getSubmissionById(input.submissionId);
+        if (!sub || sub.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+      }
       return listClientEmails(input.submissionId);
     }),
     deleteClientEmail: deleteProcedure.input(z.object({
@@ -720,7 +736,12 @@ export const appRouter = router({
       return { success: true };
     }),
 
-    stageHistory: staffProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    stageHistory: staffProcedure.input(z.object({ id: z.number() })).query(async ({ input, ctx }) => {
+      // SECURITY: Assessors can only view stage history for their assigned clients
+      if (ctx.user.role === "assessor") {
+        const sub = await getSubmissionById(input.id);
+        if (!sub || sub.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+      }
       return getStageHistoryBySubmission(input.id);
     }),
 
@@ -813,7 +834,14 @@ export const appRouter = router({
 
       stats: staffProcedure.query(async () => getTaskStats()),
 
-      byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input }) => getTasksBySubmission(input.submissionId)),
+      byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input, ctx }) => {
+        // SECURITY: Assessors can only view tasks for their assigned clients
+        if (ctx.user.role === "assessor") {
+          const sub = await getSubmissionById(input.submissionId);
+          if (!sub || sub.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+        }
+        return getTasksBySubmission(input.submissionId);
+      }),
 
       create: editProcedure.input(z.object({
         submissionId: z.number(), description: z.string().min(1),
@@ -837,7 +865,14 @@ export const appRouter = router({
 
     // ─── Case Notes ───────────────────────────────────────────────────────
     notes: router({
-      byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input }) => getCaseNotesBySubmission(input.submissionId)),
+      byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input, ctx }) => {
+        // SECURITY: Assessors can only view notes for their assigned clients
+        if (ctx.user.role === "assessor") {
+          const sub = await getSubmissionById(input.submissionId);
+          if (!sub || sub.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+        }
+        return getCaseNotesBySubmission(input.submissionId);
+      }),
       create: editProcedure.input(z.object({ submissionId: z.number(), content: z.string().min(1) }))
         .mutation(async ({ ctx, input }) => {
           const id = await createCaseNote({ ...input, createdBy: ctx.user.id });
@@ -849,7 +884,14 @@ export const appRouter = router({
 
     // ─── Documents ────────────────────────────────────────────────────────
     documents: router({
-      byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input }) => getDocumentsBySubmission(input.submissionId)),
+      byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input, ctx }) => {
+        // SECURITY: Assessors can only view documents for their assigned clients
+        if (ctx.user.role === "assessor") {
+          const sub = await getSubmissionById(input.submissionId);
+          if (!sub || sub.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+        }
+        return getDocumentsBySubmission(input.submissionId);
+      }),
       library: staffProcedure.input(z.object({ category: z.string().optional() }).optional()).query(async ({ input }) => getLibraryDocuments(input?.category)),
       upload: editProcedure.input(z.object({
         submissionId: z.number().nullable(), name: z.string(), category: z.enum(["provider_attestation", "consent", "supporting_documentation", "id_document", "medicaid_card", "birth_certificate", "marriage_license", "forms", "uncategorized"]),
@@ -906,7 +948,14 @@ export const appRouter = router({
 
     // ─── Services ─────────────────────────────────────────────────────────
     services: router({
-      byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input }) => getServicesBySubmission(input.submissionId)),
+      byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input, ctx }) => {
+        // SECURITY: Assessors can only view services for their assigned clients
+        if (ctx.user.role === "assessor") {
+          const sub = await getSubmissionById(input.submissionId);
+          if (!sub || sub.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+        }
+        return getServicesBySubmission(input.submissionId);
+      }),
       create: editProcedure.input(z.object({
         submissionId: z.number(), name: z.string().min(1), description: z.string().optional(),
         startDate: z.string().optional(),
@@ -1544,8 +1593,12 @@ export const appRouter = router({
         role: z.enum(["admin", "worker", "viewer", "assessor"]).optional(),
         permissions: z.object({ canView: z.boolean(), canEdit: z.boolean(), canExport: z.boolean(), canDelete: z.boolean(), showReferralLinks: z.boolean().default(true), canMarkNotInterested: z.boolean().default(false) }).optional(),
         newPassword: z.string().min(8).optional(),
-      })).mutation(async ({ input }) => {
+      })).mutation(async ({ input, ctx }) => {
         const { userId, name, role, permissions, newPassword } = input;
+        // SECURITY: prevent modifying another super_admin's account
+        const targetUser = await getUserById(userId);
+        if (!targetUser) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+        if (targetUser.role === "super_admin" && targetUser.id !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Cannot modify another super admin account" });
         const updates: Record<string, unknown> = {};
         if (name) updates.name = name;
         if (role) updates.role = role;
