@@ -23,8 +23,9 @@ import {
   ArrowLeft, Loader2, FileText, Plus, ChevronDown, ChevronUp,
   Pencil, Trash2, Upload, ExternalLink, Link2, Save, MessageSquare, Send, Mail, Paperclip,
   MailOpen, Reply, Clock, RefreshCw, CheckCircle2, XCircle, X, Activity, User, Tag, Layers,
-  FileUp, StickyNote, CheckSquare, AlertTriangle, ShieldCheck, AlertCircle, Ban,
+  FileUp, StickyNote, CheckSquare, AlertTriangle, ShieldCheck, AlertCircle, Ban, Download,
 } from "lucide-react";
+import { generateClientPdf } from "@/lib/generateClientPdf";
 import { useState, useRef, useEffect } from "react";
 import { formatLocalDate, formatLocalDateShort } from "@/lib/utils";
 import { Link, useParams, useLocation } from "wouter";
@@ -203,6 +204,7 @@ export default function AdminClientDetail() {
   const { data: stageHistoryData } = trpc.admin.stageHistory.useQuery({ id }, { enabled: id > 0 });
 
   const [activeTab, setActiveTab] = useState<"overview" | "assessment" | "services" | "activity">("overview");
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [activityPage, setActivityPage] = useState(1);
 
   const activityPageSize = 25;
@@ -974,6 +976,32 @@ export default function AdminClientDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-emerald-700 border-emerald-300 hover:bg-emerald-50 h-8"
+              disabled={pdfLoading}
+              onClick={async () => {
+                setPdfLoading(true);
+                try {
+                  await generateClientPdf({
+                    client,
+                    notes: (notes as any[]) || [],
+                    tasks: (tasks as any[]) || [],
+                    services: (clientServices as any[]) || [],
+                    stageHistory: (stageHistoryData as any[]) || [],
+                    staffName: (wId: number | null | undefined) => getWorkerName(wId ?? null) || "—",
+                  });
+                } catch (err) {
+                  toast.error("Failed to generate PDF");
+                } finally {
+                  setPdfLoading(false);
+                }
+              }}
+            >
+              {pdfLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              {pdfLoading ? "Generating..." : "Download PDF"}
+            </Button>
             <Button variant="outline" size="sm" className="gap-1.5 text-slate-600 h-8" onClick={openEditDialog}>
               <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>

@@ -793,3 +793,4 @@
 - [x] Wire routes in App.tsx
 - [x] Write e2e tests for the full reset flow
 - [x] Add "Send Reset Link" button (KeyRound icon) to Staff Management page per staff member
+- [x] Add "Download PDF" button to client detail page — generates comprehensive PDF with all client info and assessment data using pdf-lib (client-side)
