@@ -990,10 +990,12 @@ export default function AdminClientDetail() {
                     tasks: (tasks as any[]) || [],
                     services: (clientServices as any[]) || [],
                     stageHistory: (stageHistoryData as any[]) || [],
-                    staffName: (wId: number | null | undefined) => getWorkerName(wId ?? null) || "—",
+                    staffName: (wId: number | null | undefined) => getWorkerName(wId ?? null) || "-",
                   });
                 } catch (err) {
-                  toast.error("Failed to generate PDF");
+                  console.error("[PDF] generation failed:", err);
+                  const msg = err instanceof Error ? err.message : String(err);
+                  toast.error(`Failed to generate PDF: ${msg.slice(0, 120)}`);
                 } finally {
                   setPdfLoading(false);
                 }

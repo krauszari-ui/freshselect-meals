@@ -54,30 +54,66 @@ const STAGE_LABELS: Record<string, string> = {
   flagged:                       "Flagged",
 };
 
+// ─── WinAnsi sanitizer ───────────────────────────────────────────────────────
+// pdf-lib's Helvetica / HelveticaBold fonts only support WinAnsi (cp1252).
+// Any character outside that range throws an unrecoverable encode error.
+// This function replaces every out-of-range character with a safe ASCII
+// equivalent so the PDF always generates regardless of client data.
+function toWinAnsi(text: string): string {
+  if (!text) return text;
+  return text
+    // Common Unicode punctuation → ASCII equivalents
+    .replace(/[\u2018\u2019\u0060]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014\u2015]/g, "-")
+    .replace(/\u2026/g, "...")
+    .replace(/\u2022/g, "*")
+    .replace(/\u2019/g, "'")
+    .replace(/\u00A0/g, " ")
+    .replace(/\u00AD/g, "-")
+    // Accented Latin → base letter (covers most European names)
+    .replace(/[\u00C0-\u00C5\u00E0-\u00E5]/g, (c) => c <= "\u00C5" ? "A" : "a")
+    .replace(/[\u00C6]/g, "AE").replace(/[\u00E6]/g, "ae")
+    .replace(/[\u00C7]/g, "C").replace(/[\u00E7]/g, "c")
+    .replace(/[\u00C8-\u00CB\u00E8-\u00EB]/g, (c) => c <= "\u00CB" ? "E" : "e")
+    .replace(/[\u00CC-\u00CF\u00EC-\u00EF]/g, (c) => c <= "\u00CF" ? "I" : "i")
+    .replace(/[\u00D0]/g, "D").replace(/[\u00F0]/g, "d")
+    .replace(/[\u00D1]/g, "N").replace(/[\u00F1]/g, "n")
+    .replace(/[\u00D2-\u00D6\u00D8\u00F2-\u00F6\u00F8]/g, (c) => c <= "\u00D8" ? "O" : "o")
+    .replace(/[\u00D9-\u00DC\u00F9-\u00FC]/g, (c) => c <= "\u00DC" ? "U" : "u")
+    .replace(/[\u00DD]/g, "Y").replace(/[\u00FD\u00FF]/g, "y")
+    .replace(/[\u00DF]/g, "ss")
+    // Hebrew, Arabic, CJK, and all other non-Latin scripts → "?"
+    .replace(/[^\x00-\xFF]/g, "?")
+    // Any remaining WinAnsi control chars → space
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ");
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(val: unknown): string {
-  if (!val) return "—";
+  if (!val) return "-";
   try {
     const d = new Date(val as string);
-    if (isNaN(d.getTime())) return String(val);
+    if (isNaN(d.getTime())) return toWinAnsi(String(val));
     return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-  } catch { return String(val); }
+  } catch { return toWinAnsi(String(val)); }
 }
 
 function fmtBool(val: unknown): string {
   if (val === true || val === "Yes" || val === "yes") return "Yes";
   if (val === false || val === "No" || val === "no") return "No";
-  if (val === null || val === undefined || val === "") return "—";
-  return String(val);
+  if (val === null || val === undefined || val === "") return "-";
+  return toWinAnsi(String(val));
 }
 
 function safe(val: unknown): string {
-  if (val === null || val === undefined || val === "") return "—";
-  return String(val);
+  if (val === null || val === undefined || val === "") return "-";
+  return toWinAnsi(String(val));
 }
 
 /** Wrap text to fit within maxWidth, returning array of lines */
-function wrapText(text: string, font: any, fontSize: number, maxWidth: number): string[] {
+function wrapText(rawText: string, font: any, fontSize: number, maxWidth: number): string[] {
+  const text = toWinAnsi(rawText || "");
   const words = text.split(" ");
   const lines: string[] = [];
   let current = "";
@@ -125,7 +161,7 @@ export async function generateClientPdf(opts: {
       thickness: 0.5, color: C.border,
     });
     page.drawText(
-      `FreshSelect Meals SCN — Confidential — ${new Date().toLocaleDateString()}`,
+      `FreshSelect Meals SCN - Confidential - ${new Date().toLocaleDateString()}`,
       { x: MARGIN, y: MARGIN + 4, size: 7, font: fontReg, color: C.slate }
     );
     page.drawText(
@@ -149,14 +185,14 @@ export async function generateClientPdf(opts: {
     ensureSpace(30);
     y -= 8;
     page.drawRectangle({ x: MARGIN, y: y - 18, width: COL_W, height: 22, color: C.light, borderColor: C.border, borderWidth: 0.5 });
-    page.drawText(title.toUpperCase(), { x: MARGIN + 8, y: y - 12, size: 9, font: fontBold, color: C.black });
+    page.drawText(toWinAnsi(title.toUpperCase()), { x: MARGIN + 8, y: y - 12, size: 9, font: fontBold, color: C.black });
     y -= 28;
   };
 
   // ── Info row (label: value) ───────────────────────────────────────────────
   const drawInfoRow = (label: string, value: string, indent = 0) => {
     ensureSpace(LINE_H + 2);
-    page.drawText(label, { x: MARGIN + indent, y: y - 10, size: 8, font: fontBold, color: C.slate, maxWidth: COL_W * 0.38 });
+    page.drawText(toWinAnsi(label), { x: MARGIN + indent, y: y - 10, size: 8, font: fontBold, color: C.slate, maxWidth: COL_W * 0.38 });
     // Wrap value if long
     const maxValW = COL_W * 0.56;
     const lines = wrapText(value, fontReg, 8, maxValW);
@@ -179,7 +215,7 @@ export async function generateClientPdf(opts: {
     labelLines.forEach((line, i) => {
       page.drawText(line, { x: MARGIN + 4, y: y - 10 - i * LINE_H, size: 8, font: fontReg, color: C.slate });
     });
-    page.drawText(value, { x: MARGIN + COL_W * 0.76, y: y - 10, size: 8, font: fontBold, color: value === "Yes" ? C.green : value === "No" ? C.slate : C.black });
+    page.drawText(toWinAnsi(value), { x: MARGIN + COL_W * 0.76, y: y - 10, size: 8, font: fontBold, color: value === "Yes" ? C.green : value === "No" ? C.slate : C.black });
     page.drawLine({ start: { x: MARGIN, y: y - rowHeight + 2 }, end: { x: PAGE_W - MARGIN, y: y - rowHeight + 2 }, thickness: 0.3, color: C.border });
     y -= rowHeight;
   };
@@ -187,18 +223,18 @@ export async function generateClientPdf(opts: {
   // ─────────────────────────────────────────────────────────────────────────
   // 1. HEADER BLOCK
   // ─────────────────────────────────────────────────────────────────────────
-  const stageLabel = STAGE_LABELS[client.stage] || client.stage || "—";
+  const stageLabel = toWinAnsi(STAGE_LABELS[client.stage] || client.stage || "-");
   page.drawRectangle({ x: 0, y: PAGE_H - 72, width: PAGE_W, height: 72, color: C.green });
   page.drawText("FreshSelect Meals SCN", { x: MARGIN, y: PAGE_H - 26, size: 13, font: fontBold, color: C.white });
   page.drawText("Client Information & Assessment Report", { x: MARGIN, y: PAGE_H - 42, size: 10, font: fontReg, color: rgb(0.85, 0.95, 0.88) });
   page.drawText(`Generated: ${new Date().toLocaleString()}`, { x: MARGIN, y: PAGE_H - 56, size: 8, font: fontReg, color: rgb(0.75, 0.90, 0.80) });
-  page.drawText(`Ref: ${client.referenceNumber || "—"}`, { x: PAGE_W - MARGIN - 90, y: PAGE_H - 26, size: 9, font: fontBold, color: C.white });
+  page.drawText(`Ref: ${toWinAnsi(client.referenceNumber || "-")}`, { x: PAGE_W - MARGIN - 90, y: PAGE_H - 26, size: 9, font: fontBold, color: C.white });
   page.drawText(`Stage: ${stageLabel}`, { x: PAGE_W - MARGIN - 90, y: PAGE_H - 42, size: 8, font: fontReg, color: rgb(0.85, 0.95, 0.88) });
   page.drawText(`Priority: ${(client.priority || "normal").charAt(0).toUpperCase() + (client.priority || "normal").slice(1)}`, { x: PAGE_W - MARGIN - 90, y: PAGE_H - 56, size: 8, font: fontReg, color: rgb(0.85, 0.95, 0.88) });
   y = PAGE_H - 88;
 
   // Client name large
-  page.drawText(`${client.firstName} ${client.lastName}`, { x: MARGIN, y, size: 18, font: fontBold, color: C.black });
+  page.drawText(toWinAnsi(`${client.firstName || ""} ${client.lastName || ""}`), { x: MARGIN, y, size: 18, font: fontBold, color: C.black });
   y -= 24;
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -209,7 +245,7 @@ export async function generateClientPdf(opts: {
   drawInfoRow("Date of Birth", fmtDate(fd.dateOfBirth));
   drawInfoRow("Cell Phone", safe(client.cellPhone));
   const addr = [fd.streetAddress, fd.aptUnit, fd.city || "Brooklyn", fd.state || "NY", fd.zipcode || client.zipcode].filter(Boolean).join(" ");
-  drawInfoRow("Address", addr || "—");
+  drawInfoRow("Address", addr || "-");
   drawInfoRow("Email", safe(client.email));
   drawInfoRow("Language", safe(client.language || "English"));
   drawInfoRow("Program", safe(client.program || "PHS"));
@@ -219,15 +255,15 @@ export async function generateClientPdf(opts: {
   if (client.referralSource) drawInfoRow("Referred By", safe(client.referralSource));
   drawInfoRow("New Applicant", safe(fd.newApplicant));
   if (fd.transferAgencyName) drawInfoRow("Transfer Agency", safe(fd.transferAgencyName));
-  drawInfoRow("Intake Rep", safe(staffName?.(client.intakeRep) || "—"));
-  drawInfoRow("Assigned Worker", safe(staffName?.(client.assignedTo) || "—"));
+  drawInfoRow("Intake Rep", safe(staffName?.(client.intakeRep) || "-"));
+  drawInfoRow("Assigned Worker", safe(staffName?.(client.assignedTo) || "-"));
   drawInfoRow("Submitted On", fmtDate(client.createdAt));
-  drawInfoRow("HIPAA Consent", client.hipaaConsentAt ? `Yes — ${fmtDate(client.hipaaConsentAt)}` : "—");
+  drawInfoRow("HIPAA Consent", client.hipaaConsentAt ? `Yes - ${fmtDate(client.hipaaConsentAt)}` : "-");
   if (client.assessmentCompletedAt) {
     drawInfoRow("Assessment Completed", fmtDate(client.assessmentCompletedAt));
   }
   if (client.approvedBy) drawInfoRow("Approved By", `${client.approvedBy}${client.approvedAt ? ` on ${fmtDate(client.approvedAt)}` : ""}`);
-  if (client.rejectedBy) drawInfoRow("Rejected By", `${client.rejectedBy}${client.rejectionReason ? ` — ${client.rejectionReason}` : ""}`);
+  if (client.rejectedBy) drawInfoRow("Rejected By", toWinAnsi(`${client.rejectedBy}${client.rejectionReason ? ` - ${client.rejectionReason}` : ""}`));
   if (client.missingInfoNote) drawInfoRow("Missing Info Note", safe(client.missingInfoNote));
   if (client.notEligibleReason) drawInfoRow("Not Eligible Reason", safe(client.notEligibleReason));
 
@@ -239,7 +275,7 @@ export async function generateClientPdf(opts: {
     householdMembers.forEach((m: any, i: number) => {
       ensureSpace(60);
       const memberLabel = m.name || `Member ${i + 1}`;
-      page.drawText(memberLabel, { x: MARGIN + 4, y: y - 10, size: 9, font: fontBold, color: C.black });
+      page.drawText(toWinAnsi(memberLabel), { x: MARGIN + 4, y: y - 10, size: 9, font: fontBold, color: C.black });
       y -= LINE_H;
       drawInfoRow("Date of Birth", fmtDate(m.dateOfBirth || m.dob), 12);
       drawInfoRow("Medicaid ID", safe(m.medicaidId), 12);
@@ -254,7 +290,7 @@ export async function generateClientPdf(opts: {
   drawSectionHeader("Health Categories");
   if (healthCategories.length > 0) {
     // Draw as wrapped comma-separated list
-    const catText = healthCategories.join("  •  ");
+    const catText = toWinAnsi(healthCategories.join("  -  "));
     const catLines = wrapText(catText, fontReg, 8.5, COL_W - 8);
     catLines.forEach((line) => {
       ensureSpace(LINE_H);
@@ -281,14 +317,14 @@ export async function generateClientPdf(opts: {
     const conditionClientNames: Record<string, string> = fd.conditionClientNames || {};
     MEDICAL_CONDITIONS.filter((c) => healthCategories.includes(c)).forEach((cond) => {
       const clientName = conditionDetails[cond]?.clientName || conditionClientNames[cond];
-      if (clientName) drawInfoRow(`${cond} — Client Name`, safe(clientName), 8);
+      if (clientName) drawInfoRow(`${cond} - Client Name`, safe(clientName), 8);
     });
     if (healthCategories.includes("Other") && fd.otherHealthCategoryDetails) {
-      drawInfoRow("Other Health — Description", safe(fd.otherHealthCategoryDetails), 8);
+      drawInfoRow("Other Health - Description", safe(fd.otherHealthCategoryDetails), 8);
     }
   } else {
     ensureSpace(LINE_H);
-    page.drawText("No health categories selected", { x: MARGIN + 4, y: y - 10, size: 8, font: fontReg, color: C.slate });
+    page.drawText("No health categories selected", { x: MARGIN + 4, y: y - 10, size: 8, font: fontReg, color: C.slate });  // ASCII safe
     y -= LINE_H;
   }
 
@@ -298,8 +334,8 @@ export async function generateClientPdf(opts: {
   drawSectionHeader("SCN Screening Questionnaire");
 
   // Screening metadata
-  const screeningDate = fd.screeningDate || (client.createdAt ? fmtDate(client.createdAt) : "—");
-  const screenerName  = fd.screenerName || staffName?.(client.intakeRep) || "—";
+  const screeningDate = fd.screeningDate || (client.createdAt ? fmtDate(client.createdAt) : "-");
+  const screenerName  = toWinAnsi(fd.screenerName || staffName?.(client.intakeRep) || "-");
   drawInfoRow("Screening Date", screeningDate);
   drawInfoRow("Screener Name", screenerName);
   y -= 4;
@@ -325,7 +361,7 @@ export async function generateClientPdf(opts: {
   }
   drawQRow(13, "Other known health issues",                               fmtBool(sq.otherHealthIssues));
   drawQRow(14, "Medications require refrigeration",                       fmtBool(sq.medicationsRequireRefrigeration));
-  const pregnantVal = sq.pregnantOrPostpartum || (healthCategories.includes("Pregnant") || healthCategories.some((c: string) => c.startsWith("Postpartum")) ? "Yes" : "—");
+  const pregnantVal = sq.pregnantOrPostpartum || (healthCategories.includes("Pregnant") || healthCategories.some((c: string) => c.startsWith("Postpartum")) ? "Yes" : "-");
   drawQRow(15, "Pregnant or postpartum",                                  fmtBool(pregnantVal));
   if (String(pregnantVal).toLowerCase() === "yes" || pregnantVal === true) {
     const dueDateVal = fd.dueDate || sq.dueDate;
@@ -337,10 +373,10 @@ export async function generateClientPdf(opts: {
   // Q18: housing problems (may be array legacy)
   const HOUSING_OPTIONS = ["No","Pests such as bugs, ants, or mice","Mold","Lead paint or pipes","Lack of heat","Oven or stove not working","Smoke detectors missing or not working","Water leaks"];
   const housingProblemsRaw = sq.housingProblems;
-  let housingProblemsVal = "—";
+  let housingProblemsVal = "-";
   if (Array.isArray(housingProblemsRaw)) {
     const joined = housingProblemsRaw.join(", ");
-    housingProblemsVal = HOUSING_OPTIONS.find((opt) => joined.includes(opt)) || joined || "—";
+    housingProblemsVal = toWinAnsi(HOUSING_OPTIONS.find((opt) => joined.includes(opt)) || joined || "-");
   } else if (housingProblemsRaw) {
     housingProblemsVal = String(housingProblemsRaw);
   }
@@ -351,7 +387,7 @@ export async function generateClientPdf(opts: {
   // 6. FOOD ALLERGIES / DIETARY RESTRICTIONS
   // ─────────────────────────────────────────────────────────────────────────
   drawSectionHeader("Food Allergies / Dietary Restrictions");
-  const allergyDisplay = fd.foodAllergies === "Yes" ? (fd.foodAllergiesDetails || "Yes") : (fd.foodAllergies || "—");
+  const allergyDisplay = toWinAnsi(fd.foodAllergies === "Yes" ? (fd.foodAllergiesDetails || "Yes") : (fd.foodAllergies || "-"));
   drawInfoRow("Food allergies", allergyDisplay);
   drawInfoRow("Dietary restrictions", safe(fd.dietaryRestrictions));
 
@@ -383,7 +419,7 @@ export async function generateClientPdf(opts: {
     drawSectionHeader(`Services (${services.length})`);
     services.forEach((svc: any) => {
       ensureSpace(50);
-      page.drawText(safe(svc.name), { x: MARGIN + 4, y: y - 10, size: 9, font: fontBold, color: C.black });
+      page.drawText(toWinAnsi(safe(svc.name)), { x: MARGIN + 4, y: y - 10, size: 9, font: fontBold, color: C.black });
       y -= LINE_H;
       drawInfoRow("Status", safe(svc.status), 12);
       if (svc.startDate) drawInfoRow("Start Date", fmtDate(svc.startDate), 12);
@@ -409,7 +445,7 @@ export async function generateClientPdf(opts: {
       ensureSpace(40);
       const noteDate = fmtDate(note.createdAt);
       const noteBy   = note.authorName || staffName?.(note.createdBy) || "Staff";
-      page.drawText(`${noteDate} — ${noteBy}`, { x: MARGIN + 4, y: y - 10, size: 7.5, font: fontBold, color: C.slate });
+      page.drawText(toWinAnsi(`${noteDate} - ${noteBy}`), { x: MARGIN + 4, y: y - 10, size: 7.5, font: fontBold, color: C.slate });
       y -= LINE_H;
       const contentLines = wrapText(note.content || "", fontReg, 8, COL_W - 12);
       contentLines.forEach((line) => {
@@ -432,7 +468,7 @@ export async function generateClientPdf(opts: {
       const to   = STAGE_LABELS[entry.toStage] || entry.toStage;
       const who  = entry.changedByName || "Staff";
       const when = fmtDate(entry.createdAt);
-      const rowText = `${from}  →  ${to}   |   ${who}   |   ${when}`;
+      const rowText = toWinAnsi(`${from}  ->  ${to}   |   ${who}   |   ${when}`);
       const rowLines = wrapText(rowText, fontReg, 8, COL_W - 8);
       rowLines.forEach((line) => {
         ensureSpace(LINE_H);
