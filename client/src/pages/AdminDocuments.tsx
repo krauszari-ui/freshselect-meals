@@ -13,6 +13,7 @@ import {
   Upload, Loader2, FileText, Download, FolderOpen,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { useOpenDocument } from "@/hooks/useOpenDocument";
 import { toast } from "sonner";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -29,6 +30,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export default function AdminDocuments() {
   const utils = trpc.useUtils();
+  const { openDocument, loading: docOpenLoading } = useOpenDocument();
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [showUpload, setShowUpload] = useState(false);
   const [uploadData, setUploadData] = useState({ category: "uncategorized" as string, fileName: "" });
@@ -121,14 +123,13 @@ export default function AdminDocuments() {
                 <div className="flex items-start gap-3">
                   <FileText className="h-5 w-5 text-slate-400 mt-0.5 shrink-0" />
                   <div>
-                    <a
-                      href={doc.fileUrl || doc.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                    <button
+                      onClick={() => openDocument(doc.fileKey || doc.fileUrl || doc.url, null)}
+                      disabled={docOpenLoading === (doc.fileKey || doc.fileUrl || doc.url)}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline text-left disabled:opacity-60"
                     >
                       {doc.fileName || doc.name}
-                    </a>
+                    </button>
                     {doc.description && (
                       <p className="text-xs text-slate-500 mt-0.5">{doc.description}</p>
                     )}
@@ -142,14 +143,16 @@ export default function AdminDocuments() {
                     </div>
                   </div>
                 </div>
-                <a
-                  href={doc.fileUrl || doc.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => openDocument(doc.fileKey || doc.fileUrl || doc.url, null)}
+                  disabled={docOpenLoading === (doc.fileKey || doc.fileUrl || doc.url)}
                   title="Download document"
+                  className="disabled:opacity-60"
                 >
-                  <Download className="h-4 w-4 text-slate-400 hover:text-slate-600" />
-                </a>
+                  {docOpenLoading === (doc.fileKey || doc.fileUrl || doc.url)
+                    ? <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                    : <Download className="h-4 w-4 text-slate-400 hover:text-slate-600" />}
+                </button>
               </div>
             ))}
           </div>
