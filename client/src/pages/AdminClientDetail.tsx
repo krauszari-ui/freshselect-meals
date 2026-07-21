@@ -217,10 +217,6 @@ export default function AdminClientDetail() {
   const [noteText, setNoteText] = useState("");
   const [docType, setDocType] = useState("provider_attestation");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Re-upload state for legacy URL-only application documents
-  const reuploadInputRef = useRef<HTMLInputElement>(null);
-  const [reuploadingKey, setReuploadingKey] = useState<string | null>(null);
-
   // Dialog states
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -322,29 +318,6 @@ export default function AdminClientDetail() {
   });
   const uploadDocMutation = trpc.admin.documents.upload.useMutation({
     onSuccess: () => { utils.admin.documents.byClient.invalidate({ submissionId: id }); toast.success("Document uploaded"); },
-  });
-  // Re-upload mutation: uploads the file then patches formData.uploadedDocuments with the new url+key
-  const reuploadDocMutation = trpc.admin.documents.upload.useMutation({
-    onSuccess: (result, vars) => {
-      // Patch the uploadedDocuments entry in formData with the new url + key
-      const currentDocs = (fd.uploadedDocuments || fd.documents || {}) as Record<string, any>;
-      const updatedDocs = {
-        ...currentDocs,
-        [reuploadingKey!]: { url: result.url, key: `admin-docs/${vars.category}-${result.id}` },
-      };
-      updateClientMutation.mutate(
-        { id, formData: { uploadedDocuments: updatedDocs } },
-        {
-          onSuccess: () => {
-            utils.admin.getById.invalidate({ id });
-            toast.success("Document re-uploaded successfully");
-            setReuploadingKey(null);
-          },
-          onError: (err) => toast.error("Re-upload saved but could not update record: " + err.message),
-        }
-      );
-    },
-    onError: (err) => { toast.error("Re-upload failed: " + err.message); setReuploadingKey(null); },
   });
   const updateTaskStatusMutation = trpc.admin.tasks.updateStatus.useMutation({
     onSuccess: () => { utils.admin.tasks.byClient.invalidate({ submissionId: id }); toast.success("Task status updated"); },
@@ -868,32 +841,6 @@ export default function AdminClientDetail() {
     };
     reader.readAsDataURL(file);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handleReupload = async (e: React.ChangeEvent<HTMLInputElement>, docKey: string) => {
-    const file = e.target.files?.[0];
-    if (!file || !docKey) return;
-    setReuploadingKey(docKey);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1];
-      // Derive a sensible category from the doc key (e.g. memberMedicaidCard_0 → medicaid_card)
-      const category =
-        docKey.toLowerCase().includes("medicaid") ? "medicaid_card" :
-        docKey.toLowerCase().includes("birth") ? "birth_certificate" :
-        docKey.toLowerCase().includes("marriage") ? "marriage_license" :
-        docKey.toLowerCase().includes("consent") ? "consent" :
-        "supporting_documentation";
-      reuploadDocMutation.mutate({
-        submissionId: id,
-        name: file.name,
-        category: category as any,
-        fileData: base64,
-        contentType: file.type,
-      });
-    };
-    reader.readAsDataURL(file);
-    if (reuploadInputRef.current) reuploadInputRef.current.value = "";
   };
 
   const cycleTaskStatus = (taskId: number, currentStatus: string) => {
@@ -1621,14 +1568,6 @@ export default function AdminClientDetail() {
                   <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
                 </label>
                 {uploadDocMutation.isPending && <div className="flex items-center gap-2 text-sm text-blue-600 mb-2"><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</div>}
-                {/* Hidden file input for re-uploading legacy URL-only documents */}
-                <input
-                  ref={reuploadInputRef}
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx"
-                  onChange={(e) => reuploadingKey && handleReupload(e, reuploadingKey)}
-                />
                 {/* Form-submitted documents (uploaded during application) */}
                 {Object.keys(uploadedDocuments).length > 0 && (
                   <div className="mb-4">
@@ -1639,7 +1578,6 @@ export default function AdminClientDetail() {
                         // Old format: plain URL string — pass the URL directly to getFreshUrl (server extracts key)
                         const isNewFormat = typeof docVal === "object" && docVal !== null && "key" in docVal;
                         const fileKeyOrUrl = isNewFormat ? (docVal as any).key : (docVal as string);
-                        const isReuploading = reuploadingKey === docKey && (reuploadDocMutation.isPending || updateClientMutation.isPending);
                         const isOpening = docOpenLoading === fileKeyOrUrl;
                         return (
                           <div key={docKey} className="flex items-center justify-between p-2 rounded bg-emerald-50 border border-emerald-100">
@@ -1659,16 +1597,7 @@ export default function AdminClientDetail() {
                                   ? <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                                   : <ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" />}
                               </button>
-                              {/* Re-upload button — lets admin replace a document with a newer version */}
-                              <button
-                                onClick={() => { setReuploadingKey(docKey); setTimeout(() => reuploadInputRef.current?.click(), 0); }}
-                                disabled={isReuploading}
-                                className="inline-flex items-center gap-1 text-[11px] px-2 py-1 bg-slate-200 hover:bg-slate-300 disabled:opacity-60 text-slate-700 rounded transition-colors"
-                                title="Replace this document with a new upload"
-                              >
-                                {isReuploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                {isReuploading ? "Uploading..." : "Replace"}
-                              </button>
+            
                             </div>
                           </div>
                         );
