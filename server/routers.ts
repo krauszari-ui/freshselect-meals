@@ -948,6 +948,8 @@ export const appRouter = router({
       // when the stored URL has exceeded its 7-day TTL.
       getFreshUrl: staffProcedure
         .input(z.object({
+          // Pass either a stored fileKey (e.g. "documents/file.pdf") OR a full stored URL.
+          // The server will extract the R2 key from the URL when needed.
           fileKey: z.string().min(1),
           submissionId: z.number().nullable().optional(),
         }))
@@ -959,7 +961,36 @@ export const appRouter = router({
               throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this document" });
             }
           }
-          const { url } = await storageGet(input.fileKey);
+
+          let key = input.fileKey;
+
+          // If a full URL was passed instead of a bare key, extract the R2 object key.
+          // Handles three URL formats stored in the DB:
+          //   1. https://pub-xxx.r2.dev/<key>                        (R2 public URL)
+          //   2. https://<account>.r2.cloudflarestorage.com/<bucket>/<key>?X-Amz-...  (R2 presigned)
+          //   3. https://d2xsxph8kpxj0f.cloudfront.net/.../<key>    (Manus Forge CDN — permanent, no refresh needed)
+          if (key.startsWith("http://") || key.startsWith("https://")) {
+            try {
+              const parsed = new URL(key);
+              const hostname = parsed.hostname;
+
+              if (hostname.endsWith(".r2.cloudflarestorage.com")) {
+                // Format 2: /<bucket>/<key> — strip the leading bucket segment
+                const parts = parsed.pathname.replace(/^\//, "").split("/");
+                key = parts.slice(1).join("/"); // drop bucket name
+              } else if (hostname.endsWith(".r2.dev") || (process.env.R2_PUBLIC_URL && key.startsWith(process.env.R2_PUBLIC_URL))) {
+                // Format 1: /<key>
+                key = parsed.pathname.replace(/^\//, "");
+              } else {
+                // Format 3 (Forge CDN / CloudFront) or unknown — URL is already permanent, return as-is
+                return { url: key.split("?")[0] }; // strip any stale query params
+              }
+            } catch {
+              // Not a valid URL — treat as bare key
+            }
+          }
+
+          const { url } = await storageGet(key);
           return { url };
         }),
     }),

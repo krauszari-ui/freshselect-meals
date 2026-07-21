@@ -1635,51 +1635,39 @@ export default function AdminClientDetail() {
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Submitted with Application</p>
                     <div className="space-y-2">
                       {Object.entries(uploadedDocuments).map(([docKey, docVal]) => {
-                        // New format: { url, key } — can use getFreshUrl
-                        // Old format: plain URL string — needs re-upload
+                        // New format: { url, key } — use fileKey for getFreshUrl
+                        // Old format: plain URL string — pass the URL directly to getFreshUrl (server extracts key)
                         const isNewFormat = typeof docVal === "object" && docVal !== null && "key" in docVal;
-                        const fileKey = isNewFormat ? (docVal as any).key : null;
-                        const rawUrl = isNewFormat ? (docVal as any).url : (docVal as string);
+                        const fileKeyOrUrl = isNewFormat ? (docVal as any).key : (docVal as string);
                         const isReuploading = reuploadingKey === docKey && (reuploadDocMutation.isPending || updateClientMutation.isPending);
+                        const isOpening = docOpenLoading === fileKeyOrUrl;
                         return (
                           <div key={docKey} className="flex items-center justify-between p-2 rounded bg-emerald-50 border border-emerald-100">
                             <div className="flex items-center gap-2 min-w-0">
                               <FileText className="h-4 w-4 text-emerald-500 shrink-0" />
                               <span className="text-sm text-slate-700 truncate">{getDocLabel(docKey)}</span>
-                              {!isNewFormat && (
-                                <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5 shrink-0">expired</span>
-                              )}
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
-                              {isNewFormat && fileKey ? (
-                                <button
-                                  onClick={() => openDocument(fileKey, id)}
-                                  disabled={docOpenLoading === fileKey}
-                                  className="p-1 hover:bg-slate-100 rounded disabled:opacity-60"
-                                  title="Open document"
-                                >
-                                  {docOpenLoading === fileKey
-                                    ? <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                                    : <ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" />}
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => window.open(rawUrl, "_blank", "noopener,noreferrer")}
-                                  className="p-1 hover:bg-slate-100 rounded"
-                                  title="Try to open (may be expired)"
-                                >
-                                  <ExternalLink className="h-4 w-4 text-slate-400 hover:text-blue-500" />
-                                </button>
-                              )}
-                              {/* Re-upload button — shown for all application docs so admin can always refresh */}
+                              {/* Open button — works for both old (URL) and new (key) formats */}
+                              <button
+                                onClick={() => openDocument(fileKeyOrUrl, id)}
+                                disabled={isOpening}
+                                className="p-1 hover:bg-slate-100 rounded disabled:opacity-60"
+                                title="Open document"
+                              >
+                                {isOpening
+                                  ? <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                                  : <ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" />}
+                              </button>
+                              {/* Re-upload button — lets admin replace a document with a newer version */}
                               <button
                                 onClick={() => { setReuploadingKey(docKey); setTimeout(() => reuploadInputRef.current?.click(), 0); }}
                                 disabled={isReuploading}
-                                className="inline-flex items-center gap-1 text-[11px] px-2 py-1 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded transition-colors"
-                                title="Re-upload this document"
+                                className="inline-flex items-center gap-1 text-[11px] px-2 py-1 bg-slate-200 hover:bg-slate-300 disabled:opacity-60 text-slate-700 rounded transition-colors"
+                                title="Replace this document with a new upload"
                               >
                                 {isReuploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                {isReuploading ? "Uploading..." : "Re-upload"}
+                                {isReuploading ? "Uploading..." : "Replace"}
                               </button>
                             </div>
                           </div>
