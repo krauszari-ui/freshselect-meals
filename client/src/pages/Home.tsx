@@ -118,6 +118,7 @@ type FormErrors = Partial<Record<string, string>>;
 
 interface UploadedDoc {
   url: string;
+  key: string;
   fileName: string;
 }
 
@@ -447,7 +448,7 @@ function FileUploadField({
 
       setUploads((prev) => ({
         ...prev,
-        [category]: { url: result.url, fileName: file.name },
+        [category]: { url: result.url, key: result.key, fileName: file.name },
       }));
     } catch (err) {
       console.error("Upload failed:", err);
@@ -830,20 +831,22 @@ export default function Home() {
   };
 
   const handleSubmit = () => {
-    const uploadedDocuments: Record<string, string> = {};
-    for (const [key, doc] of Object.entries(uploads)) {
-      uploadedDocuments[key] = doc.url;
+    // Store both url and key so admin can regenerate fresh pre-signed URLs later
+    const uploadedDocuments: Record<string, { url: string; key: string }> = {};
+    for (const [k, doc] of Object.entries(uploads)) {
+      uploadedDocuments[k] = { url: doc.url, key: doc.key || "" };
     }
 
-    // Build conditionDetails: { [conditionKey]: { clientName, docUrl } }
-    const conditionDetails: Record<string, { clientName: string; docUrl: string }> = {};
+    // Build conditionDetails: { [conditionKey]: { clientName, docUrl, docKey } }
+    const conditionDetails: Record<string, { clientName: string; docUrl: string; docKey?: string }> = {};
     const allConditions = [...MEDICAL_CONDITION_CATEGORIES, "Other"];
     for (const condition of allConditions) {
       if (!form.healthCategories.includes(condition)) continue;
       const clientName = condition === "Other" ? form.otherConditionDescription : (form.conditionClientNames[condition] || "");
       const docUrl = uploads[`conditionDoc_${condition}`]?.url || "";
+      const docKey = uploads[`conditionDoc_${condition}`]?.key || "";
       if (clientName || docUrl) {
-        conditionDetails[condition] = { clientName, docUrl };
+        conditionDetails[condition] = { clientName, docUrl, ...(docKey ? { docKey } : {}) };
       }
     }
 

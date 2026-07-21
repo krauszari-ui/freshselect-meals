@@ -44,7 +44,7 @@ import bcrypt from "bcryptjs";
 import { sdk } from "./_core/sdk";
 import { sendAdminNotification, sendApplicantConfirmation, sendEmail } from "./email";
 import { generateAttestationPdf } from "./generateAttestationPdf";
-import { storagePut } from "./storage";
+import { storagePut, storageGet } from "./storage";
 import { z } from "zod";
 import { parse as parseCookieHeader } from "cookie";
 
@@ -944,6 +944,24 @@ export const appRouter = router({
         await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "document_deleted", details: { documentId: input.id } });
         return { success: true };
       }),
+      // Returns a fresh pre-signed URL for a document — avoids ExpiredRequest errors
+      // when the stored URL has exceeded its 7-day TTL.
+      getFreshUrl: staffProcedure
+        .input(z.object({
+          fileKey: z.string().min(1),
+          submissionId: z.number().nullable().optional(),
+        }))
+        .query(async ({ input, ctx }) => {
+          // SECURITY: Assessors may only fetch URLs for their assigned clients
+          if (ctx.user.role === "assessor" && input.submissionId) {
+            const sub = await getSubmissionById(input.submissionId);
+            if (!sub || sub.assessorId !== ctx.user.id) {
+              throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this document" });
+            }
+          }
+          const { url } = await storageGet(input.fileKey);
+          return { url };
+        }),
     }),
 
     // ─── Services ─────────────────────────────────────────────────────────

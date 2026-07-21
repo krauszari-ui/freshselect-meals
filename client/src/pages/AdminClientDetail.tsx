@@ -26,6 +26,7 @@ import {
   FileUp, StickyNote, CheckSquare, AlertTriangle, ShieldCheck, AlertCircle, Ban, Download,
 } from "lucide-react";
 import { generateClientPdf } from "@/lib/generateClientPdf";
+import { useOpenDocument } from "@/hooks/useOpenDocument";
 import { useState, useRef, useEffect } from "react";
 import { formatLocalDate, formatLocalDateShort } from "@/lib/utils";
 import { Link, useParams, useLocation } from "wouter";
@@ -192,6 +193,7 @@ export default function AdminClientDetail() {
   const utils = trpc.useUtils();
   const [, navigate] = useLocation();
   const { user } = useAuth();
+  const { openDocument, loading: docOpenLoading } = useOpenDocument();
   const isAssessor = user?.role === "assessor";
 
   const { data: client, isLoading } = trpc.admin.getById.useQuery({ id }, { enabled: id > 0 });
@@ -1533,14 +1535,18 @@ export default function AdminClientDetail() {
                         <p className="text-xs text-emerald-600">Auto-generated PDF with electronic signature</p>
                       </div>
                     </div>
-                    <a
-                      href={(clientDocs as any[]).find((d: any) => d.category === "consent" && d.mimeType === "application/pdf")?.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-md transition-colors"
-                    >
-                      <ExternalLink className="h-3 w-3" /> View PDF
-                    </a>
+                    {(() => {
+                      const consentDoc = (clientDocs as any[]).find((d: any) => d.category === "consent" && d.mimeType === "application/pdf");
+                      return consentDoc ? (
+                        <button
+                          onClick={() => openDocument(consentDoc.fileKey, id)}
+                          disabled={docOpenLoading === consentDoc.fileKey}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-medium rounded-md transition-colors"
+                        >
+                          {docOpenLoading === consentDoc.fileKey ? <Loader2 className="h-3 w-3 animate-spin" /> : <ExternalLink className="h-3 w-3" />} View PDF
+                        </button>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
               )}
@@ -1574,9 +1580,17 @@ export default function AdminClientDetail() {
                             <FileText className="h-4 w-4 text-emerald-500" />
                             <span className="text-sm text-slate-700">{getDocLabel(key)}</span>
                           </div>
-                          <a href={url as string} target="_blank" rel="noopener noreferrer">
+                          <button
+                            onClick={() => {
+                              // url here is a raw stored URL from formData — try to open directly
+                              // For new submissions the key is stored; for old ones we fall back to the url
+                              window.open(url as string, "_blank", "noopener,noreferrer");
+                            }}
+                            className="p-1 hover:bg-slate-100 rounded"
+                            title="Open document"
+                          >
                             <ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" />
-                          </a>
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1594,7 +1608,16 @@ export default function AdminClientDetail() {
                             <FileText className="h-4 w-4 text-slate-400" />
                             <span className="text-sm text-slate-700">{doc.name}</span>
                           </div>
-                          <a href={doc.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" /></a>
+                          <button
+                            onClick={() => openDocument(doc.fileKey, id)}
+                            disabled={docOpenLoading === doc.fileKey}
+                            className="p-1 hover:bg-slate-100 rounded disabled:opacity-60"
+                            title="Open document"
+                          >
+                            {docOpenLoading === doc.fileKey
+                              ? <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                              : <ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" />}
+                          </button>
                         </div>
                       ))}
                     </div>
