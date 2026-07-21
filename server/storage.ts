@@ -132,13 +132,8 @@ export async function storagePut(
       })
     );
 
-    // Prefer public URL if the bucket has a public domain configured
-    const publicUrl = getR2PublicUrl(key);
-    if (publicUrl) {
-      return { key, url: publicUrl };
-    }
-
-    // Otherwise generate a presigned GET URL valid for 7 days
+    // Always generate a presigned GET URL valid for 7 days.
+    // The bucket is private so public R2 URLs return 404.
     const url = await getSignedUrl(
       r2,
       new GetObjectCommand({ Bucket: getR2BucketName(), Key: key }),
@@ -152,18 +147,16 @@ export async function storagePut(
 }
 
 /**
- * Get the URL for a stored file.
- * For R2 with a public domain, returns the permanent public URL.
- * Otherwise generates a presigned URL valid for 7 days.
+ * Get a fresh pre-signed URL for a stored file.
+ * Always generates a presigned URL (valid for 7 days) regardless of R2_PUBLIC_URL,
+ * because the R2 bucket is private and direct public URLs return 404.
  */
 export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
   const r2 = getR2Client();
   const key = relKey.replace(/^\/+/, "");
 
   if (r2) {
-    const publicUrl = getR2PublicUrl(key);
-    if (publicUrl) return { key, url: publicUrl };
-
+    // Always use pre-signed URLs — the bucket is private so public URLs return 404
     const url = await getSignedUrl(
       r2,
       new GetObjectCommand({ Bucket: getR2BucketName(), Key: key }),
@@ -172,9 +165,8 @@ export async function storageGet(relKey: string): Promise<{ key: string; url: st
     return { key, url };
   }
 
-  // Forge fallback: re-upload is not appropriate here, just reconstruct
+  // Forge fallback
   const forge = getForgeConfig();
   if (!forge) throw new Error("No storage backend configured.");
-  // Forge does not have a separate get endpoint — return the CDN pattern
   throw new Error(`storageGet is not supported with Manus Forge backend. Key: ${key}`);
 }
