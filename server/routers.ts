@@ -975,9 +975,9 @@ export const appRouter = router({
               const hostname = parsed.hostname;
 
               if (hostname.endsWith(".r2.cloudflarestorage.com")) {
-                // Format 2: /<bucket>/<key> — strip the leading bucket segment
-                const parts = parsed.pathname.replace(/^\//, "").split("/");
-                key = parts.slice(1).join("/"); // drop bucket name
+                // Format 2: bucket name is in the hostname (e.g. freshselect-documents.xxx.r2.cloudflarestorage.com)
+                // The path is already just /<key> with no bucket prefix to strip
+                key = parsed.pathname.replace(/^\//, "");
               } else if (hostname.endsWith(".r2.dev") || (process.env.R2_PUBLIC_URL && key.startsWith(process.env.R2_PUBLIC_URL))) {
                 // Format 1: /<key>
                 key = parsed.pathname.replace(/^\//, "");
