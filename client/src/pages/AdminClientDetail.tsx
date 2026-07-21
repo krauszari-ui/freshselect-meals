@@ -217,6 +217,9 @@ export default function AdminClientDetail() {
   const [noteText, setNoteText] = useState("");
   const [docType, setDocType] = useState("provider_attestation");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Re-upload state for legacy URL-only application documents
+  const reuploadInputRef = useRef<HTMLInputElement>(null);
+  const [reuploadingKey, setReuploadingKey] = useState<string | null>(null);
 
   // Dialog states
   const [showEdit, setShowEdit] = useState(false);
@@ -319,6 +322,29 @@ export default function AdminClientDetail() {
   });
   const uploadDocMutation = trpc.admin.documents.upload.useMutation({
     onSuccess: () => { utils.admin.documents.byClient.invalidate({ submissionId: id }); toast.success("Document uploaded"); },
+  });
+  // Re-upload mutation: uploads the file then patches formData.uploadedDocuments with the new url+key
+  const reuploadDocMutation = trpc.admin.documents.upload.useMutation({
+    onSuccess: (result, vars) => {
+      // Patch the uploadedDocuments entry in formData with the new url + key
+      const currentDocs = (fd.uploadedDocuments || fd.documents || {}) as Record<string, any>;
+      const updatedDocs = {
+        ...currentDocs,
+        [reuploadingKey!]: { url: result.url, key: `admin-docs/${vars.category}-${result.id}` },
+      };
+      updateClientMutation.mutate(
+        { id, formData: { uploadedDocuments: updatedDocs } },
+        {
+          onSuccess: () => {
+            utils.admin.getById.invalidate({ id });
+            toast.success("Document re-uploaded successfully");
+            setReuploadingKey(null);
+          },
+          onError: (err) => toast.error("Re-upload saved but could not update record: " + err.message),
+        }
+      );
+    },
+    onError: (err) => { toast.error("Re-upload failed: " + err.message); setReuploadingKey(null); },
   });
   const updateTaskStatusMutation = trpc.admin.tasks.updateStatus.useMutation({
     onSuccess: () => { utils.admin.tasks.byClient.invalidate({ submissionId: id }); toast.success("Task status updated"); },
@@ -842,6 +868,32 @@ export default function AdminClientDetail() {
     };
     reader.readAsDataURL(file);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleReupload = async (e: React.ChangeEvent<HTMLInputElement>, docKey: string) => {
+    const file = e.target.files?.[0];
+    if (!file || !docKey) return;
+    setReuploadingKey(docKey);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      // Derive a sensible category from the doc key (e.g. memberMedicaidCard_0 → medicaid_card)
+      const category =
+        docKey.toLowerCase().includes("medicaid") ? "medicaid_card" :
+        docKey.toLowerCase().includes("birth") ? "birth_certificate" :
+        docKey.toLowerCase().includes("marriage") ? "marriage_license" :
+        docKey.toLowerCase().includes("consent") ? "consent" :
+        "supporting_documentation";
+      reuploadDocMutation.mutate({
+        submissionId: id,
+        name: file.name,
+        category: category as any,
+        fileData: base64,
+        contentType: file.type,
+      });
+    };
+    reader.readAsDataURL(file);
+    if (reuploadInputRef.current) reuploadInputRef.current.value = "";
   };
 
   const cycleTaskStatus = (taskId: number, currentStatus: string) => {
@@ -1569,30 +1621,70 @@ export default function AdminClientDetail() {
                   <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
                 </label>
                 {uploadDocMutation.isPending && <div className="flex items-center gap-2 text-sm text-blue-600 mb-2"><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</div>}
+                {/* Hidden file input for re-uploading legacy URL-only documents */}
+                <input
+                  ref={reuploadInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx"
+                  onChange={(e) => reuploadingKey && handleReupload(e, reuploadingKey)}
+                />
                 {/* Form-submitted documents (uploaded during application) */}
                 {Object.keys(uploadedDocuments).length > 0 && (
                   <div className="mb-4">
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Submitted with Application</p>
                     <div className="space-y-2">
-                      {Object.entries(uploadedDocuments).map(([key, url]) => (
-                        <div key={key} className="flex items-center justify-between p-2 rounded bg-emerald-50 border border-emerald-100">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-emerald-500" />
-                            <span className="text-sm text-slate-700">{getDocLabel(key)}</span>
+                      {Object.entries(uploadedDocuments).map(([docKey, docVal]) => {
+                        // New format: { url, key } — can use getFreshUrl
+                        // Old format: plain URL string — needs re-upload
+                        const isNewFormat = typeof docVal === "object" && docVal !== null && "key" in docVal;
+                        const fileKey = isNewFormat ? (docVal as any).key : null;
+                        const rawUrl = isNewFormat ? (docVal as any).url : (docVal as string);
+                        const isReuploading = reuploadingKey === docKey && (reuploadDocMutation.isPending || updateClientMutation.isPending);
+                        return (
+                          <div key={docKey} className="flex items-center justify-between p-2 rounded bg-emerald-50 border border-emerald-100">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileText className="h-4 w-4 text-emerald-500 shrink-0" />
+                              <span className="text-sm text-slate-700 truncate">{getDocLabel(docKey)}</span>
+                              {!isNewFormat && (
+                                <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5 shrink-0">expired</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {isNewFormat && fileKey ? (
+                                <button
+                                  onClick={() => openDocument(fileKey, id)}
+                                  disabled={docOpenLoading === fileKey}
+                                  className="p-1 hover:bg-slate-100 rounded disabled:opacity-60"
+                                  title="Open document"
+                                >
+                                  {docOpenLoading === fileKey
+                                    ? <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                                    : <ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" />}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => window.open(rawUrl, "_blank", "noopener,noreferrer")}
+                                  className="p-1 hover:bg-slate-100 rounded"
+                                  title="Try to open (may be expired)"
+                                >
+                                  <ExternalLink className="h-4 w-4 text-slate-400 hover:text-blue-500" />
+                                </button>
+                              )}
+                              {/* Re-upload button — shown for all application docs so admin can always refresh */}
+                              <button
+                                onClick={() => { setReuploadingKey(docKey); setTimeout(() => reuploadInputRef.current?.click(), 0); }}
+                                disabled={isReuploading}
+                                className="inline-flex items-center gap-1 text-[11px] px-2 py-1 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white rounded transition-colors"
+                                title="Re-upload this document"
+                              >
+                                {isReuploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                {isReuploading ? "Uploading..." : "Re-upload"}
+                              </button>
+                            </div>
                           </div>
-                          <button
-                            onClick={() => {
-                              // url here is a raw stored URL from formData — try to open directly
-                              // For new submissions the key is stored; for old ones we fall back to the url
-                              window.open(url as string, "_blank", "noopener,noreferrer");
-                            }}
-                            className="p-1 hover:bg-slate-100 rounded"
-                            title="Open document"
-                          >
-                            <ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" />
-                          </button>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
