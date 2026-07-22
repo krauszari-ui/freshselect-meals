@@ -19,7 +19,16 @@ export default function AdminLogin() {
     if (!loading && user) {
       const staffRoles = ["admin", "worker", "super_admin", "viewer", "assessor"];
       if (staffRoles.includes(user.role)) {
-        const dest = user.role === "assessor" ? "/assessor" : "/admin/dashboard";
+        // Org staff (any role with an orgId set) go to the org portal
+        const orgId = (user as any).orgId;
+        let dest: string;
+        if (orgId) {
+          dest = "/org";
+        } else if (user.role === "assessor") {
+          dest = "/assessor";
+        } else {
+          dest = "/admin/dashboard";
+        }
         window.location.replace(dest);
       }
     }
@@ -28,6 +37,9 @@ export default function AdminLogin() {
   const loginMutation = trpc.auth.adminLogin.useMutation({
     onSuccess: (data) => {
       // Reload so the session cookie is picked up by trpc.auth.me
+      // orgId is checked via a separate auth.me call after reload — the login
+      // mutation only returns { success, role }. The useEffect above handles
+      // org staff redirect once auth.me resolves with the full user object.
       if (data.role === "assessor") {
         window.location.href = "/assessor";
       } else {

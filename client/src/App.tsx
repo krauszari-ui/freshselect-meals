@@ -27,6 +27,9 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import AdminEmailBlast from "./pages/AdminEmailBlast";
 import AdminChatInbox from "./pages/AdminChatInbox";
+import AdminOrganizations from "./pages/AdminOrganizations";
+import AdminOrgChats from "./pages/AdminOrgChats";
+import OrgPortal from "./pages/OrgPortal";
 import { ImpersonationBanner } from "./components/ImpersonationBanner";
 
 function Router() {
@@ -57,6 +60,8 @@ function Router() {
       <Route path={"/admin/audit-log"} component={AdminAuditLog} />
       <Route path={"/admin/email-blast"} component={AdminEmailBlast} />
       <Route path={"/admin/chat"} component={AdminChatInbox} />
+      <Route path={"/admin/organizations"} component={AdminOrganizations} />
+      <Route path={"/admin/org-chats"} component={AdminOrgChats} />
 
       {/* Referrer Portal */}
       <Route path={"/referrer"} component={ReferrerPortal} />
@@ -64,6 +69,10 @@ function Router() {
       {/* Assessor Portal */}
       <Route path={"/assessor"} component={AssessorPortal} />
       <Route path={"/assessor/clients/:id"} component={AdminClientDetail} />
+
+      {/* Organization Portal */}
+      <Route path={"/org"} component={OrgPortal} />
+      <Route path={"/org/clients/:id"} component={AdminClientDetail} />
 
       {/* Fallback */}
       <Route path={"/404"} component={NotFound} />

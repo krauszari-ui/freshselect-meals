@@ -50,17 +50,22 @@ function getAvatarColor(name: string) {
 export default function AdminDashboard() {
   const { user } = useAuth();
 
-  // Assessors must not see the admin dashboard — redirect them to their own portal
+  // Assessors and org staff must not see the admin dashboard — redirect them to their own portals
   useEffect(() => {
-    if (user && user.role === "assessor") {
-      window.location.replace("/assessor");
+    if (user) {
+      const orgId = (user as any).orgId;
+      if (orgId) {
+        window.location.replace("/org");
+      } else if (user.role === "assessor") {
+        window.location.replace("/assessor");
+      }
     }
   }, [user]);
 
-  if (user && user.role === "assessor") {
+  if (user && ((user as any).orgId || user.role === "assessor")) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-green-900">
-        <Loader2 className="h-8 w-8 animate-spin text-green-300" />
+        <Loader2 className="h-8 w-8 animate-spin text-green-900" />
       </div>
     );
   }

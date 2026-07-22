@@ -232,6 +232,20 @@
       "when": 1784736242447,
       "tag": "0032_opposite_wendigo",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1784740932176,
+      "tag": "0033_conscious_gorilla_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1784741173978,
+      "tag": "0034_dapper_inhumans",
+      "breakpoints": true
     }
   ]
 }

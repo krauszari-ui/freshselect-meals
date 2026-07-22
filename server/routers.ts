@@ -40,6 +40,9 @@ import {
   getUserById,
   createClientMessage, listClientMessages, getNewClientMessages, deleteClientMessage,
   toggleMessageReaction, markThreadRead, getThreadUnreadCount, getAllUnreadCounts, getInboxThreads,
+  listOrganizations, getOrganizationById, createOrganization, updateOrganization,
+  listOrgMembers, assignUserToOrg, referClientToOrg, listSubmissionsByOrg,
+  createOrgGroupMessage, listOrgGroupMessages, getOrgGroupUnreadCount, markOrgGroupRead, listAllOrgGroupsWithUnread,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -2183,6 +2186,206 @@ export const appRouter = router({
         const key = `chat/${input.submissionId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { url } = await storagePut(key, buffer, input.contentType);
         return { url, key, fileName: input.fileName, contentType: input.contentType };
+      }),
+  }),
+
+  // ─── Organizations ────────────────────────────────────────────────────────
+  org: router({
+    /** List clients referred to the caller's org (org staff only) */
+    listReferredClients: staffProcedure
+      .input(z.object({ search: z.string().optional() }))
+      .query(async ({ ctx, input }) => {
+        const userOrgId = (ctx.user as any).orgId as number | undefined;
+        if (!userOrgId) throw new TRPCError({ code: "FORBIDDEN", message: "No organization assigned" });
+        return listSubmissionsByOrg(userOrgId, input.search);
+      }),
+    /** Get own org info (for org staff portal header) */
+    myOrg: staffProcedure
+      .query(async ({ ctx }) => {
+        const userOrgId = (ctx.user as any).orgId as number | undefined;
+        if (!userOrgId) return null;
+        return getOrganizationById(userOrgId);
+      }),
+    /** List all active organizations (staff can see, admin can see inactive too) */
+    list: staffProcedure
+      .input(z.object({ includeInactive: z.boolean().optional().default(false) }))
+      .query(async ({ ctx, input }) => {
+        const isAdmin = ctx.user.role === "admin" || ctx.user.role === "super_admin";
+        return listOrganizations(isAdmin ? input.includeInactive : false);
+      }),
+
+    /** Get a single org with its members */
+    get: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const org = await getOrganizationById(input.id);
+        if (!org) throw new TRPCError({ code: "NOT_FOUND", message: "Organization not found" });
+        const members = await listOrgMembers(input.id);
+        return { ...org, members };
+      }),
+
+    /** Create a new organization */
+    create: adminProcedure
+      .input(z.object({
+        name: z.string().min(1).max(256),
+        contactEmail: z.string().email().optional(),
+        contactPhone: z.string().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const id = await createOrganization(input);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "org_created", details: { orgName: input.name } }).catch(() => {});
+        return { id };
+      }),
+
+    /** Update organization details */
+    update: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).max(256).optional(),
+        contactEmail: z.string().email().optional().nullable(),
+        contactPhone: z.string().optional().nullable(),
+        notes: z.string().optional().nullable(),
+        isActive: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        await updateOrganization(id, data);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "org_updated", details: { orgId: id, changes: data } }).catch(() => {});
+        return { success: true };
+      }),
+
+    /** List members of an org */
+    listMembers: adminProcedure
+      .input(z.object({ orgId: z.number() }))
+      .query(async ({ input }) => listOrgMembers(input.orgId)),
+
+    /** Assign a staff user to an org (or remove by passing orgId: null) */
+    assignUser: adminProcedure
+      .input(z.object({ userId: z.number(), orgId: z.number().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        await assignUserToOrg(input.userId, input.orgId);
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "org_user_assigned", details: { userId: input.userId, orgId: input.orgId } }).catch(() => {});
+        return { success: true };
+      }),
+
+    /** Refer a client to an organization (admin only, replaces existing referral) */
+    referClient: adminProcedure
+      .input(z.object({
+        submissionId: z.number(),
+        orgId: z.number().nullable(),
+        note: z.string().optional().nullable(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await referClientToOrg(input.submissionId, input.orgId, input.note ?? null);
+        let orgName: string | undefined;
+        if (input.orgId) {
+          const org = await getOrganizationById(input.orgId);
+          orgName = org?.name;
+          // Notify all org members
+          const members = await listOrgMembers(input.orgId);
+          for (const member of members) {
+            await createNotification({
+              userId: member.id,
+              type: "org_referral",
+              title: `New client referred to ${orgName ?? "your organization"}`,
+              body: input.note ? `Note: ${input.note}` : "A new client has been referred to your organization.",
+            }).catch(() => {});
+          }
+        }
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "client_referred_to_org", clientId: input.submissionId, details: { orgId: input.orgId, orgName, note: input.note } }).catch(() => {});
+        return { success: true };
+      }),
+
+    // ─── Org Group Chat ────────────────────────────────────────────────────
+    /** List messages in an org's group chat channel */
+    groupMessages: staffProcedure
+      .input(z.object({ orgId: z.number(), limit: z.number().optional().default(100) }))
+      .query(async ({ ctx, input }) => {
+        const role = ctx.user.role;
+        const isFreshSelect = role === "admin" || role === "super_admin" || role === "worker" || role === "viewer";
+        // Org staff can only see their own org's channel
+        if (!isFreshSelect) {
+          const userOrgId = (ctx.user as any).orgId;
+          if (userOrgId !== input.orgId) throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+        }
+        return listOrgGroupMessages(input.orgId, input.limit);
+      }),
+
+    /** Send a message to an org group channel */
+    sendGroupMessage: staffProcedure
+      .input(z.object({
+        orgId: z.number(),
+        content: z.string().min(1).max(10000),
+        mentionedUserIds: z.array(z.number()).optional().default([]),
+        mentionedOrgIds: z.array(z.number()).optional().default([]),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const role = ctx.user.role;
+        const isFreshSelect = role === "admin" || role === "super_admin" || role === "worker" || role === "viewer";
+        const userOrgId = (ctx.user as any).orgId;
+        // Org staff can only post to their own org's channel
+        if (!isFreshSelect && userOrgId !== input.orgId) throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+        const org = await getOrganizationById(input.orgId);
+        const msgId = await createOrgGroupMessage({
+          orgId: input.orgId,
+          senderId: ctx.user.id,
+          senderName: ctx.user.name ?? ctx.user.email ?? "Staff",
+          senderRole: ctx.user.role,
+          senderOrgName: isFreshSelect ? "FreshSelect Meals" : (org?.name ?? undefined),
+          content: input.content,
+        });
+        // Notify individually @mentioned users
+        for (const uid of input.mentionedUserIds) {
+          await createNotification({
+            userId: uid,
+            type: "chat_mention",
+            title: `${ctx.user.name ?? "Staff"} mentioned you in ${org?.name ?? "org"} group chat`,
+            body: input.content.slice(0, 200),
+          }).catch(() => {});
+        }
+        // Notify all members of @mentioned orgs
+        for (const oid of input.mentionedOrgIds) {
+          const members = await listOrgMembers(oid);
+          const mentionedOrg = await getOrganizationById(oid);
+          for (const member of members) {
+            if (member.id === ctx.user.id) continue;
+            await createNotification({
+              userId: member.id,
+              type: "chat_mention",
+              title: `${ctx.user.name ?? "Staff"} mentioned @${mentionedOrg?.name ?? "your org"} in group chat`,
+              body: input.content.slice(0, 200),
+            }).catch(() => {});
+          }
+        }
+        return { id: msgId };
+      }),
+
+    /** Mark org group chat as read up to a given message */
+    markGroupRead: staffProcedure
+      .input(z.object({ orgId: z.number(), lastMessageId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await markOrgGroupRead(ctx.user.id, input.orgId, input.lastMessageId);
+        return { success: true };
+      }),
+
+    /** Get unread count for a specific org group channel */
+    groupUnreadCount: staffProcedure
+      .input(z.object({ orgId: z.number() }))
+      .query(async ({ ctx, input }) => getOrgGroupUnreadCount(ctx.user.id, input.orgId)),
+
+    /** List all org group channels with unread counts (FreshSelect staff sees all, org staff sees only theirs) */
+    allGroupsWithUnread: staffProcedure
+      .query(async ({ ctx }) => {
+        const role = ctx.user.role;
+        const isFreshSelect = role === "admin" || role === "super_admin" || role === "worker" || role === "viewer";
+        if (isFreshSelect) {
+          return listAllOrgGroupsWithUnread(ctx.user.id);
+        }
+        // Org staff: only their own org
+        const userOrgId = (ctx.user as any).orgId;
+        if (!userOrgId) return [];
+        return listAllOrgGroupsWithUnread(ctx.user.id).then((rows) => rows.filter((r: any) => r.orgId === userOrgId));
       }),
   }),
 });

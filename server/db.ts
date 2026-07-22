@@ -15,6 +15,9 @@ import {
   emailBlasts,
   clientMessages, ClientMessage, InsertClientMessage,
   messageReads,
+  organizations, Organization, InsertOrganization,
+  orgGroupMessages, OrgGroupMessage, InsertOrgGroupMessage,
+  orgMessageReads, OrgMessageRead, InsertOrgMessageRead,
 } from "../drizzle/schema";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1008,11 +1011,12 @@ export async function createNotification(payload: Omit<InsertNotification, "id" 
   return (result[0] as any).insertId as number;
 }
 
-/** List notifications, annotating each with whether the given user has read it. */
+/** List notifications for a user: shows notifications targeted to them (userId = userId) OR broadcast (userId IS NULL). */
 export async function listNotifications(userId: number, limit = 50): Promise<(Notification & { isReadByUser: boolean })[]> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(notifications)
+    .where(or(isNull(notifications.userId), eq(notifications.userId, userId)))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
   if (rows.length === 0) return [];
@@ -1025,16 +1029,22 @@ export async function listNotifications(userId: number, limit = 50): Promise<(No
   return rows.map((r) => ({ ...r, isReadByUser: readSet.has(r.id) }));
 }
 
-/** Count unread notifications for a specific user. */
+/** Count unread notifications for a specific user (targeted to them or broadcast). */
 export async function getUnreadNotificationCount(userId: number): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
-  // Total notifications minus those the user has read
-  const [totalRow] = await db.select({ count: count() }).from(notifications);
+  // Total notifications visible to this user (targeted + broadcast)
+  const [totalRow] = await db.select({ count: count() }).from(notifications)
+    .where(or(isNull(notifications.userId), eq(notifications.userId, userId)));
   const total = Number(totalRow?.count ?? 0);
   if (total === 0) return 0;
+  // Subtract those the user has already read
+  const visibleRows = await db.select({ id: notifications.id }).from(notifications)
+    .where(or(isNull(notifications.userId), eq(notifications.userId, userId)));
+  const visibleIds = visibleRows.map((r) => r.id);
+  if (visibleIds.length === 0) return 0;
   const [readRow] = await db.select({ count: count() }).from(notificationReads)
-    .where(eq(notificationReads.userId, userId));
+    .where(and(eq(notificationReads.userId, userId), inArray(notificationReads.notificationId, visibleIds)));
   const readCount = Number(readRow?.count ?? 0);
   return Math.max(0, total - readCount);
 }
@@ -1481,4 +1491,155 @@ export async function getInboxThreads(userId: number) {
 
   const rows = (Array.isArray((latestPerThread as any)[0]) ? (latestPerThread as any)[0] : latestPerThread) as any[];
   return rows;
+}
+
+// ─── Organizations ────────────────────────────────────────────────────────────
+
+export async function listOrganizations(includeInactive = false) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(organizations).orderBy(organizations.name);
+  return includeInactive ? rows : rows.filter((o) => o.isActive === 1);
+}
+
+export async function getOrganizationById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(organizations).where(eq(organizations.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createOrganization(data: InsertOrganization) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(organizations).values(data);
+  return result[0].insertId as number;
+}
+
+export async function updateOrganization(id: number, data: Partial<InsertOrganization>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(organizations).set(data).where(eq(organizations.id, id));
+}
+
+export async function listOrgMembers(orgId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(users).where(and(eq(users.orgId, orgId), eq(users.isActive, 1)));
+}
+
+export async function assignUserToOrg(userId: number, orgId: number | null) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(users).set({ orgId }).where(eq(users.id, userId));
+}
+
+export async function referClientToOrg(submissionId: number, orgId: number | null, note: string | null) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(submissions).set({
+    referredOrgId: orgId,
+    referredOrgAt: orgId ? new Date() : null,
+    referredOrgNote: note,
+  }).where(eq(submissions.id, submissionId));
+}
+
+// ─── Org Group Chat ───────────────────────────────────────────────────────────
+
+export async function createOrgGroupMessage(data: InsertOrgGroupMessage) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(orgGroupMessages).values(data);
+  return result[0].insertId as number;
+}
+
+export async function listOrgGroupMessages(orgId: number, limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(orgGroupMessages)
+    .where(and(eq(orgGroupMessages.orgId, orgId), eq(orgGroupMessages.isDeleted, 0)))
+    .orderBy(orgGroupMessages.createdAt)
+    .limit(limit);
+}
+
+export async function getOrgGroupUnreadCount(userId: number, orgId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const readRow = await db.select().from(orgMessageReads)
+    .where(and(eq(orgMessageReads.userId, userId), eq(orgMessageReads.orgId, orgId)))
+    .limit(1);
+  const lastReadId = readRow[0]?.lastReadMessageId ?? 0;
+  const rows = await db.execute(sql`
+    SELECT COUNT(*) AS cnt FROM orgGroupMessages
+    WHERE orgId = ${orgId} AND isDeleted = 0 AND id > ${lastReadId} AND senderId != ${userId}
+  `);
+  const arr = (Array.isArray((rows as any)[0]) ? (rows as any)[0] : rows) as any[];
+  return Number(arr[0]?.cnt ?? 0);
+}
+
+export async function markOrgGroupRead(userId: number, orgId: number, lastMessageId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(orgMessageReads).values({ userId, orgId, lastReadMessageId: lastMessageId })
+    .onDuplicateKeyUpdate({ set: { lastReadMessageId: lastMessageId } });
+}
+
+export async function listAllOrgGroupsWithUnread(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.execute(sql`
+    SELECT o.id AS orgId, o.name AS orgName,
+           COALESCE(mr.lastReadMessageId, 0) AS lastReadMessageId,
+           (SELECT COUNT(*) FROM orgGroupMessages m2
+            WHERE m2.orgId = o.id AND m2.isDeleted = 0
+              AND m2.id > COALESCE(mr.lastReadMessageId, 0)
+              AND m2.senderId != ${userId}) AS unreadCount,
+           (SELECT m3.content FROM orgGroupMessages m3
+            WHERE m3.orgId = o.id AND m3.isDeleted = 0
+            ORDER BY m3.createdAt DESC LIMIT 1) AS lastMessageContent,
+           (SELECT m3.senderName FROM orgGroupMessages m3
+            WHERE m3.orgId = o.id AND m3.isDeleted = 0
+            ORDER BY m3.createdAt DESC LIMIT 1) AS lastMessageSender,
+           (SELECT m3.createdAt FROM orgGroupMessages m3
+            WHERE m3.orgId = o.id AND m3.isDeleted = 0
+            ORDER BY m3.createdAt DESC LIMIT 1) AS lastMessageAt
+    FROM organizations o
+    LEFT JOIN orgMessageReads mr ON mr.orgId = o.id AND mr.userId = ${userId}
+    WHERE o.isActive = 1
+    ORDER BY lastMessageAt DESC, o.name ASC
+  `);
+  return (Array.isArray((rows as any)[0]) ? (rows as any)[0] : rows) as any[];
+}
+
+// ─── Org: list clients referred to a specific org ──────────────────────────
+export async function listSubmissionsByOrg(orgId: number, search?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const conditions: ReturnType<typeof eq>[] = [eq(submissions.referredOrgId, orgId) as any];
+  if (search && search.trim()) {
+    const q = `%${search.trim()}%`;
+    conditions.push(
+      or(
+        like(submissions.firstName, q),
+        like(submissions.lastName, q),
+        like(submissions.medicaidId, q),
+        like(submissions.cellPhone, q),
+        like(submissions.referenceNumber, q),
+      ) as any,
+    );
+  }
+  return db
+    .select({
+      id: submissions.id,
+      firstName: submissions.firstName,
+      lastName: submissions.lastName,
+      stage: submissions.stage,
+      status: submissions.status,
+      referralNote: submissions.referredOrgNote,
+      referredAt: submissions.referredOrgAt,
+      createdAt: submissions.createdAt,
+    })
+    .from(submissions)
+    .where(and(...conditions))
+    .orderBy(desc(submissions.referredOrgAt));
 }

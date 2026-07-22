@@ -21,6 +21,7 @@ const NAV_ITEMS = [
 
 const ADMIN_ONLY_NAV_ITEMS = [
   { path: "/admin/workers", label: "Staff Management", icon: UserCog },
+  { path: "/admin/organizations", label: "Organizations", icon: Building2 },
   { path: "/admin/duplicates", label: "Duplicate Scan", icon: AlertTriangle },
   { path: "/admin/assessment-report", label: "Assessment Report", icon: BarChart3 },
   { path: "/admin/audit-log", label: "Audit Log", icon: ScrollText },
@@ -89,6 +90,25 @@ function SidebarContent({ navItems, location, user, unreadCount, chatUnreadCount
             </Link>
           );
         })}
+
+        {/* Org Group Chats */}
+        <Link href="/admin/org-chats">
+          <button
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              location === "/admin/org-chats" || location.startsWith("/admin/org-chats")
+                ? "bg-green-600 text-white font-medium"
+                : "text-green-200 hover:text-white hover:bg-green-800"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Building2 className="h-[18px] w-[18px] shrink-0" />
+              <span>Org Group Chats</span>
+            </div>
+            {(location === "/admin/org-chats" || location.startsWith("/admin/org-chats")) && (
+              <ChevronRight className="h-4 w-4 opacity-60" />
+            )}
+          </button>
+        </Link>
 
         {/* Chat Inbox */}
         <Link href="/admin/chat">
@@ -202,12 +222,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return () => { document.body.style.overflow = ""; };
   }, [sidebarOpen]);
 
-  // Redirect assessors to their own portal via full page navigation
+  // Redirect assessors and org staff to their own portals
   // window.location.replace avoids React error #300 that occurs when
   // navigate() fires while the component tree is mid-render
   useEffect(() => {
-    if (!loading && user && user.role === "assessor") {
-      window.location.replace("/assessor");
+    if (!loading && user) {
+      const orgId = (user as any).orgId;
+      if (orgId) {
+        window.location.replace("/org");
+      } else if (user.role === "assessor") {
+        window.location.replace("/assessor");
+      }
     }
   }, [loading, user]);
 
@@ -244,9 +269,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  // Assessors: show a spinner while window.location.replace fires
+  // Assessors and org staff: show a spinner while window.location.replace fires
   // Never return null from a component — React error #300
-  if (user.role === "assessor") {
+  if (user.role === "assessor" || (user as any).orgId) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-green-900">
         <Loader2 className="h-8 w-8 animate-spin text-green-300" />
