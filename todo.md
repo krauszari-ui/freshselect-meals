@@ -910,3 +910,8 @@
 - [x] SERVER: canAssessorAccessClient helper — also allow access if submission.assessorId belongs to any member of the user's org
 - [x] SERVER: org.listReferredClients procedure — update label/description to reflect "org clients" not just "referred"
 - [x] OrgPortal UI — update heading from "Referred Clients" to "Your Clients" to reflect the broader scope
+
+## Org Filter Dropdown on Admin Client List (July 22 2026)
+- [x] SERVER: add optional orgId filter to listSubmissions db query (include clients where referredOrgId=orgId OR assessorId IN org staff)
+- [x] SERVER: expose orgId param on submissions.list tRPC procedure
+- [x] UI: add org dropdown (All Orgs + each org by name) to AdminClientList page, wired to the orgId filter
