@@ -12,8 +12,10 @@ export function cn(...inputs: ClassValue[]) {
  * ❌ new Date("2000-07-09")           → Jul 8 in UTC-4 (wrong)
  * ✅ parseLocalDate("2000-07-09")     → Jul 9 always (correct)
  */
-export function parseLocalDate(dateStr: string | null | undefined): Date | null {
+export function parseLocalDate(dateStr: string | Date | null | undefined): Date | null {
   if (!dateStr) return null;
+  // If already a Date object, return it directly
+  if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
   // Handle YYYY-MM-DD (ISO date-only, no time)
   const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (isoMatch) {
@@ -28,9 +30,9 @@ export function parseLocalDate(dateStr: string | null | undefined): Date | null 
   return new Date(dateStr);
 }
 
-/** Format a user-entered date string as "July 9, 2000" (long, no timezone shift) */
+/** Format a user-entered date string or Date object as "July 9, 2000" (long, no timezone shift) */
 export function formatLocalDate(
-  dateStr: string | null | undefined,
+  dateStr: string | Date | null | undefined,
   opts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric", year: "numeric" }
 ): string | null {
   const d = parseLocalDate(dateStr);
@@ -38,7 +40,7 @@ export function formatLocalDate(
   return d.toLocaleDateString("en-US", opts);
 }
 
-/** Format a user-entered date string as "Jul 9, 2000" (short) */
-export function formatLocalDateShort(dateStr: string | null | undefined): string | null {
+/** Format a user-entered date string or Date object as "Jul 9, 2000" (short) */
+export function formatLocalDateShort(dateStr: string | Date | null | undefined): string | null {
   return formatLocalDate(dateStr, { month: "short", day: "numeric", year: "numeric" });
 }

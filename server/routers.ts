@@ -797,7 +797,11 @@ export const appRouter = router({
       referralSource: z.string().optional(), program: z.string().optional(),
       assessmentCompleted: z.boolean().optional(),
     }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        // SECURITY: assessors and viewers cannot export client PII
+        if (ctx.user.role === "assessor" || ctx.user.role === "viewer") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to export client data" });
+        }
         // 'assessment_completed' is a virtual filter — maps to assessmentCompletedAt IS NOT NULL
         const { assessmentCompleted, program, assignedTo, intakeRep, referralSource, ...baseFilters } = input;
         let rows = await getAllSubmissions({ ...baseFilters, assignedTo, intakeRep, referralSource });
@@ -875,11 +879,17 @@ export const appRouter = router({
         }
         return getCaseNotesBySubmission(input.submissionId);
       }),
-      create: editProcedure.input(z.object({ submissionId: z.number(), content: z.string().min(1) }))
+      create: staffProcedure.input(z.object({ submissionId: z.number(), content: z.string().min(1) }))
         .mutation(async ({ ctx, input }) => {
-          const id = await createCaseNote({ ...input, createdBy: ctx.user.id });
+          // SECURITY: Assessors can only add notes for their assigned clients
+          if (ctx.user.role === "assessor") {
+            const sub = await getSubmissionById(input.submissionId);
+            if (!sub || sub.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+          }
+          const authorName = ctx.user.name ?? ctx.user.email ?? "Staff";
+          const id = await createCaseNote({ ...input, createdBy: ctx.user.id, authorName });
           const client = await getSubmissionById(input.submissionId);
-          await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "case_note_added", clientId: input.submissionId, clientName: client ? `${client.firstName} ${client.lastName}` : undefined, details: { preview: input.content.substring(0, 120) } });
+          await logAudit({ actorId: ctx.user.id, actorName: authorName, action: "case_note_added", clientId: input.submissionId, clientName: client ? `${client.firstName} ${client.lastName}` : undefined, details: { preview: input.content.substring(0, 120) } });
           return { success: true, id };
         }),
     }),
@@ -2133,13 +2143,37 @@ export const appRouter = router({
       .input(z.object({
         submissionId: z.number(),
         fileName: z.string(),
-        fileData: z.string(), // base64
+        // BUG-SEC: cap base64 string to ~13.3 MB (10 MB decoded) to prevent DoS
+        fileData: z.string().max(14_000_000, "File too large (max 10 MB)"), // base64
         contentType: z.string(),
       }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role === "viewer") throw new TRPCError({ code: "FORBIDDEN" });
+        // SECURITY: MIME type whitelist — reject executables and other dangerous types
+        const ALLOWED_CHAT_MIME_TYPES = new Set([
+          "application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "text/plain",
+        ]);
+        if (!ALLOWED_CHAT_MIME_TYPES.has(input.contentType)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `File type '${input.contentType}' is not allowed in chat.` });
+        }
         const buffer = Buffer.from(input.fileData, "base64");
-        const ext = input.fileName.split(".").pop() ?? "bin";
+        // SECURITY: enforce 10 MB decoded size limit
+        const MAX_CHAT_UPLOAD_BYTES = 10 * 1024 * 1024;
+        if (buffer.length > MAX_CHAT_UPLOAD_BYTES) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "File too large (max 10 MB)" });
+        }
+        // SECURITY: derive extension from MIME type, not from user-supplied filename
+        const MIME_TO_EXT: Record<string, string> = {
+          "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png",
+          "image/webp": "webp", "image/gif": "gif",
+          "application/msword": "doc",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+          "text/plain": "txt",
+        };
+        const ext = MIME_TO_EXT[input.contentType] ?? "bin";
         const key = `chat/${input.submissionId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { url } = await storagePut(key, buffer, input.contentType);
         return { url, key, fileName: input.fileName, contentType: input.contentType };
