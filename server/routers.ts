@@ -1997,17 +1997,24 @@ export const appRouter = router({
         return listClientMessages(input.submissionId, { limit: input.limit, beforeId: input.beforeId });
       }),
 
+    /** List all staff users for @mention autocomplete */
+    staffList: staffProcedure.query(async () => {
+      const staff = await listStaffUsers();
+      return staff.map(u => ({ id: u.id, name: u.name ?? "", role: u.role, email: u.email ?? "" }));
+    }),
     /** Send a message in a client thread */
     send: staffProcedure
       .input(z.object({
         submissionId: z.number(),
-        content: z.string().min(1).max(4000),
+        content: z.string().min(0).max(4000),
         attachmentUrl: z.string().optional(),
         attachmentName: z.string().optional(),
         attachmentType: z.string().optional(),
+        mentionedUserIds: z.array(z.number()).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role === "viewer") throw new TRPCError({ code: "FORBIDDEN", message: "Viewers cannot send messages" });
+        if (!input.content.trim() && !input.attachmentUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Message cannot be empty" });
         if (ctx.user.role === "assessor") {
           const sub = await getSubmissionById(input.submissionId);
           if (!sub || sub.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
@@ -2025,6 +2032,25 @@ export const appRouter = router({
         });
         // Auto-mark as read for the sender
         await markThreadRead(ctx.user.id, input.submissionId, msg.id);
+        // Fire mention notifications for each tagged user
+        if (input.mentionedUserIds?.length) {
+          const sub = await getSubmissionById(input.submissionId);
+          const clientLabel = sub
+            ? `${(sub.formData as any)?.firstName ?? ""} ${(sub.formData as any)?.lastName ?? ""}`.trim() || `Client #${input.submissionId}`
+            : `Client #${input.submissionId}`;
+          for (const mentionedId of input.mentionedUserIds) {
+            if (mentionedId === ctx.user.id) continue;
+            const mentionedUser = await getUserById(mentionedId);
+            if (!mentionedUser) continue;
+            createNotification({
+              type: "chat_mention",
+              title: `${ctx.user.name ?? "Staff"} mentioned you in ${clientLabel}'s chat`,
+              body: input.content.slice(0, 200),
+              link: `/admin/clients/${input.submissionId}?tab=chat`,
+              submissionId: input.submissionId,
+            }).catch(() => {});
+          }
+        }
         return msg;
       }),
 
