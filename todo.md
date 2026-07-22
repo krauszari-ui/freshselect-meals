@@ -808,3 +808,6 @@
 - [ ] Chat: Real-time unread count polling with SSE updates
 - [ ] Chat: Message search within a thread
 - [ ] Chat: Emoji reactions on messages
+- [x] Chat: @mention autocomplete — type @ in chat input to get a dropdown of all staff users, click to tag them
+- [x] Chat: @mention notification — when a message containing @username is sent, dispatch an in-app notification to the tagged user (fixed trailing-space name bug in DB)
+- [x] Chat: Download PDF — button to export full chat thread as a formatted PDF (client name, date, all messages with sender/timestamp)

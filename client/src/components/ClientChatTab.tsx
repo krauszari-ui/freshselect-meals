@@ -1,7 +1,8 @@
 /**
  * ClientChatTab — Professional per-client staff chat thread.
  * WhatsApp/Teams-style bubble UI with real-time polling, file attachments,
- * emoji reactions, message deletion, and read receipts.
+ * emoji reactions, message deletion, read receipts, @mention autocomplete,
+ * mention notifications, and PDF export.
  */
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
@@ -10,9 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Send, Paperclip, Smile, Trash2, Download, FileText,
-  MessageSquare, Loader2, X, Check, CheckCheck,
+  MessageSquare, Loader2, X, CheckCheck, FileDown, AtSign,
 } from "lucide-react";
 import { toast } from "sonner";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,9 +33,35 @@ interface Message {
   createdAt: Date | string;
 }
 
+interface StaffUser {
+  id: number;
+  name: string;
+  role: string;
+  email: string;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const EMOJI_REACTIONS = ["👍", "❤️", "😂", "😮", "🙏", "✅"];
+
+function toWinAnsi(str: string): string {
+  return str
+    .replace(/[\u2014\u2013]/g, "-")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/\u2026/g, "...")
+    .replace(/[^\x00-\xFF]/g, (c) => {
+      const map: Record<string, string> = {
+        "\u00e9": "e", "\u00e8": "e", "\u00ea": "e", "\u00eb": "e",
+        "\u00e0": "a", "\u00e2": "a", "\u00e4": "a", "\u00e1": "a",
+        "\u00f3": "o", "\u00f4": "o", "\u00f6": "o", "\u00fa": "u",
+        "\u00fc": "u", "\u00f1": "n", "\u00e7": "c", "\u00ed": "i",
+        "\u00ef": "i", "\u00c9": "E", "\u00c0": "A", "\u00c7": "C",
+        "\u00d1": "N",
+      };
+      return map[c] ?? "?";
+    });
+}
 
 function formatTime(date: Date | string) {
   const d = new Date(date);
@@ -71,11 +99,154 @@ function getRoleBadge(role: string) {
 }
 
 function getInitials(name: string) {
+  if (!name) return "?";
   return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
 function isImageType(type?: string | null) {
   return type?.startsWith("image/");
+}
+
+/** Render message content with @mentions highlighted */
+function renderContent(content: string) {
+  const parts = content.split(/(@\w[\w\s]*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("@") ? (
+      <span key={i} className="text-blue-300 font-semibold">{part}</span>
+    ) : (
+      <span key={i}>{part}</span>
+    )
+  );
+}
+
+// ─── PDF Export ───────────────────────────────────────────────────────────────
+
+async function exportChatToPdf(messages: Message[], clientName: string) {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+
+  const PAGE_W = 595;
+  const PAGE_H = 842;
+  const MARGIN = 50;
+  const LINE_H = 16;
+  const CONTENT_W = PAGE_W - MARGIN * 2;
+
+  let page = doc.addPage([PAGE_W, PAGE_H]);
+  let y = PAGE_H - MARGIN;
+
+  const newPage = () => {
+    page = doc.addPage([PAGE_W, PAGE_H]);
+    y = PAGE_H - MARGIN;
+    // Footer on new page
+    page.drawText(toWinAnsi("FreshSelect Meals SCN - Confidential"), {
+      x: MARGIN, y: 25, size: 8, font, color: rgb(0.6, 0.6, 0.6),
+    });
+    page.drawText(`Page ${doc.getPageCount()}`, {
+      x: PAGE_W - MARGIN - 30, y: 25, size: 8, font, color: rgb(0.6, 0.6, 0.6),
+    });
+  };
+
+  const ensureSpace = (needed: number) => {
+    if (y - needed < 60) newPage();
+  };
+
+  const drawText = (text: string, opts: { x?: number; size?: number; useBold?: boolean; color?: ReturnType<typeof rgb> }) => {
+    const { x = MARGIN, size = 10, useBold = false, color = rgb(0.1, 0.1, 0.1) } = opts;
+    const safe = toWinAnsi(text);
+    const f = useBold ? boldFont : font;
+    // Word-wrap
+    const words = safe.split(" ");
+    let line = "";
+    const lines: string[] = [];
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word;
+      const w = f.widthOfTextAtSize(test, size);
+      if (w > CONTENT_W - (x - MARGIN)) {
+        if (line) lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    for (const l of lines) {
+      ensureSpace(LINE_H);
+      page.drawText(l, { x, y, size, font: f, color });
+      y -= LINE_H;
+    }
+    return lines.length;
+  };
+
+  // ── Header ─────────────────────────────────────────────────────────────────
+  page.drawRectangle({ x: MARGIN, y: y - 40, width: CONTENT_W, height: 50, color: rgb(0.06, 0.73, 0.45) });
+  page.drawText("FreshSelect Meals SCN", { x: MARGIN + 12, y: y - 10, size: 14, font: boldFont, color: rgb(1, 1, 1) });
+  page.drawText(toWinAnsi(`Chat Thread: ${clientName}`), { x: MARGIN + 12, y: y - 28, size: 10, font, color: rgb(0.9, 1, 0.95) });
+  y -= 60;
+
+  const now = new Date().toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" });
+  page.drawText(toWinAnsi(`Exported: ${now}  |  ${messages.filter(m => !m.isDeleted).length} messages`), {
+    x: MARGIN, y, size: 8, font, color: rgb(0.5, 0.5, 0.5),
+  });
+  y -= 24;
+
+  // Footer on first page
+  page.drawText(toWinAnsi("FreshSelect Meals SCN - Confidential"), {
+    x: MARGIN, y: 25, size: 8, font, color: rgb(0.6, 0.6, 0.6),
+  });
+  page.drawText("Page 1", { x: PAGE_W - MARGIN - 30, y: 25, size: 8, font, color: rgb(0.6, 0.6, 0.6) });
+
+  // ── Messages ───────────────────────────────────────────────────────────────
+  let lastDate = "";
+
+  for (const msg of messages) {
+    if (msg.isDeleted) continue;
+
+    const msgDate = new Date(msg.createdAt).toDateString();
+    if (msgDate !== lastDate) {
+      lastDate = msgDate;
+      ensureSpace(28);
+      y -= 6;
+      const sep = formatDateSeparator(msg.createdAt);
+      page.drawLine({ start: { x: MARGIN, y: y + 6 }, end: { x: PAGE_W - MARGIN, y: y + 6 }, thickness: 0.5, color: rgb(0.85, 0.85, 0.85) });
+      const sepW = boldFont.widthOfTextAtSize(toWinAnsi(sep), 8);
+      page.drawText(toWinAnsi(sep), { x: PAGE_W / 2 - sepW / 2, y, size: 8, font: boldFont, color: rgb(0.55, 0.55, 0.55) });
+      y -= 18;
+    }
+
+    ensureSpace(50);
+
+    // Sender line
+    const timeStr = formatTime(msg.createdAt);
+    const senderLine = toWinAnsi(`${msg.senderName}  [${getRoleBadge(msg.senderRole)}]  ${timeStr}`);
+    page.drawText(senderLine, { x: MARGIN, y, size: 8, font: boldFont, color: rgb(0.3, 0.3, 0.3) });
+    y -= 14;
+
+    // Content
+    if (msg.content) {
+      drawText(msg.content, { size: 10 });
+    }
+
+    // Attachment note
+    if (msg.attachmentName) {
+      ensureSpace(LINE_H);
+      page.drawText(toWinAnsi(`[Attachment: ${msg.attachmentName}]`), {
+        x: MARGIN, y, size: 9, font, color: rgb(0.3, 0.5, 0.8),
+      });
+      y -= LINE_H;
+    }
+
+    y -= 8;
+  }
+
+  const pdfBytes = await doc.save();
+  const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = toWinAnsi(`freshselect-chat-${clientName.replace(/\s+/g, "-").toLowerCase()}.pdf`);
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -135,11 +306,9 @@ function MessageBubble({
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => { setShowActions(false); setShowEmojiPicker(false); }}
     >
-      {/* Avatar */}
       {!isMine && <Avatar name={msg.senderName} role={msg.senderRole} />}
 
       <div className={`flex flex-col max-w-[72%] ${isMine ? "items-end" : "items-start"}`}>
-        {/* Sender name + role */}
         {!isMine && (
           <div className="flex items-center gap-1.5 mb-1 ml-1">
             <span className="text-xs font-semibold text-slate-700">{msg.senderName}</span>
@@ -149,7 +318,6 @@ function MessageBubble({
           </div>
         )}
 
-        {/* Bubble */}
         <div className="relative">
           <div
             className={`rounded-2xl px-4 py-2.5 shadow-sm ${
@@ -158,7 +326,6 @@ function MessageBubble({
                 : "bg-white border border-slate-200 text-slate-800 rounded-tl-sm"
             }`}
           >
-            {/* Attachment */}
             {msg.attachmentUrl && (
               <div className="mb-2">
                 {isImageType(msg.attachmentType) ? (
@@ -183,12 +350,12 @@ function MessageBubble({
               </div>
             )}
 
-            {/* Text content */}
             {msg.content && (
-              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                {renderContent(msg.content)}
+              </p>
             )}
 
-            {/* Timestamp */}
             <div className={`flex items-center gap-1 mt-1 ${isMine ? "justify-end" : "justify-start"}`}>
               <span className={`text-[10px] ${isMine ? "text-emerald-100" : "text-slate-400"}`}>
                 {formatTime(msg.createdAt)}
@@ -197,7 +364,6 @@ function MessageBubble({
             </div>
           </div>
 
-          {/* Reactions */}
           {Object.keys(reactionCounts).length > 0 && (
             <div className={`flex flex-wrap gap-1 mt-1 ${isMine ? "justify-end" : "justify-start"}`}>
               {Object.entries(reactionCounts).map(([emoji, { count, mine }]) => (
@@ -215,10 +381,8 @@ function MessageBubble({
             </div>
           )}
 
-          {/* Action buttons (hover) */}
           {showActions && (
             <div className={`absolute top-0 ${isMine ? "right-full mr-2" : "left-full ml-2"} flex items-center gap-1 bg-white border border-slate-200 rounded-full px-2 py-1 shadow-md z-10`}>
-              {/* Emoji picker trigger */}
               <div className="relative">
                 <button
                   onClick={() => setShowEmojiPicker(p => !p)}
@@ -241,7 +405,6 @@ function MessageBubble({
                   </div>
                 )}
               </div>
-              {/* Delete */}
               {isMine && (
                 <button
                   onClick={() => onDelete(msg.id)}
@@ -271,17 +434,47 @@ function DateSeparator({ date }: { date: Date | string }) {
   );
 }
 
-// ─── Typing Indicator ─────────────────────────────────────────────────────────
+// ─── @Mention Dropdown ────────────────────────────────────────────────────────
 
-function TypingDots() {
+function MentionDropdown({
+  query,
+  users,
+  onSelect,
+  anchorRef,
+}: {
+  query: string;
+  users: StaffUser[];
+  onSelect: (user: StaffUser) => void;
+  anchorRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const filtered = users.filter(u =>
+    u.name.toLowerCase().includes(query.toLowerCase()) ||
+    u.email.toLowerCase().includes(query.toLowerCase())
+  ).slice(0, 6);
+
+  if (!filtered.length) return null;
+
   return (
-    <div className="flex items-center gap-1 px-3 py-2">
-      {[0, 1, 2].map(i => (
-        <div
-          key={i}
-          className="w-2 h-2 rounded-full bg-slate-400 animate-bounce"
-          style={{ animationDelay: `${i * 0.15}s` }}
-        />
+    <div className="absolute bottom-full mb-2 left-0 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+      <div className="px-3 py-2 border-b border-slate-100 bg-slate-50">
+        <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+          <AtSign className="h-3 w-3" /> Mention a team member
+        </p>
+      </div>
+      {filtered.map(u => (
+        <button
+          key={u.id}
+          onClick={() => onSelect(u)}
+          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors text-left"
+        >
+          <div className={`w-8 h-8 rounded-full ${getRoleColor(u.role)} flex items-center justify-center text-white text-xs font-semibold flex-shrink-0`}>
+            {getInitials(u.name)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-slate-800 truncate">{u.name}</p>
+            <p className="text-xs text-slate-400 truncate">{getRoleBadge(u.role)}</p>
+          </div>
+        </button>
       ))}
     </div>
   );
@@ -299,11 +492,19 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
   const [attachPreview, setAttachPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [lastSeenId, setLastSeenId] = useState(0);
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  // @mention state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionedUsers, setMentionedUsers] = useState<StaffUser[]>([]);
+  // Ref to avoid stale closure in handleSend
+  const mentionedUsersRef = useRef<StaffUser[]>([]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputWrapRef = useRef<HTMLDivElement>(null);
 
   // ── Load messages ──────────────────────────────────────────────────────────
   const { data: messages = [], isLoading, refetch } = trpc.chat.list.useQuery(
@@ -311,17 +512,21 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
     { refetchOnWindowFocus: false, staleTime: 0 }
   );
 
+  // ── Load staff for @mention ────────────────────────────────────────────────
+  const { data: staffList = [] } = trpc.chat.staffList.useQuery(undefined, {
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+  // Keep a ref so handleSend always reads the latest staffList without stale closure
+  const staffListRef = useRef<StaffUser[]>([]);
+  staffListRef.current = staffList;
+
   // ── Real-time polling (every 3 seconds) ────────────────────────────────────
   const { data: newMessages = [] } = trpc.chat.poll.useQuery(
     { submissionId, afterId: lastSeenId },
-    {
-      refetchInterval: 3000,
-      enabled: lastSeenId > 0,
-      refetchOnWindowFocus: true,
-    }
+    { refetchInterval: 3000, enabled: lastSeenId > 0, refetchOnWindowFocus: true }
   );
 
-  // Merge new polled messages into the list
   const allMessages = useMemo(() => {
     if (!newMessages.length) return messages;
     const existingIds = new Set(messages.map((m: Message) => m.id));
@@ -330,7 +535,6 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
     return [...messages, ...fresh];
   }, [messages, newMessages]);
 
-  // ── Track last message ID for polling ─────────────────────────────────────
   useEffect(() => {
     if (allMessages.length > 0) {
       const maxId = Math.max(...allMessages.map((m: Message) => m.id));
@@ -338,12 +542,10 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
     }
   }, [allMessages]);
 
-  // ── Auto-scroll to bottom on new messages ─────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [allMessages.length]);
 
-  // ── Mark thread as read when tab is active ────────────────────────────────
   const markReadMutation = trpc.chat.markRead.useMutation();
   useEffect(() => {
     if (allMessages.length > 0) {
@@ -351,6 +553,41 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
       markReadMutation.mutate({ submissionId, lastReadMessageId: maxId });
     }
   }, [allMessages.length, submissionId]);
+
+  // ── @mention input handling ────────────────────────────────────────────────
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setText(val);
+
+    // Detect @mention trigger: find the last @ before cursor
+    const cursor = e.target.selectionStart ?? val.length;
+    const beforeCursor = val.slice(0, cursor);
+    const atMatch = beforeCursor.match(/@(\w[\w\s]*)$/);
+    if (atMatch) {
+      setMentionQuery(atMatch[1]);
+    } else if (beforeCursor.endsWith("@")) {
+      setMentionQuery("");
+    } else {
+      setMentionQuery(null);
+    }
+  };
+
+  const handleMentionSelect = (staffUser: StaffUser) => {
+    // Replace the @query with @Name in the text
+    const cursor = textareaRef.current?.selectionStart ?? text.length;
+    const beforeCursor = text.slice(0, cursor);
+    const afterCursor = text.slice(cursor);
+    const replaced = beforeCursor.replace(/@(\w[\w\s]*)$|@$/, `@${staffUser.name.trim()} `);
+    setText(replaced + afterCursor);
+    setMentionQuery(null);
+    // Track mentioned users (deduplicated)
+    setMentionedUsers(prev => {
+      const next = prev.find(u => u.id === staffUser.id) ? prev : [...prev, staffUser];
+      mentionedUsersRef.current = next;
+      return next;
+    });
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  };
 
   // ── Send message ──────────────────────────────────────────────────────────
   const sendMutation = trpc.chat.send.useMutation({
@@ -395,17 +632,25 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
         setUploading(false);
       }
 
+      // Extract mentioned user IDs by scanning the message text against the full staff list
+      // Use ref to avoid stale closure issues with staffList
+      const mentionedInText = staffListRef.current.filter(u => content.includes(`@${u.name.trim()}`));
+
       await sendMutation.mutateAsync({
         submissionId,
-        content: content || (attachFile ? "" : ""),
+        content: content || "",
         attachmentUrl,
         attachmentName,
         attachmentType,
+        mentionedUserIds: mentionedInText.map(u => u.id),
       });
 
       setText("");
       setAttachFile(null);
       setAttachPreview(null);
+      setMentionedUsers([]);
+      mentionedUsersRef.current = [];
+      setMentionQuery(null);
       textareaRef.current?.focus();
       await refetch();
     } catch {
@@ -442,17 +687,35 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
     }
   };
 
-  // ── Keyboard shortcut: Enter to send, Shift+Enter for newline ─────────────
+  // ── Keyboard shortcut ─────────────────────────────────────────────────────
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Escape") {
+      setMentionQuery(null);
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey && mentionQuery === null) {
       e.preventDefault();
       handleSend();
     }
   };
 
   // ── Open attachment ───────────────────────────────────────────────────────
-  const handleOpenAttachment = (url: string, name: string) => {
+  const handleOpenAttachment = (url: string, _name: string) => {
     window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  // ── PDF Export ────────────────────────────────────────────────────────────
+  const handleExportPdf = async () => {
+    if (allMessages.length === 0) { toast.error("No messages to export"); return; }
+    setExportingPdf(true);
+    try {
+      await exportChatToPdf(allMessages as Message[], clientName);
+      toast.success("Chat exported as PDF");
+    } catch (err: any) {
+      toast.error(`PDF export failed: ${err?.message ?? "Unknown error"}`);
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   // ── Group messages by date ────────────────────────────────────────────────
@@ -489,6 +752,17 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Live
           </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportPdf}
+            disabled={exportingPdf || allMessages.length === 0}
+            className="flex items-center gap-1.5 text-xs h-7 px-2.5"
+            title="Download chat as PDF"
+          >
+            {exportingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+            {exportingPdf ? "Exporting..." : "Export PDF"}
+          </Button>
         </div>
       </div>
 
@@ -563,7 +837,17 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
       {/* Input area */}
       {canSend ? (
         <div className="px-4 py-3 border-t border-slate-200 bg-white">
-          <div className="flex items-end gap-2">
+          <div ref={inputWrapRef} className="flex items-end gap-2 relative">
+            {/* @mention dropdown */}
+            {mentionQuery !== null && (
+              <MentionDropdown
+                query={mentionQuery}
+                users={staffList as StaffUser[]}
+                onSelect={handleMentionSelect}
+                anchorRef={inputWrapRef}
+              />
+            )}
+
             {/* File attach button */}
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -580,9 +864,9 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
               <Textarea
                 ref={textareaRef}
                 value={text}
-                onChange={e => setText(e.target.value)}
+                onChange={handleTextChange}
                 onKeyDown={handleKeyDown}
-                placeholder={`Message ${clientName} thread... (Enter to send, Shift+Enter for new line)`}
+                placeholder={`Message ${clientName} thread... Type @ to mention someone`}
                 className="resize-none min-h-[44px] max-h-[120px] rounded-2xl border-slate-200 bg-slate-50 focus:bg-white text-sm pr-4 py-3 transition-colors"
                 rows={1}
                 disabled={sending}
@@ -604,7 +888,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
             </button>
           </div>
           <p className="text-[10px] text-slate-400 mt-1.5 ml-12">
-            Press <kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">Enter</kbd> to send &middot; <kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">Shift+Enter</kbd> for new line
+            Press <kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">Enter</kbd> to send &middot; <kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">Shift+Enter</kbd> for new line &middot; Type <kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">@</kbd> to mention
           </p>
         </div>
       ) : (
