@@ -1441,38 +1441,31 @@ export async function getThreadUnreadCount(userId: number, submissionId: number)
   return Number(result[0]?.cnt ?? 0);
 }
 
-/** Get unread counts across ALL threads for a user (for the global inbox badge). */
+/** Get unread counts across ALL threads for a user (for the global inbox badge). Single aggregated query — no N+1. */
 export async function getAllUnreadCounts(userId: number): Promise<Record<number, number>> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  // Get all threads this user has participated in or that have messages
-  const allThreads = await db.selectDistinct({ submissionId: clientMessages.submissionId })
-    .from(clientMessages)
-    .where(eq(clientMessages.isDeleted, 0));
 
-  if (allThreads.length === 0) return {};
+  // Single query: LEFT JOIN messageReads to get last-read position per thread,
+  // then GROUP BY submissionId to count unread messages in one shot.
+  const rows = await db.execute(sql`
+    SELECT cm.submissionId,
+           COUNT(*) AS unreadCount
+    FROM clientMessages cm
+    LEFT JOIN messageReads mr
+      ON mr.submissionId = cm.submissionId AND mr.userId = ${userId}
+    WHERE cm.isDeleted = 0
+      AND cm.senderId != ${userId}
+      AND cm.id > COALESCE(mr.lastReadMessageId, 0)
+    GROUP BY cm.submissionId
+    HAVING COUNT(*) > 0
+  `) as any;
 
-  const submissionIds = allThreads.map(t => t.submissionId);
-
-  // Get last-read positions for this user
-  const readRows = await db.select().from(messageReads)
-    .where(and(eq(messageReads.userId, userId), inArray(messageReads.submissionId, submissionIds)));
-  const readMap = new Map(readRows.map(r => [r.submissionId, r.lastReadMessageId]));
-
-  // Count unread per thread
   const result: Record<number, number> = {};
-  await Promise.all(submissionIds.map(async (sid) => {
-    const lastRead = readMap.get(sid) ?? 0;
-    const cnt = await db!.select({ cnt: count() }).from(clientMessages)
-      .where(and(
-        eq(clientMessages.submissionId, sid),
-        eq(clientMessages.isDeleted, 0),
-        sql`${clientMessages.id} > ${lastRead}`,
-        ne(clientMessages.senderId, userId)
-      ));
-    const n = Number(cnt[0]?.cnt ?? 0);
-    if (n > 0) result[sid] = n;
-  }));
+  const data = Array.isArray(rows) ? (Array.isArray(rows[0]) ? rows[0] : rows) : [];
+  for (const row of data as any[]) {
+    result[Number(row.submissionId)] = Number(row.unreadCount);
+  }
   return result;
 }
 

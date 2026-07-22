@@ -243,9 +243,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   });
   const unreadCount = unreadData?.count ?? 0;
 
-  // Poll chat unread count every 5 seconds
+  // Poll chat unread count every 15 seconds (only when tab is focused)
   const { data: chatUnreadData } = trpc.chat.allUnreadCounts.useQuery(undefined, {
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
     enabled: !!user,
   });
   const chatUnreadCount = chatUnreadData

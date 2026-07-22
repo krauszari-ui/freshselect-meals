@@ -193,7 +193,7 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
   // Load messages with polling
   const { data: messages = [], isLoading } = trpc.org.groupMessages.useQuery(
     { orgId, limit: 100 },
-    { refetchInterval: 5_000 },
+    { refetchInterval: 10_000, refetchIntervalInBackground: false },
   );
 
   // Load staff for @mention
@@ -431,7 +431,8 @@ export default function AdminOrgChats() {
 
   // Load all org group channels with unread counts
   const { data: orgChannels = [], isLoading } = trpc.org.allGroupsWithUnread.useQuery(undefined, {
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
   const filtered = useMemo(() => {
