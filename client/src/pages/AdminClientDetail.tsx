@@ -204,6 +204,7 @@ export default function AdminClientDetail() {
   const { data: clientDocs } = trpc.admin.documents.byClient.useQuery({ submissionId: id }, { enabled: id > 0 });
   const staffQuery = trpc.admin.staffList.useQuery();
   const { data: assessorList } = trpc.admin.listAssessors.useQuery();
+  const { data: orgList = [] } = trpc.org.list.useQuery({ includeInactive: false });
   const { data: stageHistoryData } = trpc.admin.stageHistory.useQuery({ id }, { enabled: id > 0 });
 
   const [activeTab, setActiveTab] = useState<"overview" | "assessment" | "services" | "activity" | "chat">("overview");
@@ -221,6 +222,9 @@ export default function AdminClientDetail() {
   // Dialog states
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [showReferOrg, setShowReferOrg] = useState(false);
+  const [referOrgId, setReferOrgId] = useState<string>("");
+  const [referOrgNote, setReferOrgNote] = useState("");
   const [showAddHousehold, setShowAddHousehold] = useState(false);
   const [showAddAddress, setShowAddAddress] = useState(false);
   const [showAddPhone, setShowAddPhone] = useState(false);
@@ -520,7 +524,16 @@ export default function AdminClientDetail() {
     updateAdminNotesMutation.mutate({ id, adminNotes: adminNotesText });
   };
 
-
+  const referClientMutation = trpc.org.referClient.useMutation({
+    onSuccess: () => {
+      utils.admin.getById.invalidate({ id });
+      setShowReferOrg(false);
+      setReferOrgId("");
+      setReferOrgNote("");
+      toast.success("Client referred to organization");
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const staffList = (staffQuery.data ?? []) as any[];
   const getWorkerName = (wId: number | null) => {
@@ -1006,6 +1019,11 @@ export default function AdminClientDetail() {
               {pdfLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
               {pdfLoading ? "Generating..." : "Download PDF"}
             </Button>
+            {!isAssessor && (
+              <Button variant="outline" size="sm" className="gap-1.5 text-blue-700 border-blue-300 hover:bg-blue-50 h-8" onClick={() => setShowReferOrg(true)}>
+                <Link2 className="h-3.5 w-3.5" /> Refer to Org
+              </Button>
+            )}
             <Button variant="outline" size="sm" className="gap-1.5 text-slate-600 h-8" onClick={openEditDialog}>
               <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>
@@ -3030,6 +3048,58 @@ export default function AdminClientDetail() {
               <Button variant="outline" onClick={() => setShowAddService(false)}>Cancel</Button>
               <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => newServiceName.trim() && addServiceMutation.mutate({ submissionId: id, name: newServiceName.trim() })} disabled={!newServiceName.trim() || addServiceMutation.isPending}>
                 {addServiceMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* Refer to Organization Dialog */}
+        <Dialog open={showReferOrg} onOpenChange={setShowReferOrg}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Refer Client to Organization</DialogTitle>
+              <DialogDescription>
+                Select an organization to refer {client?.firstName} {client?.lastName} to. All staff members of that organization will gain access to this client.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {client?.referredOrgId && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                  <span className="font-medium">Currently referred to:</span> {(orgList as any[]).find((o: any) => o.id === client.referredOrgId)?.name ?? `Org #${client.referredOrgId}`}
+                  {client.referredOrgNote && <p className="mt-1 text-blue-700">Note: {client.referredOrgNote}</p>}
+                </div>
+              )}
+              <div>
+                <Label className="text-xs font-medium">Organization *</Label>
+                <Select value={referOrgId} onValueChange={setReferOrgId}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select organization…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(orgList as any[]).map((org: any) => (
+                      <SelectItem key={org.id} value={String(org.id)}>{org.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs font-medium">Referral Note / Reason</Label>
+                <Textarea
+                  className="mt-1 text-sm"
+                  placeholder="Optional: reason for referral, special instructions…"
+                  value={referOrgNote}
+                  onChange={(e) => setReferOrgNote(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowReferOrg(false)}>Cancel</Button>
+              <Button
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={!referOrgId || referClientMutation.isPending}
+                onClick={() => referClientMutation.mutate({ submissionId: id, orgId: parseInt(referOrgId), note: referOrgNote || undefined })}
+              >
+                {referClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refer Client"}
               </Button>
             </DialogFooter>
           </DialogContent>

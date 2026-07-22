@@ -37,6 +37,7 @@ function buildCronUser(openId: string, name: string): AuthenticatedUser {
     passwordHash: null,
     passwordResetToken: null,
     passwordResetExpires: null,
+    orgId: null,
     isActive: 1,
     failedLoginAttempts: 0,
     lockedUntil: null,

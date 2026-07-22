@@ -823,3 +823,78 @@
 - [x] BUG-DATA-1: Case notes show "Staff" instead of author name — `caseNotes` table had no `authorName` column — added column, migration applied, `notes.create` now stores `ctx.user.name`
 - [x] SEC-IDOR-1: Assessors could call `exportCsv` and download ALL client PII — added explicit role check blocking assessors and viewers
 - [x] SEC-UPLOAD-1: Chat `uploadAttachment` had no MIME type whitelist and no server-side size limit — added MIME whitelist (PDF/JPG/PNG/WEBP/GIF/DOC/DOCX/TXT) and 10 MB decoded size cap
+
+## Organization Referral System
+
+- [ ] SCHEMA: Add `organizations` table (id, name, contactEmail, contactPhone, notes, isActive, createdAt)
+- [ ] SCHEMA: Add `orgId` column to `users` table (nullable FK to organizations)
+- [ ] SCHEMA: Add `referredOrgId`, `referredOrgAt`, `referredOrgNote` columns to `submissions` table
+- [ ] SCHEMA: Add `orgChatGroups` table (id, orgId, createdAt) for per-org group chat channels
+- [ ] SCHEMA: Extend `clientMessages` or add `orgGroupMessages` table for org group chat
+- [ ] MIGRATION: Generate and apply all schema migrations
+
+- [ ] SERVER: org.list — list all organizations (admin only)
+- [ ] SERVER: org.create — create organization (admin only)
+- [ ] SERVER: org.update — update organization details (admin only)
+- [ ] SERVER: org.delete — deactivate organization (admin only)
+- [ ] SERVER: org.listMembers — list users belonging to an org (admin only)
+- [ ] SERVER: org.assignUser — assign a user to an org (admin only)
+- [ ] SERVER: org.removeUser — remove a user from an org (admin only)
+- [ ] SERVER: admin.referToOrg — refer a client to an org with a note (admin only, replaces existing org referral)
+- [ ] SERVER: admin.removeOrgReferral — remove org referral from a client (admin only)
+- [ ] SERVER: Scope client list/detail for org staff — org staff only see clients where referredOrgId = their orgId
+- [ ] SERVER: Scope case notes for org staff — org staff only see notes by their own org members + notes where they were @tagged
+- [ ] SERVER: Org group chat — create/list/send messages in org group channel
+- [ ] SERVER: @OrgName mention — notify all members of that org
+- [ ] SERVER: @mention in org group chat — notify specific org worker
+
+- [ ] ADMIN UI: Organizations management page (/admin/organizations) — list, create, edit, deactivate orgs
+- [ ] ADMIN UI: Org members management — assign/remove users from an org on the org detail page
+- [ ] ADMIN UI: "Refer to Organization" button on client detail page — opens modal with org dropdown + referral note
+- [ ] ADMIN UI: Show referred org badge on client detail and client list
+- [ ] ADMIN UI: Remove org referral action on client detail
+- [ ] ADMIN UI: Org group chats visible in Chat Inbox for FreshSelect staff
+- [ ] ADMIN UI: @OrgName autocomplete in chat input
+
+- [ ] ORG PORTAL: Org staff login routes to org-scoped client list (/org/clients)
+- [ ] ORG PORTAL: Org staff client list — only shows clients referred to their org
+- [ ] ORG PORTAL: Org staff client detail — same tabs as assessor (overview, assessment, services, chat)
+- [ ] ORG PORTAL: Case notes filtered — org staff only see their org's notes + @tagged notes
+- [ ] ORG PORTAL: Org group chat — org staff see only their org's group channel
+- [ ] ORG PORTAL: @mention in org group chat — autocomplete shows org members + FreshSelect workers
+
+## Organization Referral System — Completion (July 22, 2026)
+
+- [x] SCHEMA: organizations table created (id, name, contactEmail, contactPhone, notes, isActive, createdAt)
+- [x] SCHEMA: orgId added to users table (nullable FK to organizations)
+- [x] SCHEMA: referredOrgId, referredOrgAt, referredOrgNote added to submissions table
+- [x] SCHEMA: orgGroupMessages table created (id, orgId, senderId, senderName, senderRole, senderOrgName, content, attachmentUrl, attachmentName, attachmentType, reactions, isDeleted, createdAt)
+- [x] SCHEMA: orgMessageReads table created (id, userId, orgId, lastReadMessageId, updatedAt)
+- [x] SCHEMA: userId added to notifications table for targeted per-user notifications
+- [x] MIGRATION: Migrations 0033 (org tables) and 0034 (notifications.userId) applied to DB
+
+- [x] SERVER: org.list — list all organizations (staff can see active, admin can see inactive)
+- [x] SERVER: org.get — get org with members (admin only)
+- [x] SERVER: org.create — create organization (admin only)
+- [x] SERVER: org.update — update organization details (admin only)
+- [x] SERVER: org.addMember — assign a user to an org (admin only)
+- [x] SERVER: org.removeMember — remove a user from an org (admin only)
+- [x] SERVER: org.referClient — refer a client to an org with a note (staff procedure with scope check)
+- [x] SERVER: org.myOrg — get own org info (for org staff portal header)
+- [x] SERVER: org.listReferredClients — list clients referred to caller's org (org staff only)
+- [x] SERVER: org.groupMessages — list messages in an org group channel (staff + org staff)
+- [x] SERVER: org.sendGroupMessage — send a message to an org group channel (with @mention notifications)
+- [x] SERVER: org.markGroupRead — mark org group chat as read
+- [x] SERVER: org.groupUnreadCount — get unread count for a specific org channel
+- [x] SERVER: org.allGroupsWithUnread — list all org channels with unread counts (admin sees all, org staff sees only theirs)
+
+- [x] ADMIN UI: AdminOrganizations page (/admin/organizations) — list, create, edit, deactivate orgs + member management
+- [x] ADMIN UI: "Refer to Organization" button + dialog on AdminClientDetail page
+- [x] ADMIN UI: Organizations link in admin sidebar (ADMIN_ONLY_NAV_ITEMS)
+- [x] ADMIN UI: Org Group Chats inbox page (/admin/org-chats) — two-panel layout with org channel list + active chat with @mention support
+- [x] ADMIN UI: Org Group Chats link in admin sidebar
+
+- [x] ORG PORTAL: OrgPortal.tsx page (/org) — org staff see their referred clients + org group chat
+- [x] ORG PORTAL: /org/clients/:id route for org staff to view client details
+- [x] ORG PORTAL: Org staff auto-redirect — login routes org staff (users with orgId) to /org instead of /admin/dashboard
+- [x] ORG PORTAL: AdminLayout redirects org staff to /org if they land on any admin page

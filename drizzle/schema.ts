@@ -19,6 +19,8 @@ export const users = mysqlTable("users", {
   passwordResetToken: varchar("passwordResetToken", { length: 128 }),
   /** Password reset token expiry (UTC timestamp) */
   passwordResetExpires: timestamp("passwordResetExpires"),
+  /** Organization this staff member belongs to (null = FreshSelect internal staff) */
+  orgId: int("orgId"),
   /** Whether the staff account is active */
   isActive: int("isActive").default(1).notNull(),
   /** Per-account brute-force protection: consecutive failed login counter */
@@ -111,6 +113,12 @@ export const submissions = mysqlTable("submissions", {
   notEligibleReason: text("notEligibleReason"),
   /** Assessor user ID assigned to review this client (separate from assignedTo worker) */
   assessorId: int("assessorId"),
+  /** Organization this client has been referred to (null = not referred to any org) */
+  referredOrgId: int("referredOrgId"),
+  /** When the client was referred to the org */
+  referredOrgAt: timestamp("referredOrgAt"),
+  /** Admin note explaining why this client was referred to this org */
+  referredOrgNote: text("referredOrgNote"),
   /** Soft-delete: true = client marked as 'Not Interested', hidden from main list */
   notInterested: boolean("notInterested").default(false).notNull(),
   /** When the client was marked as Not Interested */
@@ -359,6 +367,8 @@ export const notifications = mysqlTable("notifications", {
   link: varchar("link", { length: 512 }),
   /** Optional: related submission/client ID */
   submissionId: int("submissionId"),
+  /** Optional: target user ID — if set, only this user sees the notification; if null, all staff see it */
+  userId: int("userId"),
   /** false = unread (bold), true = read */
   isRead: boolean("isRead").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -500,3 +510,78 @@ export const messageReads = mysqlTable("messageReads", {
 
 export type MessageRead = typeof messageReads.$inferSelect;
 export type InsertMessageRead = typeof messageReads.$inferInsert;
+
+/**
+ * Organizations — external partner organizations (e.g. Lahoyal) that FreshSelect refers clients to.
+ * All staff members belonging to an org automatically see clients referred to their org.
+ */
+export const organizations = mysqlTable("organizations", {
+  id: int("id").primaryKey().autoincrement(),
+  /** Display name of the organization */
+  name: varchar("name", { length: 256 }).notNull(),
+  /** Optional contact email for the org */
+  contactEmail: varchar("contactEmail", { length: 320 }),
+  /** Optional contact phone */
+  contactPhone: varchar("contactPhone", { length: 64 }),
+  /** Internal admin notes about this org */
+  notes: text("notes"),
+  /** Whether this org is active (soft-delete) */
+  isActive: int("isActive").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Organization = typeof organizations.$inferSelect;
+export type InsertOrganization = typeof organizations.$inferInsert;
+
+/**
+ * Org Group Messages — messages in an organization's group chat channel.
+ * FreshSelect staff can see all org group chats; org staff only see their own org's channel.
+ */
+export const orgGroupMessages = mysqlTable("orgGroupMessages", {
+  id: int("id").primaryKey().autoincrement(),
+  /** The organization this group message belongs to */
+  orgId: int("orgId").notNull(),
+  /** ID of the staff member who sent the message */
+  senderId: int("senderId").notNull(),
+  /** Display name of the sender (denormalised for history) */
+  senderName: varchar("senderName", { length: 256 }).notNull(),
+  /** Role of the sender at time of sending */
+  senderRole: varchar("senderRole", { length: 64 }).notNull(),
+  /** Name of the sender's org (for FreshSelect staff display) */
+  senderOrgName: varchar("senderOrgName", { length: 256 }),
+  /** Message text content (supports @mentions) */
+  content: text("content").notNull(),
+  /** Optional file attachment URL */
+  attachmentUrl: text("attachmentUrl"),
+  /** Original filename of the attachment */
+  attachmentName: varchar("attachmentName", { length: 512 }),
+  /** MIME type of the attachment */
+  attachmentType: varchar("attachmentType", { length: 128 }),
+  /** JSON array of { userId, emoji } reaction objects */
+  reactions: json("reactions"),
+  /** Whether this message has been soft-deleted */
+  isDeleted: int("isDeleted").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  idx_orgGroupMessages_orgId: index("idx_orgGroupMessages_orgId").on(t.orgId),
+  idx_orgGroupMessages_senderId: index("idx_orgGroupMessages_senderId").on(t.senderId),
+  idx_orgGroupMessages_createdAt: index("idx_orgGroupMessages_createdAt").on(t.createdAt),
+}));
+export type OrgGroupMessage = typeof orgGroupMessages.$inferSelect;
+export type InsertOrgGroupMessage = typeof orgGroupMessages.$inferInsert;
+
+/**
+ * Tracks which staff members have read up to which message in each org group channel.
+ */
+export const orgMessageReads = mysqlTable("orgMessageReads", {
+  id: int("id").primaryKey().autoincrement(),
+  userId: int("userId").notNull(),
+  orgId: int("orgId").notNull(),
+  lastReadMessageId: int("lastReadMessageId").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  idx_orgMessageReads_userId_orgId: uniqueIndex("idx_orgMessageReads_userId_orgId").on(t.userId, t.orgId),
+}));
+export type OrgMessageRead = typeof orgMessageReads.$inferSelect;
+export type InsertOrgMessageRead = typeof orgMessageReads.$inferInsert;
