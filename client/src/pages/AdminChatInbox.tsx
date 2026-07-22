@@ -122,7 +122,8 @@ export default function AdminChatInbox() {
 
   // Load inbox threads (all clients with unread counts + last message preview)
   const { data: threads = [], isLoading } = trpc.chat.inbox.useQuery(undefined, {
-    refetchInterval: 5_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
   });
 
   // Filter by search
@@ -237,7 +238,7 @@ export default function AdminChatInbox() {
                 {[
                   { icon: MessageSquare, label: "Per-client threads", desc: "One thread per client" },
                   { icon: Users, label: "All staff", desc: "Everyone on the case" },
-                  { icon: Clock, label: "Real-time", desc: "Updates every 3s" },
+                  { icon: Clock, label: "Real-time", desc: "Updates every 10s" },
                 ].map(({ icon: Icon, label, desc }) => (
                   <div key={label} className="bg-white rounded-xl border border-slate-200 p-4 text-center shadow-sm">
                     <Icon className="h-6 w-6 text-emerald-400 mx-auto mb-2" />

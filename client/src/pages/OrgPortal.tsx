@@ -232,7 +232,7 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
   const utils = trpc.useUtils();
   const { data: messages = [], isLoading } = trpc.org.groupMessages.useQuery(
     { orgId },
-    { refetchInterval: 8000 },
+    { refetchInterval: 10_000, refetchIntervalInBackground: false },
   );
   const sendMsg = trpc.org.sendGroupMessage.useMutation({
     onSuccess: () => {

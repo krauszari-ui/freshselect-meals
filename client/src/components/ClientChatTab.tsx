@@ -535,7 +535,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
   // ── Real-time polling (every 3 seconds) ────────────────────────────────────
   const { data: newMessages = [] } = trpc.chat.poll.useQuery(
     { submissionId, afterId: lastSeenId },
-    { refetchInterval: 3000, enabled: lastSeenId > 0, refetchOnWindowFocus: true }
+    { refetchInterval: 10_000, refetchIntervalInBackground: false, enabled: lastSeenId > 0, refetchOnWindowFocus: true }
   );
 
   const allMessages = useMemo(() => {
