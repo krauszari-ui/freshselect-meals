@@ -915,3 +915,14 @@
 - [x] SERVER: add optional orgId filter to listSubmissions db query (include clients where referredOrgId=orgId OR assessorId IN org staff)
 - [x] SERVER: expose orgId param on submissions.list tRPC procedure
 - [x] UI: add org dropdown (All Orgs + each org by name) to AdminClientList page, wired to the orgId filter
+
+## Reply-to-Specific-Message Feature (July 22 2026)
+- [x] DB: add replyToId, replyToSenderName, replyToContent columns to clientMessages table
+- [x] DB: add replyToId, replyToSenderName, replyToContent columns to orgGroupMessages table
+- [x] SERVER: update chat.send procedure to accept optional replyToId, look up replied-to message, store denormalised preview
+- [x] SERVER: update org.sendGroupMessage procedure same way
+- [x] SERVER: add getClientMessageById and getOrgGroupMessageById helpers to db.ts
+- [x] UI: create shared ReplyBar.tsx component (ReplyBar, ReplyButton, ReplyQuote)
+- [x] UI: wire reply into ClientChatTab.tsx (hover button, ReplyBar above input, ReplyQuote in bubble)
+- [x] UI: wire reply into AdminOrgChats.tsx OrgChatPanel (hover button, ReplyBar, ReplyQuote)
+- [x] UI: wire reply into OrgPortal.tsx OrgGroupChatPanel (hover button, ReplyBar, ReplyQuote)

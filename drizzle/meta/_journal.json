@@ -246,6 +246,13 @@
       "when": 1784741173978,
       "tag": "0034_dapper_inhumans",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "5",
+      "when": 1784751362709,
+      "tag": "0035_high_vanisher",
+      "breakpoints": true
     }
   ]
 }

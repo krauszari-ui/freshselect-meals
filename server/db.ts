@@ -1369,6 +1369,14 @@ export async function listClientMessages(submissionId: number, opts: { limit?: n
   return rows.reverse(); // Return in chronological order for display
 }
 
+/** Get a single client message by ID. */
+export async function getClientMessageById(id: number): Promise<ClientMessage | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(clientMessages).where(eq(clientMessages.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
 /** Get messages newer than a given ID (for SSE polling). */
 export async function getNewClientMessages(submissionId: number, afterId: number): Promise<ClientMessage[]> {
   const db = await getDb();
@@ -1562,6 +1570,14 @@ export async function createOrgGroupMessage(data: InsertOrgGroupMessage) {
   if (!db) throw new Error("DB unavailable");
   const result = await db.insert(orgGroupMessages).values(data);
   return result[0].insertId as number;
+}
+
+/** Get a single org group message by ID. */
+export async function getOrgGroupMessageById(id: number): Promise<OrgGroupMessage | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(orgGroupMessages).where(eq(orgGroupMessages.id, id)).limit(1);
+  return rows[0] ?? null;
 }
 
 export async function listOrgGroupMessages(orgId: number, limit = 100) {

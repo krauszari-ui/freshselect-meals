@@ -38,11 +38,11 @@ import {
   getEmailBlastById, getBlastReplies, updateEmailBlastStatus,
   listAssessors, updateSubmissionAssessor,
   getUserById,
-  createClientMessage, listClientMessages, getNewClientMessages, deleteClientMessage,
+  createClientMessage, listClientMessages, getNewClientMessages, deleteClientMessage, getClientMessageById,
   toggleMessageReaction, markThreadRead, getThreadUnreadCount, getAllUnreadCounts, getInboxThreads,
   listOrganizations, getOrganizationById, createOrganization, updateOrganization,
   listOrgMembers, assignUserToOrg, referClientToOrg, listSubmissionsByOrg,
-  createOrgGroupMessage, listOrgGroupMessages, getOrgGroupUnreadCount, markOrgGroupRead, listAllOrgGroupsWithUnread,
+  createOrgGroupMessage, listOrgGroupMessages, getOrgGroupUnreadCount, markOrgGroupRead, listAllOrgGroupsWithUnread, getOrgGroupMessageById,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -2062,6 +2062,7 @@ export const appRouter = router({
         attachmentName: z.string().optional(),
         attachmentType: z.string().optional(),
         mentionedUserIds: z.array(z.number()).optional(),
+        replyToId: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role === "viewer") throw new TRPCError({ code: "FORBIDDEN", message: "Viewers cannot send messages" });
@@ -2069,6 +2070,16 @@ export const appRouter = router({
         if (ctx.user.role === "assessor") {
           const sub = await getSubmissionById(input.submissionId);
           if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        // Look up the replied-to message for denormalised preview
+        let replyToSenderName: string | null = null;
+        let replyToContent: string | null = null;
+        if (input.replyToId) {
+          const replyMsg = await getClientMessageById(input.replyToId);
+          if (replyMsg) {
+            replyToSenderName = replyMsg.senderName;
+            replyToContent = (replyMsg.attachmentName ? `[${replyMsg.attachmentName}]` : replyMsg.content).slice(0, 300);
+          }
         }
         const msg = await createClientMessage({
           submissionId: input.submissionId,
@@ -2080,6 +2091,9 @@ export const appRouter = router({
           attachmentName: input.attachmentName ?? null,
           attachmentType: input.attachmentType ?? null,
           reactions: [],
+          replyToId: input.replyToId ?? null,
+          replyToSenderName,
+          replyToContent,
         });
         // Auto-mark as read for the sender
         await markThreadRead(ctx.user.id, input.submissionId, msg.id);
@@ -2351,6 +2365,7 @@ export const appRouter = router({
         content: z.string().min(1).max(10000),
         mentionedUserIds: z.array(z.number()).optional().default([]),
         mentionedOrgIds: z.array(z.number()).optional().default([]),
+        replyToId: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const role = ctx.user.role;
@@ -2359,6 +2374,16 @@ export const appRouter = router({
         // Org staff can only post to their own org's channel
         if (!isFreshSelect && userOrgId !== input.orgId) throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
         const org = await getOrganizationById(input.orgId);
+        // Look up the replied-to message for denormalised preview
+        let replyToSenderName: string | null = null;
+        let replyToContent: string | null = null;
+        if (input.replyToId) {
+          const replyMsg = await getOrgGroupMessageById(input.replyToId);
+          if (replyMsg) {
+            replyToSenderName = replyMsg.senderName;
+            replyToContent = (replyMsg.attachmentName ? `[${replyMsg.attachmentName}]` : replyMsg.content).slice(0, 300);
+          }
+        }
         const msgId = await createOrgGroupMessage({
           orgId: input.orgId,
           senderId: ctx.user.id,
@@ -2366,6 +2391,9 @@ export const appRouter = router({
           senderRole: ctx.user.role,
           senderOrgName: isFreshSelect ? "FreshSelect Meals" : (org?.name ?? undefined),
           content: input.content,
+          replyToId: input.replyToId ?? null,
+          replyToSenderName,
+          replyToContent,
         });
         // Notify individually @mentioned users
         for (const uid of input.mentionedUserIds) {
