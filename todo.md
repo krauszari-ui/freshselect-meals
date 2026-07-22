@@ -898,3 +898,9 @@
 - [x] ORG PORTAL: /org/clients/:id route for org staff to view client details
 - [x] ORG PORTAL: Org staff auto-redirect — login routes org staff (users with orgId) to /org instead of /admin/dashboard
 - [x] ORG PORTAL: AdminLayout redirects org staff to /org if they land on any admin page
+
+## E2E Bug Fixes (July 22 2026)
+- [x] BUG FIX: AdminLogin.tsx — assessor login now reloads the login page (not /assessor) so auth.me resolves with full user object (including orgId) before redirect. The useEffect then correctly sends org staff to /org.
+- [x] BUG FIX: AdminClientDetail.tsx — detect /org/ URL context via location.startsWith("/org/") and user.orgId to set correct back link (/org vs /assessor)
+- [x] BUG FIX: server/routers.ts getById — assessors with orgId can now view clients referred to their org (not just their assigned clients)
+- [x] BUG FIX: server/routers.ts — added canAssessorAccessClient() helper; updated all 14 assessor access checks (notes, tasks, services, docs, assessment, email, chat, referrer notes, document URL) to allow org-referred client access

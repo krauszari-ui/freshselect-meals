@@ -192,10 +192,12 @@ export default function AdminClientDetail() {
   const params = useParams<{ id: string }>();
   const id = parseInt(params.id || "0");
   const utils = trpc.useUtils();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { user } = useAuth();
   const { openDocument, loading: docOpenLoading } = useOpenDocument();
   const isAssessor = user?.role === "assessor";
+  // Detect if this page was opened from the org portal (/org/clients/:id)
+  const isOrgContext = location.startsWith("/org/") || !!(user as any)?.orgId;
 
   const { data: client, isLoading } = trpc.admin.getById.useQuery({ id }, { enabled: id > 0 });
   const { data: notes } = trpc.admin.notes.byClient.useQuery({ submissionId: id }, { enabled: id > 0 });
@@ -542,12 +544,15 @@ export default function AdminClientDetail() {
     return w?.name || `User #${wId}`;
   };
 
+  // Determine back link based on context
+  const assessorBackHref = isOrgContext ? "/org" : "/assessor";
+
   if (isLoading) {
-    if (isAssessor) return <AssessorDetailLayout backHref="/assessor"><div className="flex justify-center items-center h-96"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div></AssessorDetailLayout>;
+    if (isAssessor) return <AssessorDetailLayout backHref={assessorBackHref}><div className="flex justify-center items-center h-96"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div></AssessorDetailLayout>;
     return <AdminLayout><div className="flex justify-center items-center h-96"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div></AdminLayout>;
   }
   if (!client) {
-    if (isAssessor) return <AssessorDetailLayout backHref="/assessor"><div className="p-6 text-center"><p className="text-slate-500">Client not found</p></div></AssessorDetailLayout>;
+    if (isAssessor) return <AssessorDetailLayout backHref={assessorBackHref}><div className="p-6 text-center"><p className="text-slate-500">Client not found</p></div></AssessorDetailLayout>;
     return <AdminLayout><div className="p-6 text-center"><p className="text-slate-500">Client not found</p><Link href="/admin/clients"><Button variant="outline" className="mt-4">Back to Clients</Button></Link></div></AdminLayout>;
   }
 
@@ -864,7 +869,7 @@ export default function AdminClientDetail() {
 
   // Use AssessorDetailLayout for assessors (no sidebar redirect), AdminLayout for everyone else
   const PageWrapper = isAssessor
-    ? ({ children }: { children: React.ReactNode }) => <AssessorDetailLayout backHref="/assessor">{children}</AssessorDetailLayout>
+    ? ({ children }: { children: React.ReactNode }) => <AssessorDetailLayout backHref={assessorBackHref}>{children}</AssessorDetailLayout>
     : ({ children }: { children: React.ReactNode }) => <AdminLayout>{children}</AdminLayout>;
 
   return (
