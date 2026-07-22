@@ -36,12 +36,12 @@ export default function AdminLogin() {
 
   const loginMutation = trpc.auth.adminLogin.useMutation({
     onSuccess: (data) => {
-      // Reload so the session cookie is picked up by trpc.auth.me
-      // orgId is checked via a separate auth.me call after reload — the login
-      // mutation only returns { success, role }. The useEffect above handles
-      // org staff redirect once auth.me resolves with the full user object.
+      // For assessors: reload THIS page so auth.me resolves with the full user
+      // object (including orgId). The useEffect above will then redirect to
+      // /org (if orgId is set) or /assessor (if plain assessor). This avoids
+      // the race where we redirect to /assessor before knowing the orgId.
       if (data.role === "assessor") {
-        window.location.href = "/assessor";
+        window.location.reload();
       } else {
         window.location.href = "/admin/dashboard";
       }
