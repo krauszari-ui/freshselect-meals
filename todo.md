@@ -815,3 +815,11 @@
 ## Chat Improvements (July 22, 2026)
 - [x] Chat: Filter @mention dropdown to only show active (non-deactivated) staff users
 - [x] Chat: Restrict "Export PDF" button to admin users only (hide for workers/assessors)
+
+## Security Audit & Bug Fixes (July 22, 2026)
+
+- [x] BUG-CRASH-1: Service list crashes page — `parseLocalDate` called with `Date` object (not string) from DB — fixed `utils.ts` to handle `Date` instances
+- [x] BUG-PERM-1: Assessors blocked from writing case notes — `notes.create` used `editProcedure` — changed to `staffProcedure` with assessor scope check
+- [x] BUG-DATA-1: Case notes show "Staff" instead of author name — `caseNotes` table had no `authorName` column — added column, migration applied, `notes.create` now stores `ctx.user.name`
+- [x] SEC-IDOR-1: Assessors could call `exportCsv` and download ALL client PII — added explicit role check blocking assessors and viewers
+- [x] SEC-UPLOAD-1: Chat `uploadAttachment` had no MIME type whitelist and no server-side size limit — added MIME whitelist (PDF/JPG/PNG/WEBP/GIF/DOC/DOCX/TXT) and 10 MB decoded size cap

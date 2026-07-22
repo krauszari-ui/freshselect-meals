@@ -225,6 +225,13 @@
       "when": 1784730980309,
       "tag": "0031_striped_karma",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1784736242447,
+      "tag": "0032_opposite_wendigo",
+      "breakpoints": true
     }
   ]
 }

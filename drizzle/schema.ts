@@ -162,6 +162,8 @@ export const caseNotes = mysqlTable("caseNotes", {
   submissionId: int("submissionId").notNull(),
   content: text("content").notNull(),
   createdBy: int("createdBy").notNull(),
+  /** Display name of the staff member who wrote this note */
+  authorName: varchar("authorName", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
