@@ -152,6 +152,8 @@ export interface ListSubmissionsOptions {
   assessorId?: number;
   /** If true, only return notInterested clients. If false, exclude notInterested clients. If undefined, return all. */
   notInterested?: boolean;
+  /** Filter to clients belonging to a specific org (Option A: referredOrgId=orgId OR assessorId IN org staff) */
+  orgId?: number;
   sortDir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
@@ -160,7 +162,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, excludeStage, excludeStages, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, assessorId, notInterested, sortDir = "desc", page = 1, pageSize = 20 } = opts;
+  const { search, status, stage, excludeStage, excludeStages, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, assessorId, notInterested, orgId, sortDir = "desc", page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -190,6 +192,15 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   if (zipcode && zipcode !== "all") conditions.push(eq(submissions.zipcode, zipcode));
   if (priority && priority !== "all") conditions.push(eq(submissions.priority, priority as Submission["priority"]));
   if (assessorId) conditions.push(eq(submissions.assessorId, assessorId));
+  // Org filter (Option A): clients where referredOrgId=orgId OR assessorId is any active member of that org
+  if (orgId) {
+    const orgStaff = await db.select({ id: users.id }).from(users).where(and(eq(users.orgId, orgId), eq(users.isActive, 1)));
+    const orgStaffIds = orgStaff.map((u) => u.id);
+    const orgCondition = orgStaffIds.length > 0
+      ? or(eq(submissions.referredOrgId, orgId), inArray(submissions.assessorId, orgStaffIds)) as any
+      : eq(submissions.referredOrgId, orgId) as any;
+    conditions.push(orgCondition);
+  }
   if (notInterested === true) conditions.push(eq(submissions.notInterested, true));
   else if (notInterested === false) conditions.push(eq(submissions.notInterested, false));
   else conditions.push(eq(submissions.notInterested, false)); // default: exclude not-interested

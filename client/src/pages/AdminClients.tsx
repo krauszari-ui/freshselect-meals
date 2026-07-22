@@ -452,6 +452,7 @@ export default function AdminClients() {
   const workerFilter = getParam("worker");
   const repFilter = getParam("rep");
   const assessorFilter = getParam("assessor");
+  const orgFilter = getParam("org");
   const referralFilter = getParam("referral");
   const applicantTypeFilter = getParam("applicantType");
   const assessmentCompletedFilter = getParam("assessmentCompleted");
@@ -477,6 +478,7 @@ export default function AdminClients() {
   const setWorkerFilter = (v: string) => setParam("worker", v);
   const setRepFilter = (v: string) => setParam("rep", v);
   const setAssessorFilter = (v: string) => setParam("assessor", v);
+  const setOrgFilter = (v: string) => setParam("org", v);
   const setReferralFilter = (v: string) => setParam("referral", v);
   const setApplicantTypeFilter = (v: string) => setParam("applicantType", v);
   const setAssessmentCompletedFilter = (v: string) => setParam("assessmentCompleted", v);
@@ -589,8 +591,9 @@ export default function AdminClients() {
     newApplicant: applicantTypeFilter !== "all" ? (applicantTypeFilter as "new" | "transfer") : undefined,
     assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
     intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
-    assessorId: assessorFilter !== "all" ? parseInt(assessorFilter) : undefined,
-    referralSource: referralFilter !== "all" ? referralFilter : undefined,
+      assessorId: assessorFilter !== "all" ? parseInt(assessorFilter) : undefined,
+      orgId: orgFilter !== "all" ? parseInt(orgFilter) : undefined,
+      referralSource: referralFilter !== "all" ? referralFilter : undefined,
       assessmentCompleted: dbAssessmentCompleted,
       zipcode: zipcodeFilter !== "all" ? zipcodeFilter : undefined,
       priority: priorityFilter !== "all" ? (priorityFilter as "low" | "normal" | "high" | "urgent") : undefined,
@@ -609,6 +612,7 @@ export default function AdminClients() {
 
   const staffQuery = trpc.admin.staffList.useQuery();
   const { data: assessorList } = trpc.admin.listAssessors.useQuery();
+  const { data: orgList } = trpc.org.list.useQuery({ includeInactive: false });
   const referralLinksQuery = trpc.admin.referrals.list.useQuery();
   const referralLinks = (referralLinksQuery.data ?? []) as any[];
 
@@ -810,7 +814,7 @@ export default function AdminClients() {
   const totalPages = listData?.totalPages ?? 1;
   const totalCount = listData?.total ?? 0;
   const totalMembers = listData?.totalMembers ?? 0;
-  const hasActiveFilter = stageFilter !== "all" || neighborhoodFilter !== "all" || vendorFilter !== "all" || programFilter !== "all" || applicantTypeFilter !== "all" || languageFilter !== "all" || boroughFilter !== "all" || workerFilter !== "all" || repFilter !== "all" || assessorFilter !== "all" || referralFilter !== "all" || assessmentCompletedFilter !== "all" || zipcodeFilter !== "all" || priorityFilter !== "all" || debouncedSearch.trim() !== "";
+  const hasActiveFilter = stageFilter !== "all" || neighborhoodFilter !== "all" || vendorFilter !== "all" || programFilter !== "all" || applicantTypeFilter !== "all" || languageFilter !== "all" || boroughFilter !== "all" || workerFilter !== "all" || repFilter !== "all" || assessorFilter !== "all" || orgFilter !== "all" || referralFilter !== "all" || assessmentCompletedFilter !== "all" || zipcodeFilter !== "all" || priorityFilter !== "all" || debouncedSearch.trim() !== "";
 
   const clearAllFilters = () => {
     setSearchInput("");
@@ -1100,6 +1104,21 @@ export default function AdminClients() {
                   <SelectItem value="all">All Assessors</SelectItem>
                   {(assessorList ?? []).map((a: any) => (
                     <SelectItem key={a.id} value={String(a.id)}>{a.name || a.email}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Organization */}
+            {(orgList ?? []).length > 0 && (
+              <Select value={orgFilter} onValueChange={(v) => { setOrgFilter(v); }}>
+                <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-purple-200 text-purple-700">
+                  <SelectValue placeholder="Organization" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Organizations</SelectItem>
+                  {(orgList ?? []).map((org: any) => (
+                    <SelectItem key={org.id} value={String(org.id)}>{org.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

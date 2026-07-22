@@ -523,6 +523,7 @@ export const appRouter = router({
       page: z.number().min(1).optional(),
       pageSize: z.number().min(1).max(100).optional(),
       notInterested: z.boolean().optional(),
+      orgId: z.number().optional(),
     })).query(async ({ input, ctx }) => {
       // SECURITY: Assessors can only see clients assigned to them — enforce server-side
       // regardless of what the frontend passes. This cannot be bypassed via API.
