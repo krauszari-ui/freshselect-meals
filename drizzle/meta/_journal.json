@@ -218,6 +218,13 @@
       "when": 1783354538370,
       "tag": "0030_lumpy_riptide",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1784730980309,
+      "tag": "0031_striped_karma",
+      "breakpoints": true
     }
   ]
 }

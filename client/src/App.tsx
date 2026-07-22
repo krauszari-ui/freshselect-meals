@@ -26,6 +26,7 @@ import AssessorPortal from "./pages/AssessorPortal";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import AdminEmailBlast from "./pages/AdminEmailBlast";
+import AdminChatInbox from "./pages/AdminChatInbox";
 import { ImpersonationBanner } from "./components/ImpersonationBanner";
 
 function Router() {
@@ -55,6 +56,7 @@ function Router() {
       <Route path={"/admin/notifications"} component={AdminNotifications} />
       <Route path={"/admin/audit-log"} component={AdminAuditLog} />
       <Route path={"/admin/email-blast"} component={AdminEmailBlast} />
+      <Route path={"/admin/chat"} component={AdminChatInbox} />
 
       {/* Referrer Portal */}
       <Route path={"/referrer"} component={ReferrerPortal} />

@@ -441,3 +441,60 @@ export const emailBlasts = mysqlTable("emailBlasts", {
 });
 export type EmailBlast = typeof emailBlasts.$inferSelect;
 export type InsertEmailBlast = typeof emailBlasts.$inferInsert;
+
+/**
+ * Per-client staff chat messages.
+ * Each client has a dedicated chat thread where all assigned staff can communicate.
+ */
+export const clientMessages = mysqlTable("clientMessages", {
+  id: int("id").primaryKey().autoincrement(),
+  /** The client (submission) this message belongs to */
+  submissionId: int("submissionId").notNull(),
+  /** ID of the staff member who sent the message */
+  senderId: int("senderId").notNull(),
+  /** Display name of the sender (denormalised for history) */
+  senderName: varchar("senderName", { length: 256 }).notNull(),
+  /** Role of the sender at time of sending */
+  senderRole: varchar("senderRole", { length: 64 }).notNull(),
+  /** Message text content (supports markdown-lite: bold, italic, mentions) */
+  content: text("content").notNull(),
+  /** Optional file attachment URL (S3/R2 key) */
+  attachmentUrl: text("attachmentUrl"),
+  /** Original filename of the attachment */
+  attachmentName: varchar("attachmentName", { length: 512 }),
+  /** MIME type of the attachment */
+  attachmentType: varchar("attachmentType", { length: 128 }),
+  /** JSON array of { userId, emoji } reaction objects */
+  reactions: json("reactions"),
+  /** Whether this message has been soft-deleted */
+  isDeleted: int("isDeleted").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  idx_clientMessages_submissionId: index("idx_clientMessages_submissionId").on(t.submissionId),
+  idx_clientMessages_senderId: index("idx_clientMessages_senderId").on(t.senderId),
+  idx_clientMessages_createdAt: index("idx_clientMessages_createdAt").on(t.createdAt),
+}));
+
+export type ClientMessage = typeof clientMessages.$inferSelect;
+export type InsertClientMessage = typeof clientMessages.$inferInsert;
+
+/**
+ * Tracks which staff members have read up to which message in each client thread.
+ * Used to compute unread counts for the global inbox.
+ */
+export const messageReads = mysqlTable("messageReads", {
+  id: int("id").primaryKey().autoincrement(),
+  /** Staff member */
+  userId: int("userId").notNull(),
+  /** Client thread */
+  submissionId: int("submissionId").notNull(),
+  /** ID of the last message this user has read in this thread */
+  lastReadMessageId: int("lastReadMessageId").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  idx_messageReads_userId_submissionId: uniqueIndex("idx_messageReads_userId_submissionId").on(t.userId, t.submissionId),
+}));
+
+export type MessageRead = typeof messageReads.$inferSelect;
+export type InsertMessageRead = typeof messageReads.$inferInsert;

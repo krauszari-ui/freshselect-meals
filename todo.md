@@ -795,3 +795,16 @@
 - [x] Add "Send Reset Link" button (KeyRound icon) to Staff Management page per staff member
 - [x] Add "Download PDF" button to client detail page — generates comprehensive PDF with all client info and assessment data using pdf-lib (client-side)
 - [x] Add re-upload button for legacy URL-only documents (no fileKey) in AdminClientDetail — allows admins to replace expired docs with a fresh upload in-place
+- [ ] Chat: Create client_messages and message_reads DB tables with migration
+- [ ] Chat: tRPC procedures — send, list (paginated), mark-read, unread counts
+- [ ] Chat: SSE endpoint for real-time message delivery per client thread
+- [ ] Chat: Per-client Chat tab in AdminClientDetail with WhatsApp/Teams-style bubble UI
+- [ ] Chat: Message bubbles — sender on right (green), others on left (white), avatar initials, timestamps
+- [ ] Chat: Typing indicator and auto-scroll to latest message
+- [ ] Chat: File/image attachment support in chat
+- [ ] Chat: @mention support with staff autocomplete
+- [ ] Chat: Global Chat Inbox page (/admin/chat) in sidebar with all active threads
+- [ ] Chat: Unread badge on sidebar Chat nav item and per-thread in inbox
+- [ ] Chat: Real-time unread count polling with SSE updates
+- [ ] Chat: Message search within a thread
+- [ ] Chat: Emoji reactions on messages

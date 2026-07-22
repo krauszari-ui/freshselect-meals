@@ -13,6 +13,8 @@ import {
   notificationReads,
   auditLogs,
   emailBlasts,
+  clientMessages, ClientMessage, InsertClientMessage,
+  messageReads,
 } from "../drizzle/schema";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1316,4 +1318,165 @@ export async function getReferrerMessageById(messageId: number) {
   const rows = await db.select({ id: referrerMessages.id, submissionId: referrerMessages.submissionId })
     .from(referrerMessages).where(eq(referrerMessages.id, messageId)).limit(1);
   return rows[0] ?? null;
+}
+
+// ─── Chat helpers ─────────────────────────────────────────────────────────────
+
+/** Send a new message in a client thread. Returns the inserted message. */
+export async function createClientMessage(data: InsertClientMessage): Promise<ClientMessage> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(clientMessages).values(data);
+  const insertId = (result as any)[0]?.insertId ?? (result as any).insertId;
+  const rows = await db.select().from(clientMessages).where(eq(clientMessages.id, insertId)).limit(1);
+  return rows[0];
+}
+
+/** List messages for a client thread, newest-first with optional cursor-based pagination. */
+export async function listClientMessages(submissionId: number, opts: { limit?: number; beforeId?: number } = {}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { limit = 50, beforeId } = opts;
+  const conditions = [eq(clientMessages.submissionId, submissionId), eq(clientMessages.isDeleted, 0)];
+  if (beforeId) conditions.push(sql`${clientMessages.id} < ${beforeId}`);
+  const rows = await db.select().from(clientMessages)
+    .where(and(...conditions))
+    .orderBy(desc(clientMessages.createdAt))
+    .limit(limit);
+  return rows.reverse(); // Return in chronological order for display
+}
+
+/** Get messages newer than a given ID (for SSE polling). */
+export async function getNewClientMessages(submissionId: number, afterId: number): Promise<ClientMessage[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.select().from(clientMessages)
+    .where(and(
+      eq(clientMessages.submissionId, submissionId),
+      eq(clientMessages.isDeleted, 0),
+      sql`${clientMessages.id} > ${afterId}`
+    ))
+    .orderBy(asc(clientMessages.createdAt));
+}
+
+/** Soft-delete a message (only sender or admin can delete). */
+export async function deleteClientMessage(messageId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(clientMessages).set({ isDeleted: 1 }).where(eq(clientMessages.id, messageId));
+}
+
+/** Add or remove an emoji reaction on a message. */
+export async function toggleMessageReaction(messageId: number, userId: number, emoji: string): Promise<ClientMessage | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select().from(clientMessages).where(eq(clientMessages.id, messageId)).limit(1);
+  if (!rows[0]) return null;
+  const existing = (rows[0].reactions as Array<{ userId: number; emoji: string }>) ?? [];
+  const idx = existing.findIndex(r => r.userId === userId && r.emoji === emoji);
+  const updated = idx >= 0
+    ? existing.filter((_, i) => i !== idx) // remove
+    : [...existing, { userId, emoji }];    // add
+  await db.update(clientMessages).set({ reactions: updated }).where(eq(clientMessages.id, messageId));
+  const updated_rows = await db.select().from(clientMessages).where(eq(clientMessages.id, messageId)).limit(1);
+  return updated_rows[0] ?? null;
+}
+
+/** Mark a thread as read up to a given message ID for a user. */
+export async function markThreadRead(userId: number, submissionId: number, lastReadMessageId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(messageReads)
+    .values({ userId, submissionId, lastReadMessageId })
+    .onDuplicateKeyUpdate({ set: { lastReadMessageId, updatedAt: new Date() } });
+}
+
+/** Get the unread count for a specific thread for a user. */
+export async function getThreadUnreadCount(userId: number, submissionId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const readRow = await db.select({ lastReadMessageId: messageReads.lastReadMessageId })
+    .from(messageReads)
+    .where(and(eq(messageReads.userId, userId), eq(messageReads.submissionId, submissionId)))
+    .limit(1);
+  const lastRead = readRow[0]?.lastReadMessageId ?? 0;
+  const result = await db.select({ cnt: count() }).from(clientMessages)
+    .where(and(
+      eq(clientMessages.submissionId, submissionId),
+      eq(clientMessages.isDeleted, 0),
+      sql`${clientMessages.id} > ${lastRead}`,
+      ne(clientMessages.senderId, userId) // don't count own messages as unread
+    ));
+  return Number(result[0]?.cnt ?? 0);
+}
+
+/** Get unread counts across ALL threads for a user (for the global inbox badge). */
+export async function getAllUnreadCounts(userId: number): Promise<Record<number, number>> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Get all threads this user has participated in or that have messages
+  const allThreads = await db.selectDistinct({ submissionId: clientMessages.submissionId })
+    .from(clientMessages)
+    .where(eq(clientMessages.isDeleted, 0));
+
+  if (allThreads.length === 0) return {};
+
+  const submissionIds = allThreads.map(t => t.submissionId);
+
+  // Get last-read positions for this user
+  const readRows = await db.select().from(messageReads)
+    .where(and(eq(messageReads.userId, userId), inArray(messageReads.submissionId, submissionIds)));
+  const readMap = new Map(readRows.map(r => [r.submissionId, r.lastReadMessageId]));
+
+  // Count unread per thread
+  const result: Record<number, number> = {};
+  await Promise.all(submissionIds.map(async (sid) => {
+    const lastRead = readMap.get(sid) ?? 0;
+    const cnt = await db!.select({ cnt: count() }).from(clientMessages)
+      .where(and(
+        eq(clientMessages.submissionId, sid),
+        eq(clientMessages.isDeleted, 0),
+        sql`${clientMessages.id} > ${lastRead}`,
+        ne(clientMessages.senderId, userId)
+      ));
+    const n = Number(cnt[0]?.cnt ?? 0);
+    if (n > 0) result[sid] = n;
+  }));
+  return result;
+}
+
+/** Get the latest message per thread for the global inbox view. */
+export async function getInboxThreads(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Get all threads that have at least one message
+  const latestPerThread = await db.execute(sql`
+    SELECT cm.submissionId,
+           cm.id AS lastMessageId,
+           cm.content AS lastMessageContent,
+           cm.senderName AS lastMessageSender,
+           cm.senderId AS lastMessageSenderId,
+           cm.attachmentName,
+           cm.createdAt AS lastMessageAt,
+           s.firstName, s.lastName, s.referenceNumber, s.stage,
+           COALESCE(mr.lastReadMessageId, 0) AS lastReadMessageId,
+           (SELECT COUNT(*) FROM clientMessages cm2
+            WHERE cm2.submissionId = cm.submissionId
+              AND cm2.isDeleted = 0
+              AND cm2.id > COALESCE(mr.lastReadMessageId, 0)
+              AND cm2.senderId != ${userId}) AS unreadCount
+    FROM clientMessages cm
+    INNER JOIN submissions s ON s.id = cm.submissionId
+    LEFT JOIN messageReads mr ON mr.submissionId = cm.submissionId AND mr.userId = ${userId}
+    WHERE cm.id = (
+      SELECT MAX(cm3.id) FROM clientMessages cm3
+      WHERE cm3.submissionId = cm.submissionId AND cm3.isDeleted = 0
+    )
+    ORDER BY cm.createdAt DESC
+    LIMIT 100
+  `);
+
+  const rows = (Array.isArray((latestPerThread as any)[0]) ? (latestPerThread as any)[0] : latestPerThread) as any[];
+  return rows;
 }

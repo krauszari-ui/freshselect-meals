@@ -34,10 +34,10 @@ export const ALLOWED_ORIGINS = [
 // Rate limiters
 // ---------------------------------------------------------------------------
 
-/** Global limiter: 300 req / 15 min per IP — baseline protection */
+/** Global limiter: 1500 req / 15 min per IP — increased to support chat polling (every 3s per active user) */
 export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 1500,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },

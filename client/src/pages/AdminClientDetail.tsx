@@ -26,6 +26,7 @@ import {
   FileUp, StickyNote, CheckSquare, AlertTriangle, ShieldCheck, AlertCircle, Ban, Download,
 } from "lucide-react";
 import { generateClientPdf } from "@/lib/generateClientPdf";
+import { ClientChatTab } from "@/components/ClientChatTab";
 import { useOpenDocument } from "@/hooks/useOpenDocument";
 import { useState, useRef, useEffect } from "react";
 import { formatLocalDate, formatLocalDateShort } from "@/lib/utils";
@@ -205,7 +206,7 @@ export default function AdminClientDetail() {
   const { data: assessorList } = trpc.admin.listAssessors.useQuery();
   const { data: stageHistoryData } = trpc.admin.stageHistory.useQuery({ id }, { enabled: id > 0 });
 
-  const [activeTab, setActiveTab] = useState<"overview" | "assessment" | "services" | "activity">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "assessment" | "services" | "activity" | "chat">("overview");
   const [pdfLoading, setPdfLoading] = useState(false);
   const [activityPage, setActivityPage] = useState(1);
 
@@ -1042,7 +1043,7 @@ export default function AdminClientDetail() {
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-slate-200 overflow-x-auto">
-          {(["overview", "assessment", "services", "activity"] as const).map((tab) => (
+                    {(["overview", "assessment", "services", "activity", "chat"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1051,7 +1052,8 @@ export default function AdminClientDetail() {
               }`}
             >
               {tab === "activity" && <Activity className="h-3.5 w-3.5" />}
-              {tab === "overview" ? "Overview" : tab === "assessment" ? "Assessment" : tab === "services" ? "Services" : "Activity"}
+              {tab === "chat" && <MessageSquare className="h-3.5 w-3.5" />}
+              {tab === "overview" ? "Overview" : tab === "assessment" ? "Assessment" : tab === "services" ? "Services" : tab === "activity" ? "Activity" : "Chat"}
             </button>
           ))}
         </div>
@@ -2568,6 +2570,14 @@ export default function AdminClientDetail() {
               )}
             </div>
           </div>
+        )}
+
+        {/* Chat Tab */}
+        {activeTab === "chat" && client && (
+          <ClientChatTab
+            submissionId={id}
+            clientName={`${client.firstName} ${client.lastName}`}
+          />
         )}
 
         {/* ═══ DIALOGS ═══ */}
