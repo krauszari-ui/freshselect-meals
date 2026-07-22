@@ -823,9 +823,15 @@ export const appRouter = router({
         });
         const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
         const csv = [headers.map(escape).join(","), ...csvRows.map((row) => row.map(escape).join(","))].join("\n");
+                // AUDIT: log every export so admins can track who downloaded client PII
+        await logAudit({
+          actorId: ctx.user.id,
+          actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
+          action: "csv_export",
+          details: { recordCount: rows.length, filters: input, role: ctx.user.role },
+        }).catch(() => {});
         return { csv, count: rows.length, headers, data: csvRows };
       }),
-
     // ─── Tasks ────────────────────────────────────────────────────────────
     tasks: router({
       list: staffProcedure.input(z.object({
