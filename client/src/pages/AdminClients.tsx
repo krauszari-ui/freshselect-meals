@@ -612,7 +612,7 @@ export default function AdminClients() {
 
   const staffQuery = trpc.admin.staffList.useQuery();
   const { data: assessorList } = trpc.admin.listAssessors.useQuery();
-  const { data: orgList } = trpc.org.list.useQuery({ includeInactive: false });
+  const { data: orgList, isLoading: orgListLoading } = trpc.org.list.useQuery({ includeInactive: false });
   const referralLinksQuery = trpc.admin.referrals.list.useQuery();
   const referralLinks = (referralLinksQuery.data ?? []) as any[];
 
@@ -1110,19 +1110,17 @@ export default function AdminClients() {
             )}
 
             {/* Organization */}
-            {(orgList ?? []).length > 0 && (
-              <Select value={orgFilter} onValueChange={(v) => { setOrgFilter(v); }}>
-                <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-purple-200 text-purple-700">
-                  <SelectValue placeholder="Organization" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Organizations</SelectItem>
-                  {(orgList ?? []).map((org: any) => (
-                    <SelectItem key={org.id} value={String(org.id)}>{org.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <Select value={orgFilter} onValueChange={(v) => { setOrgFilter(v); }} disabled={orgListLoading}>
+              <SelectTrigger className="w-[160px] h-9 text-sm bg-white border-purple-200 text-purple-700">
+                <SelectValue placeholder={orgListLoading ? "Loading..." : "Organization"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Organizations</SelectItem>
+                {(orgList ?? []).map((org: any) => (
+                  <SelectItem key={org.id} value={String(org.id)}>{org.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             {/* Referral Source */}
             <Select value={referralFilter} onValueChange={(v) => { setReferralFilter(v); }}>
