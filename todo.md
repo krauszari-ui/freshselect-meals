@@ -811,3 +811,7 @@
 - [x] Chat: @mention autocomplete — type @ in chat input to get a dropdown of all staff users, click to tag them
 - [x] Chat: @mention notification — when a message containing @username is sent, dispatch an in-app notification to the tagged user (fixed trailing-space name bug in DB)
 - [x] Chat: Download PDF — button to export full chat thread as a formatted PDF (client name, date, all messages with sender/timestamp)
+
+## Chat Improvements (July 22, 2026)
+- [x] Chat: Filter @mention dropdown to only show active (non-deactivated) staff users
+- [x] Chat: Restrict "Export PDF" button to admin users only (hide for workers/assessors)
