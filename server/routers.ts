@@ -38,6 +38,8 @@ import {
   getEmailBlastById, getBlastReplies, updateEmailBlastStatus,
   listAssessors, updateSubmissionAssessor,
   getUserById,
+  createClientMessage, listClientMessages, getNewClientMessages, deleteClientMessage,
+  toggleMessageReaction, markThreadRead, getThreadUnreadCount, getAllUnreadCounts, getInboxThreads,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -1980,6 +1982,141 @@ export const appRouter = router({
         }
         await updateEmailBlastStatus(input.id, "scheduled");
         return { success: true };
+      }),
+  }),
+  chat: router({
+    /** List messages for a client thread (paginated, chronological) */
+    list: staffProcedure
+      .input(z.object({ submissionId: z.number(), beforeId: z.number().optional(), limit: z.number().min(1).max(100).default(50) }))
+      .query(async ({ input, ctx }) => {
+        // Assessors can only read chats for their assigned clients
+        if (ctx.user.role === "assessor") {
+          const sub = await getSubmissionById(input.submissionId);
+          if (!sub || sub.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        return listClientMessages(input.submissionId, { limit: input.limit, beforeId: input.beforeId });
+      }),
+
+    /** Send a message in a client thread */
+    send: staffProcedure
+      .input(z.object({
+        submissionId: z.number(),
+        content: z.string().min(1).max(4000),
+        attachmentUrl: z.string().optional(),
+        attachmentName: z.string().optional(),
+        attachmentType: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role === "viewer") throw new TRPCError({ code: "FORBIDDEN", message: "Viewers cannot send messages" });
+        if (ctx.user.role === "assessor") {
+          const sub = await getSubmissionById(input.submissionId);
+          if (!sub || sub.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        const msg = await createClientMessage({
+          submissionId: input.submissionId,
+          senderId: ctx.user.id,
+          senderName: ctx.user.name ?? "Staff",
+          senderRole: ctx.user.role,
+          content: input.content,
+          attachmentUrl: input.attachmentUrl ?? null,
+          attachmentName: input.attachmentName ?? null,
+          attachmentType: input.attachmentType ?? null,
+          reactions: [],
+        });
+        // Auto-mark as read for the sender
+        await markThreadRead(ctx.user.id, input.submissionId, msg.id);
+        return msg;
+      }),
+
+    /** Poll for new messages since a given message ID (used by SSE fallback) */
+    poll: staffProcedure
+      .input(z.object({ submissionId: z.number(), afterId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role === "assessor") {
+          const sub = await getSubmissionById(input.submissionId);
+          if (!sub || sub.assessorId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        return getNewClientMessages(input.submissionId, input.afterId);
+      }),
+
+    /** Soft-delete a message */
+    delete: staffProcedure
+      .input(z.object({ messageId: z.number(), submissionId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const msgs = await listClientMessages(input.submissionId, { limit: 200 });
+        const msg = msgs.find(m => m.id === input.messageId);
+        if (!msg) throw new TRPCError({ code: "NOT_FOUND" });
+        if (msg.senderId !== ctx.user.id && ctx.user.role !== "admin" && ctx.user.role !== "super_admin")
+          throw new TRPCError({ code: "FORBIDDEN", message: "You can only delete your own messages" });
+        await deleteClientMessage(input.messageId);
+        return { success: true };
+      }),
+
+    /** Toggle an emoji reaction on a message */
+    react: staffProcedure
+      .input(z.object({ messageId: z.number(), submissionId: z.number(), emoji: z.string().max(8) }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role === "viewer") throw new TRPCError({ code: "FORBIDDEN" });
+        const updated = await toggleMessageReaction(input.messageId, ctx.user.id, input.emoji);
+        if (!updated) throw new TRPCError({ code: "NOT_FOUND" });
+        return updated;
+      }),
+
+    /** Mark a thread as read up to the latest message */
+    markRead: staffProcedure
+      .input(z.object({ submissionId: z.number(), lastReadMessageId: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        await markThreadRead(ctx.user.id, input.submissionId, input.lastReadMessageId);
+        return { success: true };
+      }),
+
+    /** Get unread count for a single thread */
+    unreadCount: staffProcedure
+      .input(z.object({ submissionId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        const count = await getThreadUnreadCount(ctx.user.id, input.submissionId);
+        return { count };
+      }),
+
+    /** Get unread counts across all threads (for global inbox badge) */
+    allUnreadCounts: staffProcedure
+      .query(async ({ ctx }) => {
+        return getAllUnreadCounts(ctx.user.id);
+      }),
+
+    /** Get inbox threads with latest message and unread count */
+    inbox: staffProcedure
+      .query(async ({ ctx }) => {
+        const rows = await getInboxThreads(ctx.user.id);
+        return rows.map((r: any) => ({
+          submissionId: r.submissionId,
+          clientName: r.firstName && r.lastName
+            ? `${r.firstName} ${r.lastName}`
+            : (r.firstName ?? r.lastName ?? null),
+          stage: r.stage ?? "referral",
+          lastMessage: r.lastMessageContent ?? null,
+          lastMessageAt: r.lastMessageAt ?? null,
+          lastSenderName: r.lastMessageSender ?? null,
+          unreadCount: Number(r.unreadCount ?? 0),
+          referenceNumber: r.referenceNumber ?? null,
+        }));
+      }),
+
+    /** Upload a file attachment for chat */
+    uploadAttachment: staffProcedure
+      .input(z.object({
+        submissionId: z.number(),
+        fileName: z.string(),
+        fileData: z.string(), // base64
+        contentType: z.string(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role === "viewer") throw new TRPCError({ code: "FORBIDDEN" });
+        const buffer = Buffer.from(input.fileData, "base64");
+        const ext = input.fileName.split(".").pop() ?? "bin";
+        const key = `chat/${input.submissionId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { url } = await storagePut(key, buffer, input.contentType);
+        return { url, key, fileName: input.fileName, contentType: input.contentType };
       }),
   }),
 });

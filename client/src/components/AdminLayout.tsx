@@ -3,7 +3,7 @@ import { getLoginUrl } from "@/const";
 import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Users, ClipboardList, FileText, Building2,
-  LogOut, Loader2, ShieldCheck, ChevronRight, Leaf, Link2, UserCog, AlertTriangle, BarChart3, Bell, ScrollText, Menu, X, Mail,
+  LogOut, Loader2, ShieldCheck, ChevronRight, Leaf, Link2, UserCog, AlertTriangle, BarChart3, Bell, ScrollText, Menu, X, Mail, MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { type ReactNode, useState, useEffect } from "react";
@@ -35,11 +35,12 @@ interface SidebarContentProps {
   location: string;
   user: { name?: string | null; role: string } | null;
   unreadCount: number;
+  chatUnreadCount: number;
   onClose: () => void;
   onLogout: () => void;
 }
 
-function SidebarContent({ navItems, location, user, unreadCount, onClose, onLogout }: SidebarContentProps) {
+function SidebarContent({ navItems, location, user, unreadCount, chatUnreadCount, onClose, onLogout }: SidebarContentProps) {
   const initials = user?.name
     ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
     : "U";
@@ -88,6 +89,34 @@ function SidebarContent({ navItems, location, user, unreadCount, onClose, onLogo
             </Link>
           );
         })}
+
+        {/* Chat Inbox */}
+        <Link href="/admin/chat">
+          <button
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              location === "/admin/chat" || location.startsWith("/admin/chat")
+                ? "bg-green-600 text-white font-medium"
+                : "text-green-200 hover:text-white hover:bg-green-800"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <MessageSquare className="h-[18px] w-[18px] shrink-0" />
+                {chatUnreadCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                    {chatUnreadCount > 99 ? "99+" : chatUnreadCount}
+                  </span>
+                )}
+              </div>
+              <span>Team Chat</span>
+            </div>
+            {location === "/admin/chat" || location.startsWith("/admin/chat")
+              ? <ChevronRight className="h-4 w-4 opacity-60" />
+              : chatUnreadCount > 0
+                ? <span className="bg-emerald-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{chatUnreadCount > 99 ? "99+" : chatUnreadCount}</span>
+                : null}
+          </button>
+        </Link>
 
         {/* Notifications bell — hidden for assessor role */}
         {user?.role !== "assessor" && (
@@ -189,6 +218,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   });
   const unreadCount = unreadData?.count ?? 0;
 
+  // Poll chat unread count every 5 seconds
+  const { data: chatUnreadData } = trpc.chat.allUnreadCounts.useQuery(undefined, {
+    refetchInterval: 5_000,
+    enabled: !!user,
+  });
+  const chatUnreadCount = chatUnreadData
+    ? Object.values(chatUnreadData as Record<string, number>).reduce((sum, n) => sum + (n ?? 0), 0)
+    : 0;
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-green-900">
@@ -272,6 +310,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           location={location}
           user={user}
           unreadCount={unreadCount}
+          chatUnreadCount={chatUnreadCount}
           onClose={() => setSidebarOpen(false)}
           onLogout={() => logout()}
         />
