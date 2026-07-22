@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import {
   Building2, Search, Loader2, MessageSquare, Send, AtSign,
 } from "lucide-react";
+import { ReplyBar, ReplyButton, ReplyQuote, type ReplyTarget } from "@/components/ReplyBar";
 import { toast } from "sonner";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -183,6 +184,7 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
 }) {
   const utils = trpc.useUtils();
   const [text, setText] = useState("");
+  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
@@ -291,7 +293,8 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
       .filter(o => content.includes(`@${o.orgName.trim()}`))
       .map(o => o.orgId);
 
-    sendMsg.mutate({ orgId, content, mentionedUserIds, mentionedOrgIds });
+    sendMsg.mutate({ orgId, content, mentionedUserIds, mentionedOrgIds, replyToId: replyTarget?.id });
+    setReplyTarget(null);
   }, [text, orgId, sendMsg]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -331,7 +334,7 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
           const isMe = msg.senderId === currentUserId;
           const isFreshSelect = !msg.senderOrgName || msg.senderOrgName === "FreshSelect Meals";
           return (
-            <div key={msg.id} className={`flex gap-3 ${isMe ? "flex-row-reverse" : ""}`}>
+            <div key={msg.id} className={`flex gap-3 group ${isMe ? "flex-row-reverse" : ""}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                 isMe ? "bg-emerald-500 text-white" : isFreshSelect ? "bg-green-700 text-white" : "bg-blue-500 text-white"
               }`}>
@@ -352,12 +355,16 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
                       FreshSelect
                     </span>
                   )}
+                  <ReplyButton onClick={() => setReplyTarget({ id: msg.id, senderName: msg.senderName, content: msg.content.slice(0, 300) })} />
                 </div>
                 <div className={`rounded-2xl px-4 py-2 text-sm ${
                   isMe
                     ? "bg-emerald-500 text-white rounded-tr-sm"
                     : "bg-white border border-slate-200 text-slate-800 rounded-tl-sm shadow-sm"
                 }`}>
+                  {msg.replyToId && msg.replyToSenderName && (
+                    <ReplyQuote senderName={msg.replyToSenderName} content={msg.replyToContent ?? ""} />
+                  )}
                   {msg.content}
                 </div>
                 <span className="text-[10px] text-slate-400">
@@ -372,6 +379,7 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
 
       {/* Composer */}
       <div className="px-4 py-3 border-t border-slate-200 bg-white flex-shrink-0">
+        <ReplyBar replyTarget={replyTarget} onCancel={() => setReplyTarget(null)} />
         <div ref={inputWrapRef} className="relative flex items-end gap-2">
           {mentionQuery !== null && (
             <MentionDropdown

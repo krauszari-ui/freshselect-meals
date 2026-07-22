@@ -478,6 +478,12 @@ export const clientMessages = mysqlTable("clientMessages", {
   attachmentType: varchar("attachmentType", { length: 128 }),
   /** JSON array of { userId, emoji } reaction objects */
   reactions: json("reactions"),
+  /** ID of the message this is replying to (null if not a reply) */
+  replyToId: int("replyToId"),
+  /** Denormalised sender name of the replied-to message */
+  replyToSenderName: varchar("replyToSenderName", { length: 256 }),
+  /** Denormalised content snippet of the replied-to message (first 300 chars) */
+  replyToContent: varchar("replyToContent", { length: 300 }),
   /** Whether this message has been soft-deleted */
   isDeleted: int("isDeleted").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -559,6 +565,12 @@ export const orgGroupMessages = mysqlTable("orgGroupMessages", {
   attachmentType: varchar("attachmentType", { length: 128 }),
   /** JSON array of { userId, emoji } reaction objects */
   reactions: json("reactions"),
+  /** ID of the message this is replying to (null if not a reply) */
+  replyToId: int("replyToId"),
+  /** Denormalised sender name of the replied-to message */
+  replyToSenderName: varchar("replyToSenderName", { length: 256 }),
+  /** Denormalised content snippet of the replied-to message (first 300 chars) */
+  replyToContent: varchar("replyToContent", { length: 300 }),
   /** Whether this message has been soft-deleted */
   isDeleted: int("isDeleted").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

@@ -13,6 +13,7 @@ import {
   Send, Paperclip, Smile, Trash2, Download, FileText,
   MessageSquare, Loader2, X, CheckCheck, FileDown, AtSign,
 } from "lucide-react";
+import { ReplyBar, ReplyButton, ReplyQuote, type ReplyTarget } from "@/components/ReplyBar";
 import { toast } from "sonner";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
@@ -31,6 +32,9 @@ interface Message {
   reactions?: unknown;
   isDeleted: number;
   createdAt: Date | string;
+  replyToId?: number | null;
+  replyToSenderName?: string | null;
+  replyToContent?: string | null;
 }
 
 interface StaffUser {
@@ -269,6 +273,7 @@ function MessageBubble({
   onDelete,
   onReact,
   onOpenAttachment,
+  onReply,
 }: {
   msg: Message;
   isMine: boolean;
@@ -276,6 +281,7 @@ function MessageBubble({
   onDelete: (id: number) => void;
   onReact: (id: number, emoji: string) => void;
   onOpenAttachment: (url: string, name: string) => void;
+  onReply: (target: ReplyTarget) => void;
 }) {
   const [showActions, setShowActions] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -326,6 +332,9 @@ function MessageBubble({
                 : "bg-white border border-slate-200 text-slate-800 rounded-tl-sm"
             }`}
           >
+            {msg.replyToId && msg.replyToSenderName && (
+              <ReplyQuote senderName={msg.replyToSenderName} content={msg.replyToContent ?? ""} />
+            )}
             {msg.attachmentUrl && (
               <div className="mb-2">
                 {isImageType(msg.attachmentType) ? (
@@ -381,8 +390,9 @@ function MessageBubble({
             </div>
           )}
 
-          {showActions && (
+            {showActions && (
             <div className={`absolute top-0 ${isMine ? "right-full mr-2" : "left-full ml-2"} flex items-center gap-1 bg-white border border-slate-200 rounded-full px-2 py-1 shadow-md z-10`}>
+              <ReplyButton onClick={() => onReply({ id: msg.id, senderName: msg.senderName, content: (msg.attachmentName ? `[${msg.attachmentName}]` : msg.content).slice(0, 300) })} />
               <div className="relative">
                 <button
                   onClick={() => setShowEmojiPicker(p => !p)}
@@ -488,6 +498,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
 
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
   const [attachFile, setAttachFile] = useState<File | null>(null);
   const [attachPreview, setAttachPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -643,6 +654,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
         attachmentName,
         attachmentType,
         mentionedUserIds: mentionedInText.map(u => u.id),
+        replyToId: replyTarget?.id,
       });
 
       setText("");
@@ -651,6 +663,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
       setMentionedUsers([]);
       mentionedUsersRef.current = [];
       setMentionQuery(null);
+      setReplyTarget(null);
       textareaRef.current?.focus();
       await refetch();
     } catch {
@@ -803,6 +816,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
                   onDelete={(id) => deleteMutation.mutate({ messageId: id, submissionId })}
                   onReact={(id, emoji) => reactMutation.mutate({ messageId: id, submissionId, emoji })}
                   onOpenAttachment={handleOpenAttachment}
+                  onReply={setReplyTarget}
                 />
               )
             )}
@@ -839,6 +853,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
       {/* Input area */}
       {canSend ? (
         <div className="px-4 py-3 border-t border-slate-200 bg-white">
+          <ReplyBar replyTarget={replyTarget} onCancel={() => setReplyTarget(null)} />
           <div ref={inputWrapRef} className="flex items-end gap-2 relative">
             {/* @mention dropdown */}
             {mentionQuery !== null && (

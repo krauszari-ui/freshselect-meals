@@ -7,7 +7,8 @@ import {
   Loader2, Search, LogOut, Building2, Users, MessageSquare, Bell,
   ChevronRight, Clock, CheckCircle2,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { ReplyBar, ReplyButton, ReplyQuote, type ReplyTarget } from "@/components/ReplyBar";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
@@ -226,6 +227,8 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
   orgId: number; orgName: string; userId: number; userName: string;
 }) {
   const [text, setText] = useState("");
+  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const utils = trpc.useUtils();
   const { data: messages = [], isLoading } = trpc.org.groupMessages.useQuery(
     { orgId },
@@ -235,6 +238,8 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
     onSuccess: () => {
       utils.org.groupMessages.invalidate({ orgId });
       setText("");
+      setReplyTarget(null);
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     },
     onError: (e) => toast.error(e.message),
   });
@@ -242,7 +247,7 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
   const handleSend = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    sendMsg.mutate({ orgId, content: trimmed });
+    sendMsg.mutate({ orgId, content: trimmed, replyToId: replyTarget?.id });
   };
 
   return (
@@ -259,13 +264,19 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
         {messages.map((msg: any) => {
           const isMe = msg.senderId === userId;
           return (
-            <div key={msg.id} className={`flex gap-3 ${isMe ? "flex-row-reverse" : ""}`}>
+            <div key={msg.id} className={`flex gap-3 group ${isMe ? "flex-row-reverse" : ""}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isMe ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
                 {(msg.senderName ?? "?").charAt(0).toUpperCase()}
               </div>
               <div className={`max-w-[70%] ${isMe ? "items-end" : "items-start"} flex flex-col gap-1`}>
-                <span className="text-xs text-muted-foreground">{isMe ? "You" : msg.senderName}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">{isMe ? "You" : msg.senderName}</span>
+                  <ReplyButton onClick={() => setReplyTarget({ id: msg.id, senderName: msg.senderName, content: msg.content.slice(0, 300) })} />
+                </div>
                 <div className={`rounded-2xl px-4 py-2 text-sm ${isMe ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-muted rounded-tl-sm"}`}>
+                  {msg.replyToId && msg.replyToSenderName && (
+                    <ReplyQuote senderName={msg.replyToSenderName} content={msg.replyToContent ?? ""} />
+                  )}
                   {msg.content}
                 </div>
                 <span className="text-xs text-muted-foreground">{new Date(msg.createdAt).toLocaleString()}</span>
@@ -273,18 +284,22 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
             </div>
           );
         })}
+        <div ref={bottomRef} />
       </div>
-      <div className="flex gap-2">
-        <input
-          className="flex-1 border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
-          placeholder="Type a message…"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-        />
-        <Button onClick={handleSend} disabled={!text.trim() || sendMsg.isPending} size="sm">
-          Send
-        </Button>
+      <div className="flex flex-col gap-1">
+        <ReplyBar replyTarget={replyTarget} onCancel={() => setReplyTarget(null)} />
+        <div className="flex gap-2">
+          <input
+            className="flex-1 border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+            placeholder="Type a message…"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+          />
+          <Button onClick={handleSend} disabled={!text.trim() || sendMsg.isPending} size="sm">
+            Send
+          </Button>
+        </div>
       </div>
     </div>
   );
