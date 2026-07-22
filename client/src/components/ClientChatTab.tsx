@@ -752,17 +752,19 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Live
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportPdf}
-            disabled={exportingPdf || allMessages.length === 0}
-            className="flex items-center gap-1.5 text-xs h-7 px-2.5"
-            title="Download chat as PDF"
-          >
-            {exportingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
-            {exportingPdf ? "Exporting..." : "Export PDF"}
-          </Button>
+          {(user?.role === "admin" || user?.role === "super_admin") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportPdf}
+              disabled={exportingPdf || allMessages.length === 0}
+              className="flex items-center gap-1.5 text-xs h-7 px-2.5"
+              title="Download chat as PDF"
+            >
+              {exportingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+              {exportingPdf ? "Exporting..." : "Export PDF"}
+            </Button>
+          )}
         </div>
       </div>
 

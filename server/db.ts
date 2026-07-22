@@ -533,12 +533,14 @@ export async function listStaffUsers() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   // SAFE_USER_COLUMNS projection — never exposes hash
+  // Only return active (non-deactivated) staff for @mention dropdown
+  const staffRoleFilter = or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"), eq(users.role, "assessor"));
   const rows = await db.select(SAFE_USER_COLUMNS).from(users).where(
-    or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"), eq(users.role, "assessor"))
+    and(staffRoleFilter, eq(users.isActive, 1))
   ).orderBy(desc(users.createdAt));
   // Fetch hasPassword separately to avoid exposing the hash
   const hashRows = await db.select({ id: users.id, passwordHash: users.passwordHash }).from(users).where(
-    or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"), eq(users.role, "assessor"))
+    and(staffRoleFilter, eq(users.isActive, 1))
   );
   const hashMap = new Map(hashRows.map(r => [r.id, !!r.passwordHash]));
   return rows.map(row => ({ ...row, hasPassword: hashMap.get(row.id) ?? false }));
