@@ -136,7 +136,7 @@ function OrgPortalContent({ user, logout, activeView, setActiveView, search, set
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   className="pl-9"
-                  placeholder="Search referred clients by name, ID, or phone…"
+                  placeholder="Search clients by name, ID, or phone…"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
@@ -149,7 +149,7 @@ function OrgPortalContent({ user, logout, activeView, setActiveView, search, set
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="bg-card rounded-lg border p-4">
                 <div className="text-2xl font-bold">{clients.length}</div>
-                <div className="text-sm text-muted-foreground">Referred Clients</div>
+                <div className="text-sm text-muted-foreground">Your Clients</div>
               </div>
               <div className="bg-card rounded-lg border p-4">
                 <div className="text-2xl font-bold">{clients.filter((c: any) => c.stage === "assessment_pending").length}</div>
@@ -170,8 +170,8 @@ function OrgPortalContent({ user, logout, activeView, setActiveView, search, set
             {!clientsLoading && clients.length === 0 && (
               <div className="text-center py-16 text-muted-foreground">
                 <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">No clients referred to your organization yet</p>
-                <p className="text-sm mt-1">Clients will appear here once a FreshSelect admin refers them to your organization.</p>
+                <p className="font-medium">No clients assigned to your organization yet</p>
+                <p className="text-sm mt-1">Clients will appear here once a FreshSelect admin assigns a worker from your org or refers a client directly to your organization.</p>
               </div>
             )}
             <div className="space-y-2">

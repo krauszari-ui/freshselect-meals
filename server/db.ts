@@ -1615,7 +1615,27 @@ export async function listAllOrgGroupsWithUnread(userId: number) {
 export async function listSubmissionsByOrg(orgId: number, search?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const conditions: ReturnType<typeof eq>[] = [eq(submissions.referredOrgId, orgId) as any];
+
+  // Option A: a client is visible to all org staff if EITHER:
+  //   1. The client was explicitly referred to this org (referredOrgId = orgId), OR
+  //   2. The client's assigned assessor is a member of this org (assessorId IN org staff)
+  // First, get all user IDs that belong to this org
+  const orgStaff = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.orgId, orgId), eq(users.isActive, 1)));
+  const orgStaffIds = orgStaff.map((u) => u.id);
+
+  // Build the base visibility condition
+  const visibilityCondition = orgStaffIds.length > 0
+    ? or(
+        eq(submissions.referredOrgId, orgId),
+        inArray(submissions.assessorId, orgStaffIds),
+      ) as any
+    : eq(submissions.referredOrgId, orgId) as any;
+
+  const conditions: any[] = [visibilityCondition];
+
   if (search && search.trim()) {
     const q = `%${search.trim()}%`;
     conditions.push(
@@ -1628,6 +1648,7 @@ export async function listSubmissionsByOrg(orgId: number, search?: string) {
       ) as any,
     );
   }
+
   return db
     .select({
       id: submissions.id,
@@ -1638,8 +1659,10 @@ export async function listSubmissionsByOrg(orgId: number, search?: string) {
       referralNote: submissions.referredOrgNote,
       referredAt: submissions.referredOrgAt,
       createdAt: submissions.createdAt,
+      assessorId: submissions.assessorId,
+      referredOrgId: submissions.referredOrgId,
     })
     .from(submissions)
     .where(and(...conditions))
-    .orderBy(desc(submissions.referredOrgAt));
+    .orderBy(desc(submissions.createdAt));
 }

@@ -57,13 +57,25 @@ import { parse as parseCookieHeader } from "cookie";
  * SECURITY HELPER: Check if an assessor can access a given submission.
  * An assessor can access a client if:
  *   1. They are the assigned assessor (submission.assessorId === user.id), OR
- *   2. The client is referred to their organization (submission.referredOrgId === user.orgId)
+ *   2. The client is explicitly referred to their organization (submission.referredOrgId === user.orgId), OR
+ *   3. The client's assigned assessor is a member of the same org as this user (Option A org-level visibility)
  * Returns true if access is allowed, false if denied.
  */
-function canAssessorAccessClient(user: { id: number; orgId?: number | null }, submission: { assessorId?: number | null; referredOrgId?: number | null }): boolean {
+async function canAssessorAccessClient(
+  user: { id: number; orgId?: number | null },
+  submission: { assessorId?: number | null; referredOrgId?: number | null },
+): Promise<boolean> {
+  // Rule 1: directly assigned assessor
   if (submission.assessorId === user.id) return true;
   const userOrgId = (user as any).orgId as number | null | undefined;
-  if (userOrgId != null && (submission as any).referredOrgId === userOrgId) return true;
+  if (userOrgId == null) return false;
+  // Rule 2: client explicitly referred to this org
+  if ((submission as any).referredOrgId === userOrgId) return true;
+  // Rule 3 (Option A): client's assessor is a member of the same org
+  if (submission.assessorId != null) {
+    const orgMembers = await listOrgMembers(userOrgId);
+    if (orgMembers.some((m) => m.id === submission.assessorId)) return true;
+  }
   return false;
 }
 
@@ -613,7 +625,7 @@ export const appRouter = router({
       const submission = await getSubmissionById(input.submissionId);
       if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
       // SECURITY: Assessors can only send notes for their assigned clients
-      if (ctx.user.role === "assessor" && !canAssessorAccessClient(ctx.user as any, submission as any)) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+      if (ctx.user.role === "assessor" && !(await canAssessorAccessClient(ctx.user as any, submission as any))) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
       if (!submission.referralSource) throw new TRPCError({ code: "BAD_REQUEST", message: "This client has no referrer" });
       const link = await getReferralLinkByCode(submission.referralSource);
       if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
@@ -636,7 +648,7 @@ export const appRouter = router({
       const submission = await getSubmissionById(input.submissionId);
       if (!submission || !submission.referralSource) return [];
       // SECURITY: Assessors can only view referrer notes for their assigned clients
-      if (ctx.user.role === "assessor" && !canAssessorAccessClient(ctx.user as any, submission as any)) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+      if (ctx.user.role === "assessor" && !(await canAssessorAccessClient(ctx.user as any, submission as any))) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
       const link = await getReferralLinkByCode(submission.referralSource);
       if (!link) return [];
       return listReferrerMessagesBySubmission(input.submissionId);
@@ -663,7 +675,7 @@ export const appRouter = router({
       const submission = await getSubmissionById(input.submissionId);
       if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
       // SECURITY: Assessors can only email their assigned clients
-      if (ctx.user.role === "assessor" && !canAssessorAccessClient(ctx.user as any, submission as any)) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+      if (ctx.user.role === "assessor" && !(await canAssessorAccessClient(ctx.user as any, submission as any))) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
       if (!submission.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Client has no email address" });
       // Use a client-specific reply-to so inbound replies are automatically matched to this client.
       // Format: reply-{submissionId}@freshselectmeals.com
@@ -708,7 +720,7 @@ export const appRouter = router({
       // SECURITY: Assessors can only view emails for their assigned clients
       if (ctx.user.role === "assessor") {
         const sub = await getSubmissionById(input.submissionId);
-        if (!sub || !canAssessorAccessClient(ctx.user as any, sub as any)) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+        if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
       }
       return listClientEmails(input.submissionId);
     }),
@@ -764,7 +776,7 @@ export const appRouter = router({
       // SECURITY: Assessors can only view stage history for their assigned clients
       if (ctx.user.role === "assessor") {
         const sub = await getSubmissionById(input.id);
-        if (!sub || !canAssessorAccessClient(ctx.user as any, sub as any)) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+        if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
       }
       return getStageHistoryBySubmission(input.id);
     }),
@@ -872,7 +884,7 @@ export const appRouter = router({
         // SECURITY: Assessors can only view tasks for their assigned clients
         if (ctx.user.role === "assessor") {
           const sub = await getSubmissionById(input.submissionId);
-          if (!sub || !canAssessorAccessClient(ctx.user as any, sub as any)) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
         }
         return getTasksBySubmission(input.submissionId);
       }),
@@ -903,7 +915,7 @@ export const appRouter = router({
         // SECURITY: Assessors can only view notes for their assigned clients
         if (ctx.user.role === "assessor") {
           const sub = await getSubmissionById(input.submissionId);
-          if (!sub || !canAssessorAccessClient(ctx.user as any, sub as any)) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
         }
         return getCaseNotesBySubmission(input.submissionId);
       }),
@@ -912,7 +924,7 @@ export const appRouter = router({
           // SECURITY: Assessors can only add notes for their assigned clients
           if (ctx.user.role === "assessor") {
             const sub = await getSubmissionById(input.submissionId);
-            if (!sub || !canAssessorAccessClient(ctx.user as any, sub as any)) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+            if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
           }
           const authorName = ctx.user.name ?? ctx.user.email ?? "Staff";
           const id = await createCaseNote({ ...input, createdBy: ctx.user.id, authorName });
@@ -928,7 +940,7 @@ export const appRouter = router({
         // SECURITY: Assessors can only view documents for their assigned clients
         if (ctx.user.role === "assessor") {
           const sub = await getSubmissionById(input.submissionId);
-          if (!sub || !canAssessorAccessClient(ctx.user as any, sub as any)) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
         }
         return getDocumentsBySubmission(input.submissionId);
       }),
@@ -997,7 +1009,7 @@ export const appRouter = router({
           // SECURITY: Assessors may only fetch URLs for their assigned clients
           if (ctx.user.role === "assessor" && input.submissionId) {
             const sub = await getSubmissionById(input.submissionId);
-            if (!sub || !canAssessorAccessClient(ctx.user as any, sub as any)) {
+            if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) {
               throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this document" });
             }
           }
@@ -1041,7 +1053,7 @@ export const appRouter = router({
         // SECURITY: Assessors can only view services for their assigned clients
         if (ctx.user.role === "assessor") {
           const sub = await getSubmissionById(input.submissionId);
-          if (!sub || !canAssessorAccessClient(ctx.user as any, sub as any)) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
         }
         return getServicesBySubmission(input.submissionId);
       }),
@@ -2030,7 +2042,7 @@ export const appRouter = router({
         // Assessors can only read chats for their assigned clients
         if (ctx.user.role === "assessor") {
           const sub = await getSubmissionById(input.submissionId);
-          if (!sub || !canAssessorAccessClient(ctx.user as any, sub as any)) throw new TRPCError({ code: "FORBIDDEN" });
+          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN" });
         }
         return listClientMessages(input.submissionId, { limit: input.limit, beforeId: input.beforeId });
       }),
@@ -2055,7 +2067,7 @@ export const appRouter = router({
         if (!input.content.trim() && !input.attachmentUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Message cannot be empty" });
         if (ctx.user.role === "assessor") {
           const sub = await getSubmissionById(input.submissionId);
-          if (!sub || !canAssessorAccessClient(ctx.user as any, sub as any)) throw new TRPCError({ code: "FORBIDDEN" });
+          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN" });
         }
         const msg = await createClientMessage({
           submissionId: input.submissionId,
@@ -2098,7 +2110,7 @@ export const appRouter = router({
       .query(async ({ input, ctx }) => {
         if (ctx.user.role === "assessor") {
           const sub = await getSubmissionById(input.submissionId);
-          if (!sub || !canAssessorAccessClient(ctx.user as any, sub as any)) throw new TRPCError({ code: "FORBIDDEN" });
+          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN" });
         }
         return getNewClientMessages(input.submissionId, input.afterId);
       }),

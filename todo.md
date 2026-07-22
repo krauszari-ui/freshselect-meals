@@ -904,3 +904,9 @@
 - [x] BUG FIX: AdminClientDetail.tsx — detect /org/ URL context via location.startsWith("/org/") and user.orgId to set correct back link (/org vs /assessor)
 - [x] BUG FIX: server/routers.ts getById — assessors with orgId can now view clients referred to their org (not just their assigned clients)
 - [x] BUG FIX: server/routers.ts — added canAssessorAccessClient() helper; updated all 14 assessor access checks (notes, tasks, services, docs, assessment, email, chat, referrer notes, document URL) to allow org-referred client access
+
+## Org Visibility - Option A (July 22 2026)
+- [x] SERVER: listSubmissionsByOrg — also include clients where assessorId is any staff member of the org (not just referredOrgId)
+- [x] SERVER: canAssessorAccessClient helper — also allow access if submission.assessorId belongs to any member of the user's org
+- [x] SERVER: org.listReferredClients procedure — update label/description to reflect "org clients" not just "referred"
+- [x] OrgPortal UI — update heading from "Referred Clients" to "Your Clients" to reflect the broader scope
