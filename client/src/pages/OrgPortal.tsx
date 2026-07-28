@@ -223,10 +223,24 @@ function StageBadge({ stage }: { stage: string }) {
 }
 
 // ─── Org Group Chat Panel ─────────────────────────────────────────────────────
-function renderOrgContent(content: string) {
-  const parts = content.split(/(@\w+(?:\s\w+)?)/g);
+function renderOrgContent(content: string, knownNames?: string[]) {
+  if (knownNames && knownNames.length > 0) {
+    const escaped = [...knownNames]
+      .sort((a, b) => b.length - a.length)
+      .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const pattern = new RegExp(`(@(?:${escaped.join("|")})(?=\\s|$)|@\\w+)`, "g");
+    const parts = content.split(pattern);
+    return parts.map((part, i) => {
+      if (part.startsWith("@")) {
+        return <span key={i} className="text-primary font-semibold">{part}</span>;
+      }
+      return <span key={i}>{part}</span>;
+    });
+  }
+  // Fallback: only @SingleWord (no spaces)
+  const parts = content.split(/(@\w+)/g);
   return parts.map((part, i) => {
-    if (part.startsWith("@") && /^@\w+(?:\s\w+)?$/.test(part)) {
+    if (/^@\w+$/.test(part)) {
       return <span key={i} className="text-primary font-semibold">{part}</span>;
     }
     return <span key={i}>{part}</span>;
@@ -243,6 +257,10 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
     { orgId },
     { refetchInterval: 10_000, refetchIntervalInBackground: false },
   );
+  const { data: staffListRaw = [] } = trpc.chat.staffList.useQuery(undefined, {
+    staleTime: 60_000, refetchOnWindowFocus: false,
+  });
+  const knownNames = (staffListRaw as { name: string }[]).map(u => u.name);
   const sendMsg = trpc.org.sendGroupMessage.useMutation({
     onSuccess: () => {
       utils.org.groupMessages.invalidate({ orgId });
@@ -318,7 +336,7 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
                   {msg.replyToId && msg.replyToSenderName && (
                     <ReplyQuote senderName={msg.replyToSenderName} content={msg.replyToContent ?? ""} />
                   )}
-                  {renderOrgContent(msg.content)}
+                  {renderOrgContent(msg.content, knownNames)}
                   <div className={`flex items-center gap-1 mt-1 ${isMe ? "justify-end" : "justify-start"}`}>
                     <span className="text-[10px] text-slate-400">
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
