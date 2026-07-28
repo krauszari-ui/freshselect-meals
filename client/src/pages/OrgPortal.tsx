@@ -74,6 +74,13 @@ function OrgPortalContent({ user, logout, activeView, setActiveView, search, set
   });
   const unreadCount = unreadData?.count ?? 0;
 
+  // ── Org group chat unread count (for Group Chat tab badge) ───────────────────
+  const { data: groupUnreadData } = trpc.org.groupUnreadCount.useQuery(
+    { orgId: user.orgId! },
+    { refetchInterval: 15_000, refetchIntervalInBackground: false, enabled: !!user?.orgId },
+  );
+  const groupUnreadCount = (groupUnreadData as any)?.count ?? 0;
+
   const handleSearch = () => setSearch(searchInput.trim());
 
   return (
@@ -98,15 +105,20 @@ function OrgPortalContent({ user, logout, activeView, setActiveView, search, set
             >
               <Users className="w-4 h-4" /> Clients
             </Button>
-            <Button
+              <Button
               variant={activeView === "chat" ? "default" : "ghost"}
               size="sm"
               onClick={() => setActiveView("chat")}
               className="gap-1.5 relative"
             >
               <MessageSquare className="w-4 h-4" /> Group Chat
+              {groupUnreadCount > 0 && activeView !== "chat" && (
+                <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                  {groupUnreadCount > 99 ? "99+" : groupUnreadCount}
+                </span>
+              )}
             </Button>
-            <Link href="/admin/notifications">
+            <Link href="/org/notifications">
               <Button variant="ghost" size="sm" className="relative gap-1.5">
                 <Bell className="w-4 h-4" />
                 {unreadCount > 0 && (
