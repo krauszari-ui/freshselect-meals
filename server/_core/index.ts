@@ -414,13 +414,21 @@ async function startServer() {
   // ─── Daily Digest endpoint ────────────────────────────────────────────────
   // Called daily by Manus Heartbeat (project-level cron, §4a).
   // Generates an LLM-summarised email of the previous day's activity and sends
-  // it to info@freshselectmeals.com.
+  // it to a.krausz@levelupresources.org.
+  // Pass ?test=true to send today's data instead of yesterday's (for previewing).
   app.post("/api/scheduled/daily-digest", async (req, res) => {
     try {
-      const user = await sdk.authenticateRequest(req).catch(() => null);
-      if (!user || !(user as any).isCron) {
-        res.status(401).json({ ok: false, error: "cron-only" });
-        return;
+      const isTest = req.query.test === "true";
+      // For test sends: allow CRON_SECRET header bypass (sandbox-triggered previews)
+      const cronSecret = process.env.CRON_SECRET;
+      const headerSecret = req.headers["x-cron-secret"] as string | undefined;
+      const hasSecretBypass = cronSecret && headerSecret && headerSecret === cronSecret;
+      if (!hasSecretBypass) {
+        const user = await sdk.authenticateRequest(req).catch(() => null);
+        if (!user || (!(user as any).isCron && !isTest)) {
+          res.status(401).json({ ok: false, error: "cron-only" });
+          return;
+        }
       }
     } catch {
       res.status(401).json({ ok: false, error: "Unauthorized" });
@@ -430,11 +438,12 @@ async function startServer() {
       const { getDailyDigestData } = await import("../db");
       const { sendEmail } = await import("../email");
       const { invokeLLM } = await import("./llm");
+      const isTest = req.query.test === "true";
 
-      // Yesterday in UTC
-      const yesterday = new Date();
-      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-      const dateStr = yesterday.toISOString().slice(0, 10);
+      // Use today for test sends, yesterday for scheduled cron runs
+      const targetDate = new Date();
+      if (!isTest) targetDate.setUTCDate(targetDate.getUTCDate() - 1);
+      const dateStr = targetDate.toISOString().slice(0, 10);
 
       const data = await getDailyDigestData(dateStr);
 
@@ -514,8 +523,8 @@ async function startServer() {
 </body></html>`;
 
       const ok = await sendEmail({
-        to: "info@freshselectmeals.com",
-        subject: `FreshSelect Meals Daily Report — ${data.date}`,
+        to: isTest ? "a.krausz@levelupresources.org" : "a.krausz@levelupresources.org",
+        subject: `FreshSelect Meals Daily Report${isTest ? " [TEST]" : ""} — ${data.date}`,
         html,
       });
 
