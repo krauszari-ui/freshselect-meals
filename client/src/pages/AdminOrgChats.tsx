@@ -125,6 +125,17 @@ function MentionDropdown({
   );
 }
 
+/** Render message content with @mentions highlighted (only the @Name token, not the whole line) */
+function renderContent(content: string) {
+  const parts = content.split(/(@\w+(?:\s\w+)?)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("@") && /^@\w+(?:\s\w+)?$/.test(part)) {
+      return <span key={i} className="text-blue-200 font-semibold">{part}</span>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 // ─── Org Channel Row ──────────────────────────────────────────────────────────
 
 function OrgChannelRow({ org, isActive, onClick }: {
@@ -365,7 +376,7 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
                   {msg.replyToId && msg.replyToSenderName && (
                     <ReplyQuote senderName={msg.replyToSenderName} content={msg.replyToContent ?? ""} />
                   )}
-                  {msg.content}
+                  {renderContent(msg.content)}
                 </div>
                 <span className="text-[10px] text-slate-400">
                   {new Date(msg.createdAt).toLocaleString()}

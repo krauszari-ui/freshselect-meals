@@ -223,6 +223,15 @@ function StageBadge({ stage }: { stage: string }) {
 }
 
 // ─── Org Group Chat Panel ─────────────────────────────────────────────────────
+function renderOrgContent(content: string) {
+  const parts = content.split(/(@\w+(?:\s\w+)?)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("@") && /^@\w+(?:\s\w+)?$/.test(part)) {
+      return <span key={i} className="text-primary font-semibold">{part}</span>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
 function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
   orgId: number; orgName: string; userId: number; userName: string;
 }) {
@@ -277,7 +286,7 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
                   {msg.replyToId && msg.replyToSenderName && (
                     <ReplyQuote senderName={msg.replyToSenderName} content={msg.replyToContent ?? ""} />
                   )}
-                  {msg.content}
+                  {renderOrgContent(msg.content)}
                 </div>
                 <span className="text-xs text-muted-foreground">{new Date(msg.createdAt).toLocaleString()}</span>
               </div>

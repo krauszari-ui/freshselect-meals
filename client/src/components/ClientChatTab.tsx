@@ -113,14 +113,15 @@ function isImageType(type?: string | null) {
 
 /** Render message content with @mentions highlighted */
 function renderContent(content: string) {
-  const parts = content.split(/(@\w[\w\s]*)/g);
-  return parts.map((part, i) =>
-    part.startsWith("@") ? (
-      <span key={i} className="text-blue-300 font-semibold">{part}</span>
-    ) : (
-      <span key={i}>{part}</span>
-    )
-  );
+  // Split on @mentions: @Word or @First Last (up to 2 words, no trailing space)
+  // Uses a non-greedy match: @Name or @First Last (exactly one optional second word)
+  const parts = content.split(/(@\w+(?:\s\w+)?)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("@") && /^@\w+(?:\s\w+)?$/.test(part)) {
+      return <span key={i} className="text-blue-300 font-semibold">{part}</span>;
+    }
+    return <span key={i}>{part}</span>;
+  });
 }
 
 // ─── PDF Export ───────────────────────────────────────────────────────────────
@@ -504,6 +505,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
   const [uploading, setUploading] = useState(false);
   const [lastSeenId, setLastSeenId] = useState(0);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
 
   // @mention state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -538,13 +540,16 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
     { refetchInterval: 10_000, refetchIntervalInBackground: false, enabled: lastSeenId > 0, refetchOnWindowFocus: true }
   );
 
+  // Merge: base messages + polled new messages + optimistic (sent but not yet in base)
   const allMessages = useMemo(() => {
-    if (!newMessages.length) return messages;
-    const existingIds = new Set(messages.map((m: Message) => m.id));
-    const fresh = newMessages.filter((m: Message) => !existingIds.has(m.id));
-    if (!fresh.length) return messages;
-    return [...messages, ...fresh];
-  }, [messages, newMessages]);
+    const baseIds = new Set(messages.map((m: Message) => m.id));
+    const freshPolled = newMessages.filter((m: Message) => !baseIds.has(m.id));
+    const merged = [...messages, ...freshPolled];
+    const mergedIds = new Set(merged.map((m: Message) => m.id));
+    // Keep optimistic messages that haven't been confirmed yet (id < 0 = temp)
+    const stillPending = optimisticMessages.filter((m: Message) => m.id < 0 || !mergedIds.has(m.id));
+    return [...merged, ...stillPending];
+  }, [messages, newMessages, optimisticMessages]);
 
   useEffect(() => {
     if (allMessages.length > 0) {
@@ -647,6 +652,36 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
       // Use ref to avoid stale closure issues with staffList
       const mentionedInText = staffListRef.current.filter(u => content.includes(`@${u.name.trim()}`));
 
+      // Add optimistic message immediately so it doesn't disappear while waiting
+      const tempId = -(Date.now());
+      const optimistic: Message = {
+        id: tempId,
+        submissionId,
+        senderId: user?.id ?? 0,
+        senderName: user?.name ?? user?.email ?? "You",
+        senderRole: user?.role ?? "worker",
+        content: content || "",
+        createdAt: new Date(),
+        attachmentUrl: attachmentUrl ?? null,
+        attachmentName: attachmentName ?? null,
+        attachmentType: attachmentType ?? null,
+        isDeleted: 0,
+        reactions: [],
+        replyToId: replyTarget?.id ?? null,
+        replyToSenderName: replyTarget?.senderName ?? null,
+        replyToContent: replyTarget?.content ?? null,
+      };
+      setOptimisticMessages(prev => [...prev, optimistic]);
+
+      setText("");
+      setAttachFile(null);
+      setAttachPreview(null);
+      setMentionedUsers([]);
+      mentionedUsersRef.current = [];
+      setMentionQuery(null);
+      setReplyTarget(null);
+      textareaRef.current?.focus();
+
       await sendMutation.mutateAsync({
         submissionId,
         content: content || "",
@@ -657,15 +692,9 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
         replyToId: replyTarget?.id,
       });
 
-      setText("");
-      setAttachFile(null);
-      setAttachPreview(null);
-      setMentionedUsers([]);
-      mentionedUsersRef.current = [];
-      setMentionQuery(null);
-      setReplyTarget(null);
-      textareaRef.current?.focus();
+      // Clear optimistic after server confirms and refetch brings real message
       await refetch();
+      setOptimisticMessages([]);
     } catch {
       // errors handled in mutation callbacks
     } finally {
