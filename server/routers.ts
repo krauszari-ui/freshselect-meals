@@ -38,11 +38,11 @@ import {
   getEmailBlastById, getBlastReplies, updateEmailBlastStatus,
   listAssessors, updateSubmissionAssessor,
   getUserById,
-  createClientMessage, listClientMessages, getNewClientMessages, deleteClientMessage, getClientMessageById,
+  createClientMessage, listClientMessages, getNewClientMessages, deleteClientMessage, getClientMessageById, getThreadReadWatermarks,
   toggleMessageReaction, markThreadRead, getThreadUnreadCount, getAllUnreadCounts, getInboxThreads,
   listOrganizations, getOrganizationById, createOrganization, updateOrganization,
   listOrgMembers, assignUserToOrg, referClientToOrg, listSubmissionsByOrg,
-  createOrgGroupMessage, listOrgGroupMessages, getOrgGroupUnreadCount, markOrgGroupRead, listAllOrgGroupsWithUnread, getOrgGroupMessageById,
+  createOrgGroupMessage, listOrgGroupMessages, getOrgGroupUnreadCount, markOrgGroupRead, listAllOrgGroupsWithUnread, getOrgGroupMessageById, getOrgGroupReadWatermarks,
   type WorkerPermissions,
 } from "./db";
 import bcrypt from "bcryptjs";
@@ -2151,6 +2151,17 @@ export const appRouter = router({
         const updated = await toggleMessageReaction(input.messageId, ctx.user.id, input.emoji);
         if (!updated) throw new TRPCError({ code: "NOT_FOUND" });
         return updated;
+      }),
+
+    /** Get read watermarks for all participants in a thread (for ✓✓ read receipts) */
+    readWatermarks: staffProcedure
+      .input(z.object({ submissionId: z.number() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role === "assessor") {
+          const sub = await getSubmissionById(input.submissionId);
+          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        return getThreadReadWatermarks(input.submissionId);
       }),
 
     /** Mark a thread as read up to the latest message */
