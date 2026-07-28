@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Loader2, Search, LogOut, Building2, Users, MessageSquare, Bell,
-  ChevronRight, Clock, CheckCircle2,
+  ChevronRight, Clock, CheckCircle2, ClipboardList,
 } from "lucide-react";
+import { CreateTaskFromMessageDialog } from "@/components/CreateTaskFromMessageDialog";
 import { useState, useRef } from "react";
 import { ReplyBar, ReplyButton, ReplyQuote, type ReplyTarget } from "@/components/ReplyBar";
 import { Link, useLocation } from "wouter";
@@ -263,6 +264,7 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
 }) {
   const [text, setText] = useState("");
   const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
+  const [taskDialogMsg, setTaskDialogMsg] = useState<any | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const utils = trpc.useUtils();
   const { data: messages = [], isLoading } = trpc.org.groupMessages.useQuery(
@@ -354,9 +356,16 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>
-                  {/* Reply button on hover */}
+                  {/* Reply + Create Task buttons on hover */}
                   <div className={`absolute top-0 ${isMe ? "right-full mr-2" : "left-full ml-2"} hidden group-hover:flex items-center gap-1 bg-white border border-slate-200 rounded-full px-2 py-1 shadow-md z-10`}>
                     <ReplyButton onClick={() => setReplyTarget({ id: msg.id, senderName: msg.senderName, content: msg.content.slice(0, 300) })} />
+                    <button
+                      onClick={() => setTaskDialogMsg(msg)}
+                      className="p-1 rounded-full hover:bg-blue-50 text-slate-500 hover:text-blue-600 transition-colors"
+                      title="Create task from this message"
+                    >
+                      <ClipboardList className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -390,6 +399,22 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
           </button>
         </div>
       </div>
+
+      {/* Create Task from Message dialog */}
+      {taskDialogMsg && (
+        <CreateTaskFromMessageDialog
+          open={!!taskDialogMsg}
+          onClose={() => setTaskDialogMsg(null)}
+          messageContent={taskDialogMsg.content ?? ""}
+          messageId={taskDialogMsg.id}
+          messageType="org_group"
+          submissionId={0}
+          clientName={`${orgName} group chat`}
+          onCreated={() => {
+            utils.org.groupMessages.invalidate({ orgId });
+          }}
+        />
+      )}
     </div>
   );
 }

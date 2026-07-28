@@ -238,6 +238,17 @@ export default function AdminClientDetail() {
   const [showReassignWarning, setShowReassignWarning] = useState(false);
   const [pendingAssessorId, setPendingAssessorId] = useState<number | null>(null);
 
+  // Terminal stage confirmation
+  const [pendingStageChange, setPendingStageChange] = useState<string | null>(null);
+  const TERMINAL_STAGES = ["not_eligible", "ineligible", "level_one_only", "level_one_household", "level_2_active"];
+  const handleStageChange = (v: string) => {
+    if (TERMINAL_STAGES.includes(v)) {
+      setPendingStageChange(v);
+    } else {
+      updateStageMutation.mutate({ id, stage: v as any });
+    }
+  };
+
   // Edit/delete state for household members
   const [editHouseholdIdx, setEditHouseholdIdx] = useState<number | null>(null);
   const [editHouseholdForm, setEditHouseholdForm] = useState({ name: "", dateOfBirth: "", medicaidId: "", relationship: "" });
@@ -640,6 +651,18 @@ export default function AdminClientDetail() {
   const isAssessment = ["assessment", "level_one_only", "level_one_household", "level_2_active"].includes(client.stage);
   const intakeRepName = getWorkerName(client.intakeRep);
 
+  // Required field completion indicator
+  const requiredFields = [
+    { label: "Date of Birth", ok: !!fd.dateOfBirth },
+    { label: "Phone", ok: !!client.cellPhone },
+    { label: "Address", ok: !!fd.streetAddress },
+    { label: "Medicaid ID", ok: !!client.medicaidId },
+    { label: "Vendor", ok: !!(client as any).supermarket },
+    { label: "Language", ok: !!(client as any).language },
+  ];
+  const completedCount = requiredFields.filter(f => f.ok).length;
+  const profileComplete = completedCount === requiredFields.length;
+
   const intakeRepTasks = (tasks || []).filter((t: any) => t.area === "intake_rep");
   const workerTasks = (tasks || []).filter((t: any) => t.area === "assigned_worker");
 
@@ -847,7 +870,7 @@ export default function AdminClientDetail() {
 
   const handleAddTask = () => {
     if (!taskForm.trim()) { toast.error("Task description is required"); return; }
-    addTaskMutation.mutate({ submissionId: id, description: taskForm.trim(), area: taskArea });
+    addTaskMutation.mutate({ submissionId: id, title: taskForm.trim().slice(0, 80), description: taskForm.trim(), area: taskArea });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -933,6 +956,22 @@ export default function AdminClientDetail() {
                   <span><strong>Not Eligible:</strong> {(client as any).notEligibleReason}</span>
                 </div>
               )}
+              {/* Profile completion indicator */}
+              <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex items-center gap-1">
+                  {requiredFields.map((f) => (
+                    <span key={f.label} title={f.ok ? `${f.label}: complete` : `${f.label}: missing`}
+                      className={`h-2 w-5 rounded-sm ${f.ok ? "bg-emerald-400" : "bg-slate-200"}`} />
+                  ))}
+                </div>
+                {profileComplete ? (
+                  <span className="text-xs text-emerald-600 font-medium">Profile complete</span>
+                ) : (
+                  <span className="text-xs text-amber-600 font-medium">
+                    {completedCount}/{requiredFields.length} fields — missing: {requiredFields.filter(f => !f.ok).map(f => f.label).join(", ")}
+                  </span>
+                )}
+              </div>
               <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-slate-500">
                 <span>Intake Rep: <strong className="text-slate-700">{intakeRepName || "—"}</strong></span>
                 <span className="flex items-center gap-1.5">
@@ -1053,7 +1092,7 @@ export default function AdminClientDetail() {
             </div>
             <div className="flex-1 h-0.5 mx-2 bg-slate-200" />
             <div className="flex flex-col items-center">
-              <Select value={client.stage} onValueChange={(v) => updateStageMutation.mutate({ id, stage: v as any })}>
+              <Select value={client.stage} onValueChange={handleStageChange}>
                 <SelectTrigger className="h-10 w-[180px] text-xs bg-slate-100 border-slate-200"><SelectValue placeholder="Select Outcome" /></SelectTrigger>
                 <SelectContent>
                   {Object.entries(STAGE_CONFIG).map(([key, { label }]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
@@ -1231,14 +1270,20 @@ export default function AdminClientDetail() {
                 <CollapsibleSection title={`Intake Rep Tasks → ${intakeRepName || "Unassigned"}`}>
                   {intakeRepTasks.length > 0 ? (
                     <div className="space-y-2">
-                      {intakeRepTasks.map((t: any) => (
-                        <div key={t.id} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100">
-                          <span className="text-sm text-slate-700">{t.description}</span>
-                          <Badge className={`text-[10px] cursor-pointer ${t.status === "completed" ? "bg-emerald-100 text-emerald-700" : t.status === "verified" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`} onClick={() => cycleTaskStatus(t.id, t.status)}>
-                            {t.status}
-                          </Badge>
-                        </div>
-                      ))}
+                      {intakeRepTasks.map((t: any) => {
+                        const isOverdue = t.status !== "completed" && t.status !== "verified" && t.dueDate && new Date(t.dueDate) < new Date();
+                        return (
+                          <div key={t.id} className={`flex items-start justify-between p-2 rounded border ${isOverdue ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-100"}`}>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm text-slate-700 block">{t.title || t.description}</span>
+                              {t.dueDate && <span className={`text-[11px] ${isOverdue ? "text-red-600 font-semibold" : "text-slate-400"}`}>{isOverdue ? "⚠ Overdue: " : "Due: "}{new Date(t.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
+                            </div>
+                            <Badge className={`text-[10px] cursor-pointer ml-2 shrink-0 ${t.status === "completed" ? "bg-emerald-100 text-emerald-700" : t.status === "verified" ? "bg-blue-100 text-blue-700" : isOverdue ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`} onClick={() => cycleTaskStatus(t.id, t.status)}>
+                              {t.status}
+                            </Badge>
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : <p className="text-sm text-slate-400">No tasks yet.</p>}
                   <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 gap-1 mt-2 h-7 text-xs px-2" onClick={() => { setTaskArea("intake_rep"); setShowAddTask(true); }}>
@@ -1249,14 +1294,20 @@ export default function AdminClientDetail() {
                   <CollapsibleSection title="Assigned Worker Tasks">
                     {workerTasks.length > 0 ? (
                       <div className="space-y-2">
-                        {workerTasks.map((t: any) => (
-                          <div key={t.id} className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-100">
-                            <span className="text-sm text-slate-700">{t.description}</span>
-                            <Badge className={`text-[10px] cursor-pointer ${t.status === "completed" ? "bg-emerald-100 text-emerald-700" : t.status === "verified" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`} onClick={() => cycleTaskStatus(t.id, t.status)}>
-                              {t.status}
-                            </Badge>
-                          </div>
-                        ))}
+                        {workerTasks.map((t: any) => {
+                          const isOverdue = t.status !== "completed" && t.status !== "verified" && t.dueDate && new Date(t.dueDate) < new Date();
+                          return (
+                            <div key={t.id} className={`flex items-start justify-between p-2 rounded border ${isOverdue ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-100"}`}>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm text-slate-700 block">{t.title || t.description}</span>
+                                {t.dueDate && <span className={`text-[11px] ${isOverdue ? "text-red-600 font-semibold" : "text-slate-400"}`}>{isOverdue ? "⚠ Overdue: " : "Due: "}{new Date(t.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
+                              </div>
+                              <Badge className={`text-[10px] cursor-pointer ml-2 shrink-0 ${t.status === "completed" ? "bg-emerald-100 text-emerald-700" : t.status === "verified" ? "bg-blue-100 text-blue-700" : isOverdue ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`} onClick={() => cycleTaskStatus(t.id, t.status)}>
+                                {t.status}
+                              </Badge>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : <p className="text-sm text-slate-400">No tasks yet.</p>}
                     <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 gap-1 mt-2 h-7 text-xs px-2" onClick={() => { setTaskArea("assigned_worker"); setShowAddTask(true); }}>
@@ -1667,28 +1718,50 @@ export default function AdminClientDetail() {
         {/* Stage History Timeline — shown in overview tab, below documents */}
         {activeTab === "overview" && (
           <div className="bg-white rounded-lg border border-slate-200 p-5 mt-0">
-            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Stage History</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Stage History &amp; Progress</h3>
+              {(() => {
+                const terminalStages = ["not_eligible", "ineligible", "level_one_only", "level_one_household", "level_2_active"];
+                const isTerminal = terminalStages.includes((client as any)?.stage ?? "");
+                const stageRef = (client as any)?.stageUpdatedAt ? new Date((client as any).stageUpdatedAt) : new Date((client as any)?.createdAt ?? Date.now());
+                const daysInStage = Math.floor((Date.now() - stageRef.getTime()) / 86_400_000);
+                if (isTerminal) return null;
+                return (
+                  <span className={`inline-flex items-center gap-1 text-xs font-semibold rounded-full px-2.5 py-1 ${
+                    daysInStage >= 14 ? "bg-red-100 text-red-700" :
+                    daysInStage >= 7  ? "bg-amber-100 text-amber-700" :
+                    "bg-emerald-50 text-emerald-700"
+                  }`}>
+                    {daysInStage >= 14 ? "⚠" : daysInStage >= 7 ? "⏱" : "✓"} {daysInStage} day{daysInStage !== 1 ? "s" : ""} in current stage
+                  </span>
+                );
+              })()}
+            </div>
             {stageHistoryData && (stageHistoryData as any[]).length > 0 ? (
-              <ol className="relative border-l border-slate-200 ml-2 space-y-4">
+              <ol className="relative border-l-2 border-slate-200 ml-2 space-y-5">
                 {(stageHistoryData as any[]).map((entry: any, idx: number) => {
                   const fromCfg = entry.fromStage ? STAGE_CONFIG[entry.fromStage] : null;
                   const toCfg = STAGE_CONFIG[entry.toStage] || { label: entry.toStage, bg: "bg-slate-100", text: "text-slate-600" };
+                  const isLatest = idx === (stageHistoryData as any[]).length - 1;
                   return (
-                    <li key={entry.id} className="ml-4">
-                      <span className="absolute -left-1.5 mt-1 h-3 w-3 rounded-full border-2 border-white bg-slate-400" />
-                      <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    <li key={entry.id} className="ml-5 relative">
+                      <span className={`absolute -left-[22px] top-1 h-3.5 w-3.5 rounded-full border-2 border-white ${
+                        isLatest ? "bg-blue-500" : "bg-slate-300"
+                      }`} />
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {fromCfg ? (
                           <>
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${fromCfg.bg} ${fromCfg.text}`}>{fromCfg.label}</span>
-                            <span className="text-slate-400 text-xs">&rarr;</span>
+                            <span className="text-slate-400 text-xs">→</span>
                           </>
                         ) : (
-                          idx === 0 && <span className="text-xs text-slate-400 italic">Initial stage:</span>
+                          idx === 0 && <span className="text-xs text-slate-400 italic">Started at:</span>
                         )}
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${toCfg.bg} ${toCfg.text}`}>{toCfg.label}</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${toCfg.bg} ${toCfg.text}`}>{toCfg.label}</span>
+                        {isLatest && <span className="text-[10px] bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5 font-medium">Current</span>}
                       </div>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
-                        <span>{entry.changedByName || "Staff"}</span>
+                      <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+                        <span className="font-medium text-slate-500">{entry.changedByName || "Staff"}</span>
                         <span>&middot;</span>
                         <span>{new Date(entry.createdAt).toLocaleString()}</span>
                       </div>
@@ -3105,6 +3178,32 @@ export default function AdminClientDetail() {
                 onClick={() => referClientMutation.mutate({ submissionId: id, orgId: parseInt(referOrgId), note: referOrgNote || undefined })}
               >
                 {referClientMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refer Client"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Terminal stage confirmation dialog */}
+        <Dialog open={!!pendingStageChange} onOpenChange={(v) => { if (!v) setPendingStageChange(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Confirm Stage Change</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-slate-600">
+              You are about to move <strong>{client?.firstName} {client?.lastName}</strong> to{" "}
+              <strong>{pendingStageChange ? (STAGE_CONFIG[pendingStageChange]?.label ?? pendingStageChange) : ""}</strong>.
+              This is a significant outcome stage. Are you sure?
+            </p>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setPendingStageChange(null)}>Cancel</Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700"
+                onClick={() => {
+                  if (pendingStageChange) updateStageMutation.mutate({ id, stage: pendingStageChange as any });
+                  setPendingStageChange(null);
+                }}
+              >
+                Yes, confirm
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -97,6 +97,12 @@ function AddClientDialog({
 }) {
   const [form, setForm] = useState<AddClientForm>({ ...INITIAL_ADD_FORM });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [dupCheckPhone, setDupCheckPhone] = useState("");
+  const [dupCheckCin, setDupCheckCin] = useState("");
+  const { data: dupResult } = trpc.admin.checkDuplicate.useQuery(
+    { cellPhone: dupCheckPhone || undefined, medicaidId: dupCheckCin || undefined },
+    { enabled: !!(dupCheckPhone || dupCheckCin) }
+  );
 
   const submitMutation = trpc.submission.submit.useMutation({
     onSuccess: () => {
@@ -191,8 +197,12 @@ function AddClientDialog({
             <div>
               <Label className="text-xs text-slate-600">Medicaid ID (CIN) *</Label>
               <Input value={form.medicaidId} onChange={(e) => update("medicaidId", e.target.value.toUpperCase())}
+                onBlur={(e) => setDupCheckCin(e.target.value.trim())}
                 className={errors.medicaidId ? "border-red-400" : ""} placeholder="AB12345C" maxLength={8} />
               {errors.medicaidId && <p className="text-red-500 text-xs mt-0.5">{errors.medicaidId}</p>}
+              {dupResult?.cinMatch && (
+                <p className="text-amber-600 text-xs mt-0.5 font-medium">⚠ CIN already exists: <a href={`/admin/clients/${dupResult.cinMatch.id}`} className="underline" target="_blank">{dupResult.cinMatch.name}</a></p>
+              )}
             </div>
           </div>
 
@@ -200,8 +210,12 @@ function AddClientDialog({
             <div>
               <Label className="text-xs text-slate-600">Cell Phone *</Label>
               <Input value={form.cellPhone} onChange={(e) => update("cellPhone", e.target.value)}
+                onBlur={(e) => setDupCheckPhone(e.target.value.trim())}
                 className={errors.cellPhone ? "border-red-400" : ""} placeholder="(718) 555-0123" />
               {errors.cellPhone && <p className="text-red-500 text-xs mt-0.5">{errors.cellPhone}</p>}
+              {dupResult?.phoneMatch && (
+                <p className="text-amber-600 text-xs mt-0.5 font-medium">⚠ Phone already exists: <a href={`/admin/clients/${dupResult.phoneMatch.id}`} className="underline" target="_blank">{dupResult.phoneMatch.name}</a></p>
+              )}
             </div>
             <div>
               <Label className="text-xs text-slate-600">Email *</Label>
@@ -1302,6 +1316,12 @@ export default function AdminClients() {
                     const avatarColor = getAvatarColor(`${client.firstName}${client.lastName}`);
                     const workerName = getWorkerName(client.assignedTo);
                     const stageInfo = STAGE_CONFIG[client.stage] || { label: client.stage, bg: "bg-slate-100", text: "text-slate-700" };
+                    // SLA: compute days in current stage
+                    const stageRef = client.stageUpdatedAt ? new Date(client.stageUpdatedAt) : new Date(client.createdAt);
+                    const daysInStage = Math.floor((Date.now() - stageRef.getTime()) / 86_400_000);
+                    const terminalStages = ["not_eligible", "ineligible", "level_one_only", "level_one_household", "level_2_active"];
+                    const isTerminal = terminalStages.includes(client.stage);
+                    const slaWarning = !isTerminal && daysInStage >= 14 ? "red" : !isTerminal && daysInStage >= 7 ? "yellow" : null;
                     const dob = formatLocalDate(fd.dateOfBirth) ?? "—";
                     const additionalCount = typeof client.additionalMembersCount === "number" ? client.additionalMembersCount : (fd.householdMembers?.length ?? 0);
                     const membersDisplay = additionalCount > 0 ? `1 + ${additionalCount}` : "1";
@@ -1378,9 +1398,21 @@ export default function AdminClients() {
                             : <span className="text-slate-300">—</span>}
                         </td>
                         <td className="px-4 py-3">
-                          <Badge className={`${stageInfo.bg} ${stageInfo.text} text-[11px] font-medium border-0`}>
-                            {stageInfo.label}
-                          </Badge>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge className={`${stageInfo.bg} ${stageInfo.text} text-[11px] font-medium border-0`}>
+                              {stageInfo.label}
+                            </Badge>
+                            {slaWarning === "red" && (
+                              <span title={`${daysInStage} days in this stage — overdue`} className="inline-flex items-center gap-0.5 text-[10px] font-semibold bg-red-100 text-red-700 rounded-full px-1.5 py-0.5 cursor-default">
+                                ⚠ {daysInStage}d
+                              </span>
+                            )}
+                            {slaWarning === "yellow" && (
+                              <span title={`${daysInStage} days in this stage — approaching deadline`} className="inline-flex items-center gap-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 cursor-default">
+                                ⏱ {daysInStage}d
+                              </span>
+                            )}
+                          </div>
                         </td>
                         {canMarkNotInterested && (
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>

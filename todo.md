@@ -947,3 +947,31 @@
 - [x] NEW: OrgNotifications.tsx — standalone notifications page for org staff at /org/notifications, with back button to /org, notification link rewriting (/admin/clients/ → /org/clients/)
 - [x] NEW: /org/notifications route added to App.tsx
 - [x] IMPROVEMENT: OrgPortal Group Chat tab now shows unread badge (red dot with count) when there are unread messages in the org group channel
+
+## New Features - Create Task from Message, Progress Tracking, Daily Digest (July 28 2026)
+- [x] SCHEMA: Add title, dueDate, priority, sourceMessageId, sourceMessageType columns to tasks table
+- [x] SCHEMA: Add stageUpdatedAt column to submissions table
+- [x] DB: Run migration for new tasks + submissions columns
+- [x] DB: Add getTasksBySubmissionWithDetails helper (includes assignee name)
+- [x] DB: Add getDailyDigestData helper (audit logs, new clients, stage changes, tasks, messages for a date range)
+- [x] BACKEND: Update tasks.create procedure to accept title, dueDate, priority, sourceMessageId, sourceMessageType
+- [x] BACKEND: Add tasks.updateTask procedure (edit title, description, dueDate, priority, assignedTo)
+- [x] BACKEND: Add tasks.deleteTask procedure
+- [x] BACKEND: Add admin.checkDuplicate procedure (check phone/CIN for duplicates)
+- [x] BACKEND: Add /api/scheduled/daily-digest endpoint in server/_core/index.ts
+- [x] BACKEND: Add getDailyDigestData function in db.ts
+- [ ] BACKEND: Register Heartbeat cron for daily digest (8 AM UTC = 4 AM ET)
+- [x] FRONTEND: Create CreateTaskFromMessageDialog component (pre-filled from message, title/description/assignee/dueDate/priority)
+- [x] FRONTEND: Add "Create Task" button to ClientChatTab message bubble hover actions
+- [x] FRONTEND: Add "Create Task" button to AdminOrgChats message bubble hover actions
+- [x] FRONTEND: Add "Create Task" button to OrgPortal group chat message bubble hover actions
+- [ ] FRONTEND: Show linked task card below message after task is created (clickable, shows status)
+- [x] FRONTEND: SLA badge on AdminClients list — yellow after 7 days in stage, red after 14 days
+- [ ] FRONTEND: "Days in stage" shown on client row in AdminClients
+- [x] FRONTEND: Stage timeline section on AdminClientDetail (full history with timestamps and actor names)
+- [x] FRONTEND: Required field completion checklist on AdminClientDetail overview tab
+- [x] FRONTEND: Overdue task badge (red "Overdue" label) on tasks past dueDate
+- [x] FRONTEND: Stage change confirmation dialog for terminal stages (not_eligible, ineligible, flagged)
+- [x] FRONTEND: Duplicate phone/CIN warning on Add Client and Edit Client dialogs
+- [x] TESTS: Write vitest tests for new task procedures (title, dueDate, priority, sourceMessage)
+- [x] TESTS: Write vitest test for daily digest data query
