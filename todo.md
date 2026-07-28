@@ -940,3 +940,10 @@
 - [x] UI ClientChatTab: rounded-3xl white pill input, dark teal send button, light grey (#F0F0F0) composer bg
 - [x] UI AdminOrgChats OrgChatPanel: matching WhatsApp design, reply-on-hover button repositioned outside bubble
 - [x] UI OrgPortal OrgGroupChatPanel: matching WhatsApp design, FreshSelect badge on non-org senders
+
+## E2E Audit Fixes (July 28 2026)
+- [x] BUG FIX: AssessorPortal.tsx — add orgId redirect guard so org staff who navigate directly to /assessor are immediately redirected to /org via window.location.replace
+- [x] BUG FIX: OrgPortal.tsx — fix notifications bell link from /admin/notifications (uses AdminLayout, would redirect org staff back to /org) to /org/notifications (standalone page)
+- [x] NEW: OrgNotifications.tsx — standalone notifications page for org staff at /org/notifications, with back button to /org, notification link rewriting (/admin/clients/ → /org/clients/)
+- [x] NEW: /org/notifications route added to App.tsx
+- [x] IMPROVEMENT: OrgPortal Group Chat tab now shows unread badge (red dot with count) when there are unread messages in the org group channel
