@@ -930,3 +930,13 @@
 ## Chat Bug Fixes (July 28 2026)
 - [x] FIX: Messages disappearing after send (added optimistic message state; message appears instantly, cleared after server confirms)
 - [x] FIX: @mention turns entire message text blue (fixed regex to match only @Name or @First Last token, not trailing words)
+
+## WhatsApp-Style Chat Redesign (July 28 2026)
+- [x] SERVER: add getThreadReadWatermarks and getOrgGroupReadWatermarks to db.ts (watermark-based read tracking)
+- [x] SERVER: add chat.readWatermarks and org.readWatermarks procedures to routers.ts
+- [x] UI ClientChatTab: dark teal (#075E54) header, ECE5DD wallpaper with subtle pattern, DCF8C6 my-bubbles, white other-bubbles
+- [x] UI ClientChatTab: ✓✓ read receipt ticks (grey = sent, blue = seen by all participants via watermarks)
+- [x] UI ClientChatTab: time-only timestamps inline in bubble footer (HH:MM)
+- [x] UI ClientChatTab: rounded-3xl white pill input, dark teal send button, light grey (#F0F0F0) composer bg
+- [x] UI AdminOrgChats OrgChatPanel: matching WhatsApp design, reply-on-hover button repositioned outside bubble
+- [x] UI OrgPortal OrgGroupChatPanel: matching WhatsApp design, FreshSelect badge on non-org senders

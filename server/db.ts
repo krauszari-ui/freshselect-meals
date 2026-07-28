@@ -1422,6 +1422,30 @@ export async function markThreadRead(userId: number, submissionId: number, lastR
     .onDuplicateKeyUpdate({ set: { lastReadMessageId, updatedAt: new Date() } });
 }
 
+/** Get all read watermarks for a thread (returns userId → lastReadMessageId map for read receipts). */
+export async function getThreadReadWatermarks(submissionId: number): Promise<Record<number, number>> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select({ userId: messageReads.userId, lastReadMessageId: messageReads.lastReadMessageId })
+    .from(messageReads)
+    .where(eq(messageReads.submissionId, submissionId));
+  const map: Record<number, number> = {};
+  for (const row of rows) map[row.userId] = row.lastReadMessageId;
+  return map;
+}
+
+/** Get all read watermarks for an org group channel (returns userId → lastReadMessageId map). */
+export async function getOrgGroupReadWatermarks(orgId: number): Promise<Record<number, number>> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select({ userId: orgMessageReads.userId, lastReadMessageId: orgMessageReads.lastReadMessageId })
+    .from(orgMessageReads)
+    .where(eq(orgMessageReads.orgId, orgId));
+  const map: Record<number, number> = {};
+  for (const row of rows) map[row.userId] = row.lastReadMessageId;
+  return map;
+}
+
 /** Get the unread count for a specific thread for a user. */
 export async function getThreadUnreadCount(userId: number, submissionId: number): Promise<number> {
   const db = await getDb();

@@ -271,6 +271,8 @@ function MessageBubble({
   msg,
   isMine,
   currentUserId,
+  readWatermarks = {},
+  totalParticipants = 0,
   onDelete,
   onReact,
   onOpenAttachment,
@@ -279,6 +281,8 @@ function MessageBubble({
   msg: Message;
   isMine: boolean;
   currentUserId: number;
+  readWatermarks?: Record<number, number>;
+  totalParticipants?: number;
   onDelete: (id: number) => void;
   onReact: (id: number, emoji: string) => void;
   onOpenAttachment: (url: string, name: string) => void;
@@ -370,7 +374,22 @@ function MessageBubble({
               <span className={`text-[10px] ${isMine ? "text-emerald-100" : "text-slate-400"}`}>
                 {formatTime(msg.createdAt)}
               </span>
-              {isMine && <CheckCheck className="h-3 w-3 text-emerald-200" />}
+              {isMine && (() => {
+                // Count how many OTHER participants have read this message
+                const othersWhoRead = Object.entries(readWatermarks)
+                  .filter(([uid, lastRead]) => Number(uid) !== currentUserId && lastRead >= msg.id)
+                  .length;
+                const otherCount = Math.max(0, totalParticipants - 1); // exclude self
+                const allRead = otherCount > 0 && othersWhoRead >= otherCount;
+                return (
+                  <CheckCheck
+                    className={`h-3.5 w-3.5 transition-colors ${
+                      allRead ? "text-blue-300" : "text-emerald-200"
+                    }`}
+                    aria-label={allRead ? "Seen by all" : "Delivered"}
+                  />
+                );
+              })()}
             </div>
           </div>
 
@@ -391,7 +410,7 @@ function MessageBubble({
             </div>
           )}
 
-            {showActions && (
+          {showActions && (
             <div className={`absolute top-0 ${isMine ? "right-full mr-2" : "left-full ml-2"} flex items-center gap-1 bg-white border border-slate-200 rounded-full px-2 py-1 shadow-md z-10`}>
               <ReplyButton onClick={() => onReply({ id: msg.id, senderName: msg.senderName, content: (msg.attachmentName ? `[${msg.attachmentName}]` : msg.content).slice(0, 300) })} />
               <div className="relative">
@@ -534,7 +553,13 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
   const staffListRef = useRef<StaffUser[]>([]);
   staffListRef.current = staffList;
 
-  // ── Real-time polling (every 3 seconds) ────────────────────────────────────
+  // ── Read watermarks (for ✓✓ read receipts) ─────────────────────────────────
+  const { data: readWatermarks = {} } = trpc.chat.readWatermarks.useQuery(
+    { submissionId },
+    { refetchInterval: 15_000, refetchIntervalInBackground: false, staleTime: 5_000 }
+  );
+
+  // ── Real-time polling (every 10 seconds) ─────────────────────────────────────
   const { data: newMessages = [] } = trpc.chat.poll.useQuery(
     { submissionId, afterId: lastSeenId },
     { refetchInterval: 10_000, refetchIntervalInBackground: false, enabled: lastSeenId > 0, refetchOnWindowFocus: true }
@@ -779,28 +804,27 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-[calc(100vh-280px)] min-h-[500px] bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+    <div className="flex flex-col h-[calc(100vh-280px)] min-h-[500px] rounded-xl overflow-hidden shadow-md border border-slate-200">
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 bg-white">
-        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-          <MessageSquare className="h-5 w-5 text-emerald-600" />
+      <div className="flex items-center gap-3 px-5 py-3.5 bg-[#075E54] text-white">
+        <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center">
+          <MessageSquare className="h-4.5 w-4.5 text-white" />
         </div>
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Team Chat — {clientName}</h2>
-          <p className="text-xs text-slate-400">Staff-only thread for this client</p>
+          <h2 className="text-sm font-semibold text-white">Team Chat — {clientName}</h2>
+          <p className="text-xs text-emerald-200 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
+            Staff-only thread
+          </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <span className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Live
-          </span>
           {(user?.role === "admin" || user?.role === "super_admin") && (
             <Button
               variant="outline"
               size="sm"
               onClick={handleExportPdf}
               disabled={exportingPdf || allMessages.length === 0}
-              className="flex items-center gap-1.5 text-xs h-7 px-2.5"
+              className="flex items-center gap-1.5 text-xs h-7 px-2.5 border-emerald-400 text-white hover:bg-emerald-700 bg-transparent"
               title="Download chat as PDF"
             >
               {exportingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
@@ -810,11 +834,14 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
         </div>
       </div>
 
-      {/* Messages area */}
+      {/* Messages area - WhatsApp-style wallpaper */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto px-5 py-4 bg-slate-50/40"
-        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(148,163,184,0.08) 1px, transparent 0)", backgroundSize: "24px 24px" }}
+        className="flex-1 overflow-y-auto px-4 py-4"
+        style={{
+          backgroundColor: "#ECE5DD",
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c8b8a2' fill-opacity='0.18'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+        }}
       >
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
@@ -842,6 +869,8 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
                   msg={item.msg}
                   isMine={item.msg.senderId === user?.id}
                   currentUserId={user?.id ?? 0}
+                  readWatermarks={readWatermarks as Record<number, number>}
+                  totalParticipants={Object.keys(readWatermarks).length}
                   onDelete={(id) => deleteMutation.mutate({ messageId: id, submissionId })}
                   onReact={(id, emoji) => reactMutation.mutate({ messageId: id, submissionId, emoji })}
                   onOpenAttachment={handleOpenAttachment}
@@ -879,9 +908,9 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
         </div>
       )}
 
-      {/* Input area */}
+      {/* Input area - WhatsApp style */}
       {canSend ? (
-        <div className="px-4 py-3 border-t border-slate-200 bg-white">
+        <div className="px-3 py-2.5 bg-[#F0F0F0] border-t border-[#d9d9d9]">
           <ReplyBar replyTarget={replyTarget} onCancel={() => setReplyTarget(null)} />
           <div ref={inputWrapRef} className="flex items-end gap-2 relative">
             {/* @mention dropdown */}
@@ -897,11 +926,11 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
             {/* File attach button */}
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex-shrink-0 p-2.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors mb-0.5"
+              className="flex-shrink-0 p-2.5 rounded-full hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors mb-0.5"
               title="Attach file"
               disabled={sending}
             >
-              <Paperclip className="h-4.5 w-4.5" />
+              <Paperclip className="h-5 w-5" />
             </button>
             <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" />
 
@@ -912,8 +941,8 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
                 value={text}
                 onChange={handleTextChange}
                 onKeyDown={handleKeyDown}
-                placeholder={`Message ${clientName} thread... Type @ to mention someone`}
-                className="resize-none min-h-[44px] max-h-[120px] rounded-2xl border-slate-200 bg-slate-50 focus:bg-white text-sm pr-4 py-3 transition-colors"
+                placeholder="Type a message..."
+                className="resize-none min-h-[44px] max-h-[120px] rounded-3xl border-0 bg-white shadow-sm text-sm px-4 py-3 transition-colors focus-visible:ring-1 focus-visible:ring-emerald-400"
                 rows={1}
                 disabled={sending}
               />
@@ -923,23 +952,20 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
             <button
               onClick={handleSend}
               disabled={sending || uploading || (!text.trim() && !attachFile)}
-              className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-200 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors shadow-sm mb-0.5"
+              className="flex-shrink-0 w-11 h-11 rounded-full bg-[#075E54] hover:bg-[#064e46] disabled:bg-slate-300 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors shadow-sm mb-0.5"
               title="Send (Enter)"
             >
               {sending || uploading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4.5 w-4.5 animate-spin" />
               ) : (
-                <Send className="h-4 w-4" />
+                <Send className="h-4.5 w-4.5" />
               )}
             </button>
           </div>
-          <p className="text-[10px] text-slate-400 mt-1.5 ml-12">
-            Press <kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">Enter</kbd> to send &middot; <kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">Shift+Enter</kbd> for new line &middot; Type <kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px]">@</kbd> to mention
-          </p>
         </div>
       ) : (
-        <div className="px-4 py-3 border-t border-slate-200 bg-slate-50 text-center">
-          <p className="text-xs text-slate-400">Viewers cannot send messages</p>
+        <div className="px-4 py-3 bg-[#F0F0F0] border-t border-[#d9d9d9] text-center">
+          <p className="text-xs text-slate-500">Viewers cannot send messages</p>
         </div>
       )}
     </div>
