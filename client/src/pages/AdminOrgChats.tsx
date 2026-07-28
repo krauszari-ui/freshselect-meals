@@ -126,10 +126,23 @@ function MentionDropdown({
 }
 
 /** Render message content with @mentions highlighted (only the @Name token, not the whole line) */
-function renderContent(content: string) {
-  const parts = content.split(/(@\w+(?:\s\w+)?)/g);
+function renderContent(content: string, knownNames?: string[]) {
+  if (knownNames && knownNames.length > 0) {
+    const escaped = [...knownNames]
+      .sort((a, b) => b.length - a.length)
+      .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const pattern = new RegExp(`(@(?:${escaped.join("|")})(?=\\s|$)|@\\w+)`, "g");
+    const parts = content.split(pattern);
+    return parts.map((part, i) => {
+      if (part.startsWith("@")) {
+        return <span key={i} className="text-blue-200 font-semibold">{part}</span>;
+      }
+      return <span key={i}>{part}</span>;
+    });
+  }
+  const parts = content.split(/(@\w+)/g);
   return parts.map((part, i) => {
-    if (part.startsWith("@") && /^@\w+(?:\s\w+)?$/.test(part)) {
+    if (/^@\w+$/.test(part)) {
       return <span key={i} className="text-blue-200 font-semibold">{part}</span>;
     }
     return <span key={i}>{part}</span>;
@@ -260,11 +273,9 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
     setText(val);
     const cursor = e.target.selectionStart ?? val.length;
     const beforeCursor = val.slice(0, cursor);
-    const atMatch = beforeCursor.match(/@(\w[\w\s]*)$/);
+    const atMatch = beforeCursor.match(/@(\w*)$/);
     if (atMatch) {
       setMentionQuery(atMatch[1]);
-    } else if (beforeCursor.endsWith("@")) {
-      setMentionQuery("");
     } else {
       setMentionQuery(null);
     }
@@ -380,7 +391,10 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
                   {msg.replyToId && msg.replyToSenderName && (
                     <ReplyQuote senderName={msg.replyToSenderName} content={msg.replyToContent ?? ""} />
                   )}
-                  {renderContent(msg.content)}
+                  {renderContent(msg.content, [
+                    ...staffListRef.current.map(u => u.name),
+                    ...orgListRef.current.map(o => o.orgName),
+                  ])}
                   <div className={`flex items-center gap-1 mt-1 ${isMe ? "justify-end" : "justify-start"}`}>
                     <span className="text-[10px] text-slate-400">
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}

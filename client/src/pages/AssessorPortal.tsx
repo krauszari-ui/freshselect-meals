@@ -90,6 +90,13 @@ export default function AssessorPortal() {
 
   const utils = trpc.useUtils();
 
+  // Org staff (assessors with orgId) must use the /org portal, not /assessor
+  useEffect(() => {
+    if (!loading && user && (user as any).orgId) {
+      window.location.replace("/org");
+    }
+  }, [user, loading]);
+
   // Debounce search input — wait 400ms after typing stops before firing API call
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 400);

@@ -112,12 +112,28 @@ function isImageType(type?: string | null) {
 }
 
 /** Render message content with @mentions highlighted */
-function renderContent(content: string) {
-  // Split on @mentions: @Word or @First Last (up to 2 words, no trailing space)
-  // Uses a non-greedy match: @Name or @First Last (exactly one optional second word)
-  const parts = content.split(/(@\w+(?:\s\w+)?)/g);
+function renderContent(content: string, knownNames?: string[]) {
+  // Build a regex that matches @KnownName or @KnownFirst KnownLast from the staff list,
+  // falling back to @Word (no spaces) for unknown mentions.
+  // This prevents greedy space-matching from turning the whole message blue.
+  if (knownNames && knownNames.length > 0) {
+    // Sort longest first so "@Mrs Smith" matches before "@Mrs"
+    const escaped = [...knownNames]
+      .sort((a, b) => b.length - a.length)
+      .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const pattern = new RegExp(`(@(?:${escaped.join("|")})(?=\\s|$)|@\\w+)`, "g");
+    const parts = content.split(pattern);
+    return parts.map((part, i) => {
+      if (part.startsWith("@")) {
+        return <span key={i} className="text-blue-300 font-semibold">{part}</span>;
+      }
+      return <span key={i}>{part}</span>;
+    });
+  }
+  // Fallback: only match @SingleWord (no spaces) to avoid greedy highlight
+  const parts = content.split(/(@\w+)/g);
   return parts.map((part, i) => {
-    if (part.startsWith("@") && /^@\w+(?:\s\w+)?$/.test(part)) {
+    if (/^@\w+$/.test(part)) {
       return <span key={i} className="text-blue-300 font-semibold">{part}</span>;
     }
     return <span key={i}>{part}</span>;
@@ -273,6 +289,7 @@ function MessageBubble({
   currentUserId,
   readWatermarks = {},
   totalParticipants = 0,
+  staffNames = [],
   onDelete,
   onReact,
   onOpenAttachment,
@@ -283,6 +300,7 @@ function MessageBubble({
   currentUserId: number;
   readWatermarks?: Record<number, number>;
   totalParticipants?: number;
+  staffNames?: string[];
   onDelete: (id: number) => void;
   onReact: (id: number, emoji: string) => void;
   onOpenAttachment: (url: string, name: string) => void;
@@ -366,7 +384,7 @@ function MessageBubble({
 
             {msg.content && (
               <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                {renderContent(msg.content)}
+                {renderContent(msg.content, staffNames)}
               </p>
             )}
 
@@ -600,14 +618,13 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
     const val = e.target.value;
     setText(val);
 
-    // Detect @mention trigger: find the last @ before cursor
+    // Detect @mention trigger: find the last @ before cursor.
+    // Only match @word-chars-no-spaces so the dropdown closes when user types a space.
     const cursor = e.target.selectionStart ?? val.length;
     const beforeCursor = val.slice(0, cursor);
-    const atMatch = beforeCursor.match(/@(\w[\w\s]*)$/);
+    const atMatch = beforeCursor.match(/@(\w*)$/);
     if (atMatch) {
       setMentionQuery(atMatch[1]);
-    } else if (beforeCursor.endsWith("@")) {
-      setMentionQuery("");
     } else {
       setMentionQuery(null);
     }
@@ -871,6 +888,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
                   currentUserId={user?.id ?? 0}
                   readWatermarks={readWatermarks as Record<number, number>}
                   totalParticipants={Object.keys(readWatermarks).length}
+                  staffNames={staffListRef.current.map(u => u.name)}
                   onDelete={(id) => deleteMutation.mutate({ messageId: id, submissionId })}
                   onReact={(id, emoji) => reactMutation.mutate({ messageId: id, submissionId, emoji })}
                   onOpenAttachment={handleOpenAttachment}
