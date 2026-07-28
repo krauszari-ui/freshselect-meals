@@ -926,3 +926,7 @@
 - [x] UI: wire reply into ClientChatTab.tsx (hover button, ReplyBar above input, ReplyQuote in bubble)
 - [x] UI: wire reply into AdminOrgChats.tsx OrgChatPanel (hover button, ReplyBar, ReplyQuote)
 - [x] UI: wire reply into OrgPortal.tsx OrgGroupChatPanel (hover button, ReplyBar, ReplyQuote)
+
+## Chat Bug Fixes (July 28 2026)
+- [x] FIX: Messages disappearing after send (added optimistic message state; message appears instantly, cleared after server confirms)
+- [x] FIX: @mention turns entire message text blue (fixed regex to match only @Name or @First Last token, not trailing words)
