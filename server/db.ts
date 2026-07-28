@@ -373,7 +373,27 @@ export async function getRecentSubmissions(days: number = 7, limit: number = 10)
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  return db.select().from(submissions).where(gte(submissions.createdAt, since)).orderBy(desc(submissions.createdAt)).limit(limit);
+  // Explicit column selection — avoids returning formData (JSON object) to the frontend
+  // which would cause React error #300 if accidentally rendered as JSX text
+  return db.select({
+    id: submissions.id,
+    firstName: submissions.firstName,
+    lastName: submissions.lastName,
+    medicaidId: submissions.medicaidId,
+    stage: submissions.stage,
+    status: submissions.status,
+    createdAt: submissions.createdAt,
+    assignedTo: submissions.assignedTo,
+    intakeRep: submissions.intakeRep,
+    referralSource: submissions.referralSource,
+    priority: submissions.priority,
+    language: submissions.language,
+    borough: submissions.borough,
+    neighborhood: submissions.neighborhood,
+    newApplicant: submissions.newApplicant,
+    transferAgencyName: submissions.transferAgencyName,
+    stageUpdatedAt: submissions.stageUpdatedAt,
+  }).from(submissions).where(gte(submissions.createdAt, since)).orderBy(desc(submissions.createdAt)).limit(limit);
 }
 
 export async function getRecentlyUpdated(days: number = 7, limit: number = 10) {
