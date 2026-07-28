@@ -227,6 +227,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
       notInterested: submissions.notInterested,
       notInterestedAt: submissions.notInterestedAt,
       notInterestedBy: submissions.notInterestedBy,
+      stageUpdatedAt: submissions.stageUpdatedAt,
     }).from(submissions).where(where).orderBy(sortDir === "asc" ? asc(submissions.createdAt) : desc(submissions.createdAt)).limit(pageSize).offset(offset),
     db.select({ count: sql<number>`count(*)` }).from(submissions).where(where),
     db.select({ totalAdditional: sql<number>`COALESCE(SUM(additionalMembersCount), 0)`, totalClients: sql<number>`count(*)` }).from(submissions).where(where),
@@ -403,6 +404,21 @@ export async function getTasksBySubmission(submissionId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.select().from(tasks).where(eq(tasks.submissionId, submissionId)).orderBy(desc(tasks.createdAt));
+}
+
+/** Get tasks for a submission with assignee display name joined from users table. */
+export async function getTasksBySubmissionWithDetails(submissionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select().from(tasks).where(eq(tasks.submissionId, submissionId)).orderBy(desc(tasks.createdAt));
+  // Fetch assignee names in one query
+  const assigneeIds = Array.from(new Set(rows.map(r => r.assignedTo).filter(Boolean))) as number[];
+  let nameMap: Record<number, string> = {};
+  if (assigneeIds.length > 0) {
+    const staffRows = await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, assigneeIds));
+    nameMap = Object.fromEntries(staffRows.map(r => [r.id, r.name ?? ""])) as Record<number, string>;
+  }
+  return rows.map(r => ({ ...r, assigneeName: r.assignedTo ? (nameMap[r.assignedTo] ?? null) : null }));
 }
 
 export interface ListTasksOptions {
@@ -1168,6 +1184,92 @@ export async function getAuditLogsBySession(sessionId: string): Promise<AuditLog
     .where(eq(auditLogs.sessionId, sessionId))
     .orderBy(asc(auditLogs.createdAt));
   return rows as AuditLogRow[];
+}
+
+// ─── Daily Digest ────────────────────────────────────────────────────────────
+
+export interface DailyDigestData {
+  date: string; // e.g. "2026-07-28"
+  newClients: Array<{ id: number; name: string; referralSource: string | null; stage: string; createdAt: Date }>;
+  stageChanges: Array<{ clientId: number | null; clientName: string | null; actorName: string | null; fromStage: string | null; toStage: string; createdAt: Date }>;
+  tasksCreated: Array<{ id: number; title: string; description: string; clientName: string | null; actorName: string | null; createdAt: Date }>;
+  tasksCompleted: Array<{ id: number; title: string; clientName: string | null; actorName: string | null; completedAt: Date | null }>;
+  documentsUploaded: Array<{ clientName: string | null; actorName: string | null; fileName: string; createdAt: Date }>;
+  staffLogins: Array<{ actorName: string | null; createdAt: Date }>;
+  allActions: Array<{ actorName: string | null; action: string; clientName: string | null; details: unknown; createdAt: Date }>;
+  totalActions: number;
+}
+
+export async function getDailyDigestData(dateStr: string): Promise<DailyDigestData> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const start = new Date(dateStr + "T00:00:00.000Z");
+  const end = new Date(dateStr + "T23:59:59.999Z");
+
+  // New clients added today
+  const newClients = await db.select({
+    id: submissions.id,
+    firstName: submissions.firstName,
+    lastName: submissions.lastName,
+    referralSource: submissions.referralSource,
+    stage: submissions.stage,
+    createdAt: submissions.createdAt,
+  }).from(submissions).where(and(gte(submissions.createdAt, start), lte(submissions.createdAt, end))).orderBy(asc(submissions.createdAt));
+
+  // Stage changes from audit log
+  const stageChangeLogs = await db.select().from(auditLogs).where(
+    and(eq(auditLogs.action, "stage_changed"), gte(auditLogs.createdAt, start), lte(auditLogs.createdAt, end))
+  ).orderBy(asc(auditLogs.createdAt));
+
+  // Tasks created today
+  const tasksCreatedRows = await db.select().from(tasks).where(
+    and(gte(tasks.createdAt, start), lte(tasks.createdAt, end))
+  ).orderBy(asc(tasks.createdAt));
+
+  // Tasks completed today
+  const tasksCompletedRows = await db.select().from(tasks).where(
+    and(eq(tasks.status, "completed"), gte(tasks.completedAt, start), lte(tasks.completedAt, end))
+  ).orderBy(asc(tasks.completedAt));
+
+  // Documents uploaded today
+  const docsLogs = await db.select().from(auditLogs).where(
+    and(eq(auditLogs.action, "document_uploaded"), gte(auditLogs.createdAt, start), lte(auditLogs.createdAt, end))
+  ).orderBy(asc(auditLogs.createdAt));
+
+  // Staff logins today
+  const loginLogs = await db.select().from(auditLogs).where(
+    and(eq(auditLogs.action, "login"), gte(auditLogs.createdAt, start), lte(auditLogs.createdAt, end))
+  ).orderBy(asc(auditLogs.createdAt));
+
+  // All audit actions today (for the full log section)
+  const allActions = await db.select().from(auditLogs).where(
+    and(gte(auditLogs.createdAt, start), lte(auditLogs.createdAt, end))
+  ).orderBy(asc(auditLogs.createdAt)).limit(500);
+
+  // Fetch client names for tasks
+  const taskClientIds = Array.from(new Set([
+    ...tasksCreatedRows.map(t => t.submissionId),
+    ...tasksCompletedRows.map(t => t.submissionId),
+  ]));
+  let clientNameMap: Record<number, string> = {};
+  if (taskClientIds.length > 0) {
+    const clientRows = await db.select({ id: submissions.id, firstName: submissions.firstName, lastName: submissions.lastName })
+      .from(submissions).where(inArray(submissions.id, taskClientIds));
+    clientNameMap = Object.fromEntries(clientRows.map(r => [r.id, `${r.firstName} ${r.lastName}`]));
+  }
+
+  return {
+    date: dateStr,
+    newClients: newClients.map(c => ({ id: c.id, name: `${c.firstName} ${c.lastName}`, referralSource: c.referralSource, stage: c.stage, createdAt: c.createdAt })),
+    stageChanges: stageChangeLogs.map(l => ({ clientId: l.clientId, clientName: l.clientName, actorName: l.actorName, fromStage: (l.details as any)?.fromStage ?? null, toStage: (l.details as any)?.toStage ?? "", createdAt: l.createdAt })),
+    tasksCreated: tasksCreatedRows.map(t => ({ id: t.id, title: t.title || t.description.slice(0, 60), description: t.description, clientName: clientNameMap[t.submissionId] ?? null, actorName: null, createdAt: t.createdAt })),
+    tasksCompleted: tasksCompletedRows.map(t => ({ id: t.id, title: t.title || t.description.slice(0, 60), clientName: clientNameMap[t.submissionId] ?? null, actorName: null, completedAt: t.completedAt })),
+    documentsUploaded: docsLogs.map(l => ({ clientName: l.clientName, actorName: l.actorName, fileName: (l.details as any)?.fileName ?? "document", createdAt: l.createdAt })),
+    staffLogins: loginLogs.map(l => ({ actorName: l.actorName, createdAt: l.createdAt })),
+    allActions: allActions.map(l => ({ actorName: l.actorName, action: l.action, clientName: l.clientName, details: l.details, createdAt: l.createdAt })),
+    totalActions: allActions.length,
+  };
 }
 
 // ─── Email Blasts ─────────────────────────────────────────────────────────────

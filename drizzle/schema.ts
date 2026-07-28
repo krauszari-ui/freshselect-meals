@@ -125,6 +125,8 @@ export const submissions = mysqlTable("submissions", {
   notInterestedAt: timestamp("notInterestedAt"),
   /** User ID of the staff member who marked this client as Not Interested */
   notInterestedBy: int("notInterestedBy"),
+  /** When the stage was last changed — used for SLA tracking (days in current stage) */
+  stageUpdatedAt: timestamp("stageUpdatedAt"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({
   idx_submissions_medicaidId: uniqueIndex("idx_submissions_medicaidId").on(t.medicaidId),
@@ -144,16 +146,26 @@ export const tasks = mysqlTable("tasks", {
   id: int("id").autoincrement().primaryKey(),
   /** The client (submission) this task relates to */
   submissionId: int("submissionId").notNull(),
+  /** Short task title (required for task-from-message flow) */
+  title: varchar("title", { length: 256 }).notNull().default(""),
   /** Task description */
   description: text("description").notNull(),
   /** Area: intake_rep or assigned_worker */
   area: mysqlEnum("area", ["intake_rep", "assigned_worker"]).default("intake_rep").notNull(),
   /** Assigned to user ID */
   assignedTo: int("assignedTo"),
+  /** Task priority */
+  priority: mysqlEnum("priority", ["low", "normal", "high", "urgent"]).default("normal").notNull(),
+  /** Due date for this task */
+  dueDate: timestamp("dueDate"),
   /** Status */
   status: mysqlEnum("status", ["open", "completed", "verified"]).default("open").notNull(),
   /** Created by user ID */
   createdBy: int("createdBy").notNull(),
+  /** ID of the chat message this task was created from (null = created manually) */
+  sourceMessageId: int("sourceMessageId"),
+  /** Type of source message: 'client' | 'org_group' */
+  sourceMessageType: varchar("sourceMessageType", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   completedAt: timestamp("completedAt"),

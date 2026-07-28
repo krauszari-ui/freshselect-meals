@@ -435,6 +435,7 @@ describe("admin.tasks", () => {
     const caller = appRouter.createCaller(createAdminContext());
     const result = await caller.admin.tasks.create({
       submissionId: 1,
+      title: "Follow up with client",
       description: "Follow up with client",
       area: "intake_rep",
     });

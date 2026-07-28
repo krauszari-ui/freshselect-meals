@@ -11,7 +11,7 @@ import {
   toggleWorkerActive, updateSubmissionStatus,
   updateSubmissionStage, updateSubmissionAssignment, updateWorkerPermissions,
   getRecentSubmissions, getRecentlyUpdated, getAddedCount,
-  createTask, getTasksBySubmission, listTasks, getTaskStats, updateTaskStatus,
+  createTask, getTasksBySubmission, getTasksBySubmissionWithDetails, listTasks, getTaskStats, updateTaskStatus,
   createCaseNote, getCaseNotesBySubmission,
   createDocument, getDocumentsBySubmission, getLibraryDocuments, deleteDocument,
   createService, getServicesBySubmission, updateServiceStatus,
@@ -436,6 +436,31 @@ export const appRouter = router({
 
   // ─── Admin procedures ─────────────────────────────────────────────────────
   admin: router({
+    // Check for duplicate phone/CIN before adding or editing a client
+    checkDuplicate: editProcedure.input(z.object({
+      cellPhone: z.string().optional(),
+      medicaidId: z.string().optional(),
+      excludeId: z.number().optional(), // exclude the current client when editing
+    })).query(async ({ input }) => {
+      const db = await (await import("./db")).getDb();
+      if (!db) return { phoneMatch: null, cinMatch: null };
+      const { eq, and, ne } = await import("drizzle-orm");
+      const { submissions: subs } = await import("../drizzle/schema");
+      let phoneMatch: { id: number; name: string } | null = null;
+      let cinMatch: { id: number; name: string } | null = null;
+      if (input.cellPhone && input.cellPhone.trim()) {
+        const cond = input.excludeId ? and(eq(subs.cellPhone, input.cellPhone.trim()), ne(subs.id, input.excludeId)) : eq(subs.cellPhone, input.cellPhone.trim());
+        const rows = await db.select({ id: subs.id, firstName: subs.firstName, lastName: subs.lastName }).from(subs).where(cond).limit(1);
+        if (rows[0]) phoneMatch = { id: rows[0].id, name: `${rows[0].firstName} ${rows[0].lastName}` };
+      }
+      if (input.medicaidId && input.medicaidId.trim()) {
+        const cond = input.excludeId ? and(eq(subs.medicaidId, input.medicaidId.trim()), ne(subs.id, input.excludeId)) : eq(subs.medicaidId, input.medicaidId.trim());
+        const rows = await db.select({ id: subs.id, firstName: subs.firstName, lastName: subs.lastName }).from(subs).where(cond).limit(1);
+        if (rows[0]) cinMatch = { id: rows[0].id, name: `${rows[0].firstName} ${rows[0].lastName}` };
+      }
+      return { phoneMatch, cinMatch };
+    }),
+
     // Dashboard stats
     stats: staffProcedure.query(async () => getSubmissionStats()),
     taskStats: staffProcedure.query(async () => getTaskStats()),
@@ -890,15 +915,75 @@ export const appRouter = router({
         return getTasksBySubmission(input.submissionId);
       }),
 
+      byClientWithDetails: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input, ctx }) => {
+        if (ctx.user.role === "assessor") {
+          const sub = await getSubmissionById(input.submissionId);
+          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+        }
+        return getTasksBySubmissionWithDetails(input.submissionId);
+      }),
+
       create: editProcedure.input(z.object({
-        submissionId: z.number(), description: z.string().min(1),
+        submissionId: z.number(),
+        title: z.string().min(1).max(256),
+        description: z.string().default(""),
         area: z.enum(["intake_rep", "assigned_worker"]),
         assignedTo: z.number().optional(),
+        priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
+        dueDate: z.string().optional(), // ISO date string
+        sourceMessageId: z.number().optional(),
+        sourceMessageType: z.enum(["client", "org_group"]).optional(),
       })).mutation(async ({ ctx, input }) => {
-        const id = await createTask({ ...input, createdBy: ctx.user.id });
+        const id = await createTask({
+          submissionId: input.submissionId,
+          title: input.title,
+          description: input.description,
+          area: input.area,
+          assignedTo: input.assignedTo ?? null,
+          priority: input.priority,
+          dueDate: input.dueDate ? new Date(input.dueDate) : null,
+          sourceMessageId: input.sourceMessageId ?? null,
+          sourceMessageType: input.sourceMessageType ?? null,
+          createdBy: ctx.user.id,
+        });
         const client = await getSubmissionById(input.submissionId);
-        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "task_created", clientId: input.submissionId, clientName: client ? `${client.firstName} ${client.lastName}` : undefined, details: { description: input.description, area: input.area } });
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "task_created", clientId: input.submissionId, clientName: client ? `${client.firstName} ${client.lastName}` : undefined, details: { title: input.title, description: input.description, area: input.area, sourceMessageId: input.sourceMessageId } });
         return { success: true, id };
+      }),
+
+      update: editProcedure.input(z.object({
+        id: z.number(),
+        title: z.string().min(1).max(256).optional(),
+        description: z.string().optional(),
+        area: z.enum(["intake_rep", "assigned_worker"]).optional(),
+        assignedTo: z.number().nullable().optional(),
+        priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
+        dueDate: z.string().nullable().optional(),
+      })).mutation(async ({ input, ctx }) => {
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { eq } = await import("drizzle-orm");
+        const { tasks: tasksTable } = await import("../drizzle/schema");
+        const patch: Record<string, unknown> = {};
+        if (input.title !== undefined) patch.title = input.title;
+        if (input.description !== undefined) patch.description = input.description;
+        if (input.area !== undefined) patch.area = input.area;
+        if (input.assignedTo !== undefined) patch.assignedTo = input.assignedTo;
+        if (input.priority !== undefined) patch.priority = input.priority;
+        if (input.dueDate !== undefined) patch.dueDate = input.dueDate ? new Date(input.dueDate) : null;
+        if (Object.keys(patch).length > 0) await db.update(tasksTable).set(patch).where(eq(tasksTable.id, input.id));
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "task_updated", details: { taskId: input.id, patch } });
+        return { success: true };
+      }),
+
+      delete: editProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { eq } = await import("drizzle-orm");
+        const { tasks: tasksTable } = await import("../drizzle/schema");
+        await db.delete(tasksTable).where(eq(tasksTable.id, input.id));
+        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "task_deleted", details: { taskId: input.id } });
+        return { success: true };
       }),
 
       updateStatus: editProcedure.input(z.object({

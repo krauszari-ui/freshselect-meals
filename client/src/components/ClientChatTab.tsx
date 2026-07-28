@@ -9,11 +9,11 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Send, Paperclip, Smile, Trash2, Download, FileText,
-  MessageSquare, Loader2, X, CheckCheck, FileDown, AtSign,
+import { Send, Paperclip, Smile, Trash2, Download, FileText,
+  MessageSquare, Loader2, X, CheckCheck, FileDown, AtSign, ClipboardList,
 } from "lucide-react";
 import { ReplyBar, ReplyButton, ReplyQuote, type ReplyTarget } from "@/components/ReplyBar";
+import { CreateTaskFromMessageDialog } from "@/components/CreateTaskFromMessageDialog";
 import { toast } from "sonner";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
@@ -294,6 +294,7 @@ function MessageBubble({
   onReact,
   onOpenAttachment,
   onReply,
+  onCreateTask,
 }: {
   msg: Message;
   isMine: boolean;
@@ -305,6 +306,7 @@ function MessageBubble({
   onReact: (id: number, emoji: string) => void;
   onOpenAttachment: (url: string, name: string) => void;
   onReply: (target: ReplyTarget) => void;
+  onCreateTask: (msg: Message) => void;
 }) {
   const [showActions, setShowActions] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -431,6 +433,13 @@ function MessageBubble({
           {showActions && (
             <div className={`absolute top-0 ${isMine ? "right-full mr-2" : "left-full ml-2"} flex items-center gap-1 bg-white border border-slate-200 rounded-full px-2 py-1 shadow-md z-10`}>
               <ReplyButton onClick={() => onReply({ id: msg.id, senderName: msg.senderName, content: (msg.attachmentName ? `[${msg.attachmentName}]` : msg.content).slice(0, 300) })} />
+              <button
+                onClick={() => onCreateTask(msg)}
+                className="p-1 rounded-full hover:bg-blue-50 text-slate-500 hover:text-blue-600 transition-colors"
+                title="Create task from this message"
+              >
+                <ClipboardList className="h-3.5 w-3.5" />
+              </button>
               <div className="relative">
                 <button
                   onClick={() => setShowEmojiPicker(p => !p)}
@@ -543,6 +552,9 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
   const [lastSeenId, setLastSeenId] = useState(0);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
+
+  // Create Task from Message dialog state
+  const [taskDialogMsg, setTaskDialogMsg] = useState<Message | null>(null);
 
   // @mention state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -893,6 +905,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
                   onReact={(id, emoji) => reactMutation.mutate({ messageId: id, submissionId, emoji })}
                   onOpenAttachment={handleOpenAttachment}
                   onReply={setReplyTarget}
+                  onCreateTask={(msg) => setTaskDialogMsg(msg)}
                 />
               )
             )}
@@ -985,6 +998,23 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
         <div className="px-4 py-3 bg-[#F0F0F0] border-t border-[#d9d9d9] text-center">
           <p className="text-xs text-slate-500">Viewers cannot send messages</p>
         </div>
+      )}
+
+      {/* Create Task from Message dialog */}
+      {taskDialogMsg && (
+        <CreateTaskFromMessageDialog
+          open={!!taskDialogMsg}
+          onClose={() => setTaskDialogMsg(null)}
+          messageContent={taskDialogMsg.content}
+          messageId={taskDialogMsg.id}
+          messageType="client"
+          submissionId={submissionId}
+          clientName={clientName}
+          onCreated={() => {
+            utils.admin.tasks.byClient.invalidate({ submissionId });
+            utils.admin.tasks.byClientWithDetails.invalidate({ submissionId });
+          }}
+        />
       )}
     </div>
   );

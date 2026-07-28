@@ -281,6 +281,7 @@ export default function AdminTasks() {
                 if (newTask.submissionId && newTask.description.trim()) {
                   createMutation.mutate({
                     submissionId: parseInt(newTask.submissionId),
+                    title: newTask.description.trim().slice(0, 80),
                     description: newTask.description.trim(),
                     area: newTask.area,
                   });
