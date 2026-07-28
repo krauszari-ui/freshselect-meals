@@ -473,32 +473,57 @@ async function startServer() {
         aiSummary = "AI summary unavailable.";
       }
 
-      // Build rich HTML email
-      const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      // Build focused HTML email — staff activity breakdown, no raw log
+      const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const fmtTime = (d: Date) => new Date(d).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" });
       const section = (title: string, rows: string[]) => rows.length === 0
         ? `<tr><td style="padding:12px 20px"><b style="color:#374151">${esc(title)}</b><br/><span style="color:#9ca3af;font-size:13px">Nothing to report.</span></td></tr>`
         : `<tr><td style="padding:12px 20px"><b style="color:#374151">${esc(title)}</b><ul style="margin:6px 0 0 0;padding-left:20px;font-size:13px;color:#374151">${rows.map(r => `<li>${r}</li>`).join("")}</ul></td></tr>`;
 
-      const newClientRows = data.newClients.map(c => `<b>${esc(c.name)}</b> — ${esc(c.referralSource ?? "Unknown source")} → <i>${esc(c.stage)}</i>`);
-      const stageRows = data.stageChanges.map(c => `<b>${esc(c.clientName ?? "Unknown")}</b>: ${esc(c.fromStage ?? "start")} → <b>${esc(c.toStage)}</b> <span style="color:#9ca3af">(${esc(c.actorName ?? "Staff")})</span>`);
-      const taskCreatedRows = data.tasksCreated.map(t => `${esc(t.title)}${t.clientName ? ` — <i>${esc(t.clientName)}</i>` : ""}`);
-      const taskDoneRows = data.tasksCompleted.map(t => `${esc(t.title)}${t.clientName ? ` — <i>${esc(t.clientName)}</i>` : ""}`);
-      const docRows = data.documentsUploaded.map(d => `${esc(d.fileName)} for <b>${esc(d.clientName ?? "Unknown")}</b> by ${esc(d.actorName ?? "Staff")}`);
-      const loginRows = Array.from(new Set(data.staffLogins.map(l => l.actorName ?? "Unknown"))).map(n => esc(n));
+      const newClientRows = data.newClients.map(c =>
+        `<b>${esc(c.name)}</b> — ${esc(c.referralSource ?? "Unknown source")} → <i>${esc(c.stage)}</i>`);
+      const stageRows = data.stageChanges.map(c =>
+        `<b>${esc(c.clientName ?? "Unknown")}</b>: ${esc(c.fromStage ?? "start")} → <b>${esc(c.toStage)}</b> <span style="color:#9ca3af">(${esc(c.actorName ?? "Staff")}, ${fmtTime(c.createdAt)})</span>`);
+      const taskCreatedRows = data.tasksCreated.map(t =>
+        `${esc(t.title)}${t.clientName ? ` — <i>${esc(t.clientName)}</i>` : ""}`);
+      const taskDoneRows = data.tasksCompleted.map(t =>
+        `${esc(t.title)}${t.clientName ? ` — <i>${esc(t.clientName)}</i>` : ""}`);
+      const docRows = data.documentsUploaded.map(d =>
+        `${esc(d.fileName)} for <b>${esc(d.clientName ?? "Unknown")}</b>${d.actorName ? ` by ${esc(d.actorName)}` : ""}`);
 
-      // Full action log (last 100)
-      const actionRows = data.allActions.slice(-100).map(a =>
-        `<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:4px 8px;font-size:12px;color:#6b7280">${new Date(a.createdAt).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" })}</td><td style="padding:4px 8px;font-size:12px;color:#374151">${esc(a.actorName ?? "System")}</td><td style="padding:4px 8px;font-size:12px;color:#374151">${esc(a.action.replace(/_/g, " "))}</td><td style="padding:4px 8px;font-size:12px;color:#6b7280">${esc(a.clientName ?? "")}</td></tr>`
-      ).join("");
+      // Per-staff breakdown — meaningful client-facing actions only
+      const MEANINGFUL_ACTIONS = new Set([
+        "stage_changed", "task_created", "task_completed", "task_updated", "task_deleted",
+        "document_uploaded", "document_deleted", "message_sent", "note_added", "note_updated",
+        "client_updated", "client_created", "referral_sent", "assessment_submitted",
+        "org_message_sent", "task_assigned",
+      ]);
+      type StaffEntry = { action: string; clientName: string | null; createdAt: Date };
+      const staffMap = new Map<string, StaffEntry[]>();
+      for (const a of data.allActions) {
+        if (!MEANINGFUL_ACTIONS.has(a.action)) continue;
+        if (!a.actorName) continue;
+        if (!staffMap.has(a.actorName)) staffMap.set(a.actorName, []);
+        staffMap.get(a.actorName)!.push({ action: a.action, clientName: a.clientName, createdAt: a.createdAt });
+      }
+      const staffSections = Array.from(staffMap.entries()).map(([name, entries]) => {
+        const rows = entries.map(e => {
+          const label = e.action.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+          const client = e.clientName ? ` — <i>${esc(e.clientName)}</i>` : "";
+          const time = `<span style="color:#9ca3af">${fmtTime(e.createdAt)}</span>`;
+          return `${time} ${esc(label)}${client}`;
+        });
+        return section(`👤 ${esc(name)} (${entries.length} action${entries.length !== 1 ? "s" : ""})`, rows);
+      }).join("");
 
-      const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#f9fafb;margin:0;padding:20px">
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;background:#f9fafb;margin:0;padding:20px">
 <div style="max-width:680px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1)">
   <div style="background:#16a34a;padding:20px 24px">
-    <h1 style="margin:0;color:#fff;font-size:20px">FreshSelect Meals — Daily Report</h1>
-    <p style="margin:4px 0 0;color:#bbf7d0;font-size:14px">${esc(data.date)} (New York time)</p>
+    <h1 style="margin:0;color:#fff;font-size:20px">🌿 FreshSelect Meals — Daily Report</h1>
+    <p style="margin:4px 0 0;color:#bbf7d0;font-size:14px">${esc(data.date)} · New York time · a.krausz@levelupresources.org</p>
   </div>
   <div style="padding:16px 20px;background:#f0fdf4;border-bottom:1px solid #dcfce7">
-    <p style="margin:0;font-size:15px;color:#166534;line-height:1.5">${esc(aiSummary)}</p>
+    <p style="margin:0;font-size:15px;color:#166534;line-height:1.6"><b>Summary:</b> ${esc(aiSummary)}</p>
   </div>
   <table style="width:100%;border-collapse:collapse">
     ${section(`🆕 New Clients (${data.newClients.length})`, newClientRows)}
@@ -506,22 +531,17 @@ async function startServer() {
     ${section(`✅ Tasks Created (${data.tasksCreated.length})`, taskCreatedRows)}
     ${section(`☑️ Tasks Completed (${data.tasksCompleted.length})`, taskDoneRows)}
     ${section(`📄 Documents Uploaded (${data.documentsUploaded.length})`, docRows)}
-    ${section(`👤 Staff Active (${loginRows.length})`, loginRows)}
   </table>
-  ${data.allActions.length > 0 ? `
-  <div style="padding:12px 20px;border-top:1px solid #e5e7eb">
-    <b style="color:#374151;font-size:13px">Full Activity Log (${data.allActions.length} actions)</b>
-    <table style="width:100%;border-collapse:collapse;margin-top:8px">
-      <thead><tr style="background:#f9fafb"><th style="padding:4px 8px;font-size:11px;color:#9ca3af;text-align:left">Time (ET)</th><th style="padding:4px 8px;font-size:11px;color:#9ca3af;text-align:left">Staff</th><th style="padding:4px 8px;font-size:11px;color:#9ca3af;text-align:left">Action</th><th style="padding:4px 8px;font-size:11px;color:#9ca3af;text-align:left">Client</th></tr></thead>
-      <tbody>${actionRows}</tbody>
-    </table>
+  ${staffMap.size > 0 ? `
+  <div style="border-top:2px solid #16a34a;margin-top:4px">
+    <div style="padding:10px 20px;background:#f0fdf4"><b style="color:#166534;font-size:14px">Staff Activity Breakdown</b></div>
+    <table style="width:100%;border-collapse:collapse">${staffSections}</table>
   </div>` : ""}
   <div style="padding:12px 20px;background:#f9fafb;border-top:1px solid #e5e7eb">
-    <p style="margin:0;font-size:11px;color:#9ca3af">FreshSelect Meals automated daily digest &mdash; sent at 08:00 UTC. Manage at freshselectmeals.com</p>
+    <p style="margin:0;font-size:11px;color:#9ca3af">FreshSelect Meals automated daily digest — sent at 08:00 ET daily · freshselectmeals.com</p>
   </div>
 </div>
 </body></html>`;
-
       const ok = await sendEmail({
         to: isTest ? "a.krausz@levelupresources.org" : "a.krausz@levelupresources.org",
         subject: `FreshSelect Meals Daily Report${isTest ? " [TEST]" : ""} — ${data.date}`,
