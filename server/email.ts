@@ -42,10 +42,19 @@ function getResend(): Resend {
 // Read FROM_EMAIL dynamically so env var updates are picked up without restart.
 // Some deployment platforms (Vercel) store angle brackets as \u003c / \u003e —
 // we decode those so Resend receives a valid RFC 5322 address.
+function decodeEnvEmail(raw: string): string {
+  // The Manus secrets system stores angle brackets as literal \u003c / \u003e.
+  // Split on the pattern and rebuild to avoid regex backslash confusion.
+  return raw
+    .split('\\u003c').join('<')
+    .split('\\u003e').join('>')
+    .split('\\u0026').join('&');
+}
+
 function getFromEmail(): string {
   const raw = process.env.RESEND_FROM_EMAIL ?? "FreshSelect Meals <admin@freshselectmeals.com>";
-  // Decode \uXXXX sequences that Vercel/some env stores may inject
-  return raw.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  const decoded = decodeEnvEmail(raw);
+  return decoded.includes('@') ? decoded : 'FreshSelect Meals <admin@freshselectmeals.com>';
 }
 
 const ADMIN_EMAIL = "info@freshselectmeals.com";
