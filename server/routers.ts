@@ -37,7 +37,7 @@ import {
   createEmailBlast, listEmailBlasts, cancelEmailBlast,
   getEmailBlastById, getBlastReplies, updateEmailBlastStatus,
   listAssessors, updateSubmissionAssessor,
-  getUserById,
+  getUserById, getAdminWorkerUserIds,
   createClientMessage, listClientMessages, getNewClientMessages, deleteClientMessage, getClientMessageById, getThreadReadWatermarks,
   toggleMessageReaction, markThreadRead, getThreadUnreadCount, getAllUnreadCounts, getInboxThreads,
   listOrganizations, getOrganizationById, createOrganization, updateOrganization,
@@ -376,14 +376,19 @@ export const appRouter = router({
           } else {
             console.log(`[Email] Skipped (load test mode) for ref: ${refNumber}`);
           }
-          // In-app notification for new submission
-          createNotification({
-            type: "new_submission",
-            title: `New application: ${input.firstName} ${input.lastName}`,
-            body: `Ref: ${refNumber} \u2014 ${input.supermarket} \u2014 ${input.email}`,
-            link: `/admin/clients`,
-            submissionId: null,
-          }).catch((e: unknown) => console.warn("[Notification] new_submission:", e));
+          // In-app notification for new submission — send to each admin/worker individually (not broadcast)
+          getAdminWorkerUserIds().then((adminIds) => {
+            for (const uid of adminIds) {
+              createNotification({
+                type: "new_submission",
+                title: `New application: ${input.firstName} ${input.lastName}`,
+                body: `Ref: ${refNumber} \u2014 ${input.supermarket} \u2014 ${input.email}`,
+                link: `/admin/clients`,
+                submissionId: null,
+                userId: uid,
+              }).catch((e: unknown) => console.warn("[Notification] new_submission:", e));
+            }
+          }).catch((e: unknown) => console.warn("[Notification] getAdminWorkerUserIds failed:", e));
 
           // Generate Household Attestation + HIPAA PDF (non-blocking)
           generateAttestationPdf({
@@ -835,7 +840,7 @@ export const appRouter = router({
         clientName: `${existing.firstName} ${existing.lastName}`,
         details: { previousAssessorId, newAssessorId: input.assessorId },
       });
-      // Notify the newly assigned assessor (if assigning, not unassigning)
+      // Notify the newly assigned assessor (if assigning, not unassigning) — target only that assessor
       if (input.assessorId) {
         await createNotification({
           type: "assessor_assigned",
@@ -843,6 +848,7 @@ export const appRouter = router({
           body: `${existing.firstName} ${existing.lastName} (${existing.medicaidId}) has been assigned to you for assessment.`,
           link: `/assessor`,
           submissionId: input.submissionId,
+          userId: input.assessorId,
         });
       }
       return { success: true };
@@ -1638,14 +1644,19 @@ export const appRouter = router({
           direction: "referrer",
           attachmentUrl: safeAttachmentUrl,
         });
-        // Fire in-app notification for staff
-        createNotification({
-          type: "referrer_reply",
-          title: `New message from referrer: ${link.referrerName || link.email || link.code}`,
-          body: input.message.slice(0, 160) + (input.message.length > 160 ? "\u2026" : ""),
-          link: input.submissionId ? `/admin/clients/${input.submissionId}` : `/admin/referrals`,
-          submissionId: input.submissionId ?? null,
-        }).catch((e: unknown) => console.warn("[Notification] referrer_reply:", e));
+        // Fire in-app notification for staff — target admin/worker users, not broadcast
+        getAdminWorkerUserIds().then((adminIds) => {
+          for (const uid of adminIds) {
+            createNotification({
+              type: "referrer_reply",
+              title: `New message from referrer: ${link.referrerName || link.email || link.code}`,
+              body: input.message.slice(0, 160) + (input.message.length > 160 ? "\u2026" : ""),
+              link: input.submissionId ? `/admin/clients/${input.submissionId}` : `/admin/referrals`,
+              submissionId: input.submissionId ?? null,
+              userId: uid,
+            }).catch((e: unknown) => console.warn("[Notification] referrer_reply:", e));
+          }
+        }).catch((e: unknown) => console.warn("[Notification] referrer_reply getAdminWorkerUserIds failed:", e));
         return { success: true, id };
       }),
       markAllRead: publicProcedure.input(z.object({
@@ -2192,12 +2203,14 @@ export const appRouter = router({
             if (mentionedId === ctx.user.id) continue;
             const mentionedUser = await getUserById(mentionedId);
             if (!mentionedUser) continue;
+            // Target only the mentioned user — not a broadcast
             createNotification({
               type: "chat_mention",
               title: `${ctx.user.name ?? "Staff"} mentioned you in ${clientLabel}'s chat`,
               body: input.content.slice(0, 200),
               link: `/admin/clients/${input.submissionId}?tab=chat`,
               submissionId: input.submissionId,
+              userId: mentionedId,
             }).catch(() => {});
           }
         }
@@ -2274,7 +2287,9 @@ export const appRouter = router({
     /** Get inbox threads with latest message and unread count */
     inbox: staffProcedure
       .query(async ({ ctx }) => {
-        const rows = await getInboxThreads(ctx.user.id);
+        // Assessors only see threads for their assigned clients; admins/workers see all
+        const assessorFilter = ctx.user.role === "assessor" ? ctx.user.id : undefined;
+        const rows = await getInboxThreads(ctx.user.id, assessorFilter);
         return rows.map((r: any) => ({
           submissionId: r.submissionId,
           clientName: r.firstName && r.lastName

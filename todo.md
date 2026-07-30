@@ -975,3 +975,19 @@
 - [x] FRONTEND: Duplicate phone/CIN warning on Add Client and Edit Client dialogs
 - [x] TESTS: Write vitest tests for new task procedures (title, dueDate, priority, sourceMessage)
 - [x] TESTS: Write vitest test for daily digest data query
+
+## Assessor Portal Messages Tab & Notification Scoping (July 2026)
+- [x] FRONTEND: Restructure AssessorPortal with left sidebar (My Clients / Messages nav items)
+- [x] FRONTEND: Add Messages view to AssessorPortal — two-panel chat inbox (thread list + ClientChatTab)
+- [x] FRONTEND: Messages view scoped to assessor's assigned clients only (via chat.inbox assessorId filter)
+- [x] FRONTEND: Unread badge on Messages sidebar nav item (polls chat.inbox every 15s)
+- [x] FRONTEND: No notification bell in AssessorPortal (per Assessor UI Restrictions policy)
+- [x] BACKEND: Add getAdminWorkerUserIds() helper in db.ts
+- [x] BACKEND: Fix new_submission notification — target each admin/worker individually (not broadcast)
+- [x] BACKEND: Fix referrer_reply notification — target each admin/worker individually (not broadcast)
+- [x] BACKEND: Fix inbound_email notification (index.ts) — target each admin/worker individually (not broadcast)
+- [x] BACKEND: Fix assessor_assigned notification — target only the assigned assessor (userId: input.assessorId)
+- [x] BACKEND: Fix chat_mention notification — target only the mentioned user (userId: mentionedId)
+- [x] BACKEND: chat.inbox procedure filters threads by assessorId when user.role === "assessor"
+- [x] BACKEND: getInboxThreads() in db.ts accepts optional assessorId filter
+- [x] TESTS: All 308 tests passing, 0 TypeScript errors

@@ -582,18 +582,24 @@ export async function listWorkers() {
 export async function listStaffUsers() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  // SAFE_USER_COLUMNS projection — never exposes hash
-  // Only return active (non-deactivated) staff for @mention dropdown
-  const staffRoleFilter = or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"), eq(users.role, "assessor"));
   const rows = await db.select(SAFE_USER_COLUMNS).from(users).where(
-    and(staffRoleFilter, eq(users.isActive, 1))
+    and(or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"), eq(users.role, "assessor")), eq(users.isActive, 1))
   ).orderBy(desc(users.createdAt));
   // Fetch hasPassword separately to avoid exposing the hash
   const hashRows = await db.select({ id: users.id, passwordHash: users.passwordHash }).from(users).where(
-    and(staffRoleFilter, eq(users.isActive, 1))
+    and(or(eq(users.role, "worker"), eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "viewer"), eq(users.role, "assessor")), eq(users.isActive, 1))
   );
   const hashMap = new Map(hashRows.map(r => [r.id, !!r.passwordHash]));
   return rows.map(row => ({ ...row, hasPassword: hashMap.get(row.id) ?? false }));
+}
+
+/** Get IDs of all active admin/super_admin/worker users — for sending targeted notifications to staff. */
+export async function getAdminWorkerUserIds(): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const roleFilter = or(eq(users.role, "admin"), eq(users.role, "super_admin"), eq(users.role, "worker"));
+  const rows = await db.select({ id: users.id }).from(users).where(and(roleFilter, eq(users.isActive, 1)));
+  return rows.map((r) => r.id);
 }
 
 export async function createStaffUser(data: {
@@ -1615,12 +1621,17 @@ export async function getAllUnreadCounts(userId: number): Promise<Record<number,
   return result;
 }
 
-/** Get the latest message per thread for the global inbox view. */
-export async function getInboxThreads(userId: number) {
+/** Get the latest message per thread for the global inbox view.
+ * @param userId - The current user's ID (for unread count calculation)
+ * @param assessorId - Optional: if provided, only return threads for clients assigned to this assessor
+ */
+export async function getInboxThreads(userId: number, assessorId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   // Get all threads that have at least one message
+  // When assessorId is provided, only show threads for clients assigned to that assessor
+  const assessorFilter = assessorId != null ? sql`AND s.assessorId = ${assessorId}` : sql``;
   const latestPerThread = await db.execute(sql`
     SELECT cm.submissionId,
            cm.id AS lastMessageId,
@@ -1643,6 +1654,7 @@ export async function getInboxThreads(userId: number) {
       SELECT MAX(cm3.id) FROM clientMessages cm3
       WHERE cm3.submissionId = cm.submissionId AND cm3.isDeleted = 0
     )
+    ${assessorFilter}
     ORDER BY cm.createdAt DESC
     LIMIT 100
   `);
