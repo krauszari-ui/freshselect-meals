@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { type ReactNode, useState, useEffect } from "react";
 import InactivityGuard from "@/components/InactivityGuard";
 import { trpc } from "@/lib/trpc";
+import { useNotificationToast } from "@/hooks/useNotificationToast";
 
 const NAV_ITEMS = [
   { path: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -242,6 +243,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     enabled: !!user && user.role !== "assessor",
   });
   const unreadCount = unreadData?.count ?? 0;
+
+  // Real-time toast popups for new notifications (admin/worker/viewer only)
+  useNotificationToast(!!user && user.role !== "assessor");
 
   // Poll chat unread count every 15 seconds (only when tab is focused)
   const { data: chatUnreadData } = trpc.chat.allUnreadCounts.useQuery(undefined, {

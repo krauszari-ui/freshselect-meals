@@ -1002,3 +1002,11 @@
 - [x] BACKEND: Improve org_referral copy — "[Actor] referred [Client] to [Org]" with link to /org/clients
 - [x] FRONTEND: Update AdminNotifications TYPE_CONFIG — add assessor_assigned, org_referral, chat_mention types with proper labels and icons
 - [x] TESTS: All 308 tests passing, 0 TypeScript errors
+
+## Real-Time Notification Toasts (July 2026)
+- [x] FRONTEND: Create useNotificationToast hook (client/src/hooks/useNotificationToast.ts)
+- [x] FRONTEND: Hook polls notifications.list every 15s; on first fetch sets baseline (no toast); on subsequent fetches toasts each new notification
+- [x] FRONTEND: Toast shows notification title, truncated body, type icon (emoji), and "View" action button linking to notification.link
+- [x] FRONTEND: Wire hook into AdminLayout — enabled for admin/worker/viewer, disabled for assessors (per policy)
+- [x] FRONTEND: Wire hook into OrgPortal — enabled for all org staff
+- [x] TESTS: All 308 tests passing, 0 TypeScript errors

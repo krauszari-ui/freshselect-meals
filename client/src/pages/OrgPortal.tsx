@@ -13,6 +13,7 @@ import { ReplyBar, ReplyButton, ReplyQuote, type ReplyTarget } from "@/component
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
+import { useNotificationToast } from "@/hooks/useNotificationToast";
 // OrgGroupChat component - defined below
 
 export default function OrgPortal() {
@@ -74,6 +75,9 @@ function OrgPortalContent({ user, logout, activeView, setActiveView, search, set
     refetchInterval: 30_000,
   });
   const unreadCount = unreadData?.count ?? 0;
+
+  // Real-time toast popups for new notifications
+  useNotificationToast(!!user);
 
   // ── Org group chat unread count (for Group Chat tab badge) ───────────────────
   const { data: groupUnreadData } = trpc.org.groupUnreadCount.useQuery(
