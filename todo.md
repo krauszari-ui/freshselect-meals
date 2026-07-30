@@ -991,3 +991,14 @@
 - [x] BACKEND: chat.inbox procedure filters threads by assessorId when user.role === "assessor"
 - [x] BACKEND: getInboxThreads() in db.ts accepts optional assessorId filter
 - [x] TESTS: All 308 tests passing, 0 TypeScript errors
+
+## Notification Scoping Deep Fix & Copy Improvements (July 2026)
+- [x] BACKEND: Remove userId IS NULL broadcast clause from listNotifications — only show targeted notifications
+- [x] BACKEND: Remove userId IS NULL broadcast clause from getUnreadNotificationCount
+- [x] BACKEND: Fix markAllNotificationsRead to only mark user's own notifications (not all rows)
+- [x] BACKEND: Improve new_submission copy — "New application from [Name]" with Ref #
+- [x] BACKEND: Improve assessor_assigned copy — "[Actor] assigned [Client] to you" with CIN
+- [x] BACKEND: Improve referrer_reply copy — "[Referrer] sent a message about [Client]" when client known
+- [x] BACKEND: Improve org_referral copy — "[Actor] referred [Client] to [Org]" with link to /org/clients
+- [x] FRONTEND: Update AdminNotifications TYPE_CONFIG — add assessor_assigned, org_referral, chat_mention types with proper labels and icons
+- [x] TESTS: All 308 tests passing, 0 TypeScript errors

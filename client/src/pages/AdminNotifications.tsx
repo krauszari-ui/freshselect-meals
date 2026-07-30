@@ -1,14 +1,17 @@
 import AdminLayout from "@/components/AdminLayout";
 import { trpc } from "@/lib/trpc";
-import { Bell, CheckCheck, Mail, MessageSquare, UserPlus, ClipboardList, ChevronRight } from "lucide-react";
+import { Bell, CheckCheck, Mail, MessageSquare, UserPlus, ClipboardList, ChevronRight, Building2, AtSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 
 const TYPE_CONFIG: Record<string, { icon: typeof Bell; color: string; label: string }> = {
-  inbound_email:  { icon: Mail,           color: "bg-blue-100 text-blue-600",   label: "Email Reply"       },
-  referrer_reply: { icon: MessageSquare,  color: "bg-purple-100 text-purple-600", label: "Referrer Message" },
-  new_submission: { icon: UserPlus,       color: "bg-green-100 text-green-600",  label: "New Application"  },
-  task_update:    { icon: ClipboardList,  color: "bg-orange-100 text-orange-600", label: "Task Update"     },
+  inbound_email:    { icon: Mail,           color: "bg-blue-100 text-blue-600",    label: "Email Reply"        },
+  referrer_reply:   { icon: MessageSquare,  color: "bg-purple-100 text-purple-600", label: "Referrer Message"  },
+  new_submission:   { icon: UserPlus,       color: "bg-green-100 text-green-600",   label: "New Application"   },
+  task_update:      { icon: ClipboardList,  color: "bg-orange-100 text-orange-600", label: "Task Update"       },
+  assessor_assigned:{ icon: ClipboardList,  color: "bg-teal-100 text-teal-600",    label: "Client Assigned"   },
+  org_referral:     { icon: Building2,      color: "bg-indigo-100 text-indigo-600", label: "Org Referral"      },
+  chat_mention:     { icon: AtSign,         color: "bg-yellow-100 text-yellow-600", label: "Mention"           },
 };
 
 function timeAgo(date: Date | string) {

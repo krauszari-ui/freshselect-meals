@@ -1064,12 +1064,12 @@ export async function createNotification(payload: Omit<InsertNotification, "id" 
   return (result[0] as any).insertId as number;
 }
 
-/** List notifications for a user: shows notifications targeted to them (userId = userId) OR broadcast (userId IS NULL). */
+/** List notifications for a user: shows only notifications explicitly targeted to them (userId = userId). */
 export async function listNotifications(userId: number, limit = 50): Promise<(Notification & { isReadByUser: boolean })[]> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(notifications)
-    .where(or(isNull(notifications.userId), eq(notifications.userId, userId)))
+    .where(eq(notifications.userId, userId))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
   if (rows.length === 0) return [];
@@ -1082,18 +1082,18 @@ export async function listNotifications(userId: number, limit = 50): Promise<(No
   return rows.map((r) => ({ ...r, isReadByUser: readSet.has(r.id) }));
 }
 
-/** Count unread notifications for a specific user (targeted to them or broadcast). */
+/** Count unread notifications for a specific user (targeted to them only). */
 export async function getUnreadNotificationCount(userId: number): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
-  // Total notifications visible to this user (targeted + broadcast)
+  // Total notifications targeted to this user
   const [totalRow] = await db.select({ count: count() }).from(notifications)
-    .where(or(isNull(notifications.userId), eq(notifications.userId, userId)));
+    .where(eq(notifications.userId, userId));
   const total = Number(totalRow?.count ?? 0);
   if (total === 0) return 0;
   // Subtract those the user has already read
   const visibleRows = await db.select({ id: notifications.id }).from(notifications)
-    .where(or(isNull(notifications.userId), eq(notifications.userId, userId)));
+    .where(eq(notifications.userId, userId));
   const visibleIds = visibleRows.map((r) => r.id);
   if (visibleIds.length === 0) return 0;
   const [readRow] = await db.select({ count: count() }).from(notificationReads)
@@ -1111,15 +1111,17 @@ export async function markNotificationRead(notificationId: number, userId: numbe
     .onDuplicateKeyUpdate({ set: { readAt: new Date() } });
 }
 
-/** Mark all current notifications as read for a specific user. */
+/** Mark all current notifications as read for a specific user (only their own targeted notifications). */
 export async function markAllNotificationsRead(userId: number) {
   const db = await getDb();
   if (!db) return;
-  const allNotifs = await db.select({ id: notifications.id }).from(notifications);
-  if (allNotifs.length === 0) return;
+  // Only mark notifications that are targeted to this user
+  const userNotifs = await db.select({ id: notifications.id }).from(notifications)
+    .where(eq(notifications.userId, userId));
+  if (userNotifs.length === 0) return;
   // Upsert a read receipt for every notification for this user
   await db.insert(notificationReads)
-    .values(allNotifs.map((n) => ({ notificationId: n.id, userId })))
+    .values(userNotifs.map((n) => ({ notificationId: n.id, userId })))
     .onDuplicateKeyUpdate({ set: { readAt: new Date() } });
 }
 

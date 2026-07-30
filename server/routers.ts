@@ -376,13 +376,13 @@ export const appRouter = router({
           } else {
             console.log(`[Email] Skipped (load test mode) for ref: ${refNumber}`);
           }
-          // In-app notification for new submission — send to each admin/worker individually (not broadcast)
+          // In-app notification for new submission — send to each admin/worker individually
           getAdminWorkerUserIds().then((adminIds) => {
             for (const uid of adminIds) {
               createNotification({
                 type: "new_submission",
-                title: `New application: ${input.firstName} ${input.lastName}`,
-                body: `Ref: ${refNumber} \u2014 ${input.supermarket} \u2014 ${input.email}`,
+                title: `New application from ${input.firstName} ${input.lastName}`,
+                body: `Ref #${refNumber} — ${input.supermarket} — ${input.email}`,
                 link: `/admin/clients`,
                 submissionId: null,
                 userId: uid,
@@ -842,10 +842,11 @@ export const appRouter = router({
       });
       // Notify the newly assigned assessor (if assigning, not unassigning) — target only that assessor
       if (input.assessorId) {
+        const actorName = ctx.user.name ?? ctx.user.email ?? "Staff";
         await createNotification({
           type: "assessor_assigned",
-          title: "New client assigned to you",
-          body: `${existing.firstName} ${existing.lastName} (${existing.medicaidId}) has been assigned to you for assessment.`,
+          title: `${actorName} assigned ${existing.firstName} ${existing.lastName} to you`,
+          body: `CIN: ${existing.medicaidId ?? "N/A"} — Please complete the assessment at your earliest convenience.`,
           link: `/assessor`,
           submissionId: input.submissionId,
           userId: input.assessorId,
@@ -1645,11 +1646,18 @@ export const appRouter = router({
           attachmentUrl: safeAttachmentUrl,
         });
         // Fire in-app notification for staff — target admin/worker users, not broadcast
+        const referrerLabel = link.referrerName || link.email || link.code;
+        const clientLabel = input.submissionId
+          ? await getSubmissionById(input.submissionId).then((s) => s ? `${s.firstName} ${s.lastName}`.trim() : null).catch(() => null)
+          : null;
+        const notifTitle = clientLabel
+          ? `${referrerLabel} sent a message about ${clientLabel}`
+          : `New message from ${referrerLabel}`;
         getAdminWorkerUserIds().then((adminIds) => {
           for (const uid of adminIds) {
             createNotification({
               type: "referrer_reply",
-              title: `New message from referrer: ${link.referrerName || link.email || link.code}`,
+              title: notifTitle,
               body: input.message.slice(0, 160) + (input.message.length > 160 ? "\u2026" : ""),
               link: input.submissionId ? `/admin/clients/${input.submissionId}` : `/admin/referrals`,
               submissionId: input.submissionId ?? null,
@@ -2439,14 +2447,20 @@ export const appRouter = router({
         if (input.orgId) {
           const org = await getOrganizationById(input.orgId);
           orgName = org?.name;
-          // Notify all org members
+          // Fetch client name for the notification
+          const sub = await getSubmissionById(input.submissionId);
+          const clientName = sub ? `${sub.firstName} ${sub.lastName}`.trim() : `Client #${input.submissionId}`;
+          const actorName = ctx.user.name ?? ctx.user.email ?? "Staff";
+          // Notify all org members individually
           const members = await listOrgMembers(input.orgId);
           for (const member of members) {
             await createNotification({
               userId: member.id,
               type: "org_referral",
-              title: `New client referred to ${orgName ?? "your organization"}`,
-              body: input.note ? `Note: ${input.note}` : "A new client has been referred to your organization.",
+              title: `${actorName} referred ${clientName} to ${orgName ?? "your organization"}`,
+              body: input.note ? `Note: ${input.note}` : `${clientName} has been referred to ${orgName ?? "your organization"} for services.`,
+              link: `/org/clients`,
+              submissionId: input.submissionId,
             }).catch(() => {});
           }
         }
