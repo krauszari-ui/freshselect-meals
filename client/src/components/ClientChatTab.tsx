@@ -37,6 +37,14 @@ interface Message {
   replyToContent?: string | null;
 }
 
+const MAX_CHAT_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const ALLOWED_CHAT_ATTACHMENT_TYPES = new Set([
+  "application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+]);
+
 interface StaffUser {
   id: number;
   name: string;
@@ -569,9 +577,9 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
   const inputWrapRef = useRef<HTMLDivElement>(null);
 
   // ── Load messages ──────────────────────────────────────────────────────────
-  const { data: messages = [], isLoading, refetch } = trpc.chat.list.useQuery(
+  const { data: messages = [], isLoading, isError, error, refetch } = trpc.chat.list.useQuery(
     { submissionId, limit: 50 },
-    { refetchOnWindowFocus: false, staleTime: 0 }
+    { refetchOnWindowFocus: true, staleTime: 0 }
   );
 
   // ── Load staff for @mention ────────────────────────────────────────────────
@@ -673,10 +681,23 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
     onError: (err) => toast.error(err.message ?? "Failed to upload file"),
   });
 
+  const clearAttachment = useCallback(() => {
+    setAttachFile(null);
+    setAttachPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (attachPreview) URL.revokeObjectURL(attachPreview);
+    };
+  }, [attachPreview]);
+
   const handleSend = useCallback(async () => {
     const content = text.trim();
-    if (!content && !attachFile) return;
+    if (sending || uploading || (!content && !attachFile)) return;
     setSending(true);
+    let tempId: number | null = null;
     try {
       let attachmentUrl: string | undefined;
       let attachmentName: string | undefined;
@@ -707,7 +728,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
       const mentionedInText = staffListRef.current.filter(u => content.includes(`@${u.name.trim()}`));
 
       // Add optimistic message immediately so it doesn't disappear while waiting
-      const tempId = -(Date.now());
+      tempId = -(Date.now());
       const optimistic: Message = {
         id: tempId,
         submissionId,
@@ -728,8 +749,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
       setOptimisticMessages(prev => [...prev, optimistic]);
 
       setText("");
-      setAttachFile(null);
-      setAttachPreview(null);
+      clearAttachment();
       setMentionedUsers([]);
       mentionedUsersRef.current = [];
       setMentionQuery(null);
@@ -750,12 +770,19 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
       await refetch();
       setOptimisticMessages([]);
     } catch {
-      // errors handled in mutation callbacks
+      // Restore the drafted text/file after a failed mutation and remove the ghost bubble.
+      if (tempId != null) setOptimisticMessages(prev => prev.filter(message => message.id !== tempId));
+      setText(content);
+      setReplyTarget(replyTarget);
+      if (attachFile) {
+        setAttachFile(attachFile);
+        setAttachPreview(attachFile.type.startsWith("image/") ? URL.createObjectURL(attachFile) : null);
+      }
     } finally {
       setSending(false);
       setUploading(false);
     }
-  }, [text, attachFile, submissionId, sendMutation, uploadAttachmentMutation, refetch]);
+  }, [text, attachFile, submissionId, sendMutation, uploadAttachmentMutation, refetch, user, replyTarget, sending, uploading, clearAttachment]);
 
   // ── Delete message ────────────────────────────────────────────────────────
   const deleteMutation = trpc.chat.delete.useMutation({
@@ -773,7 +800,17 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 16 * 1024 * 1024) { toast.error("File must be under 16 MB"); return; }
+    if (!ALLOWED_CHAT_ATTACHMENT_TYPES.has(file.type)) {
+      toast.error("Choose a PDF, image, Word document, or plain-text file.");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > MAX_CHAT_ATTACHMENT_BYTES) {
+      toast.error("File must be 10 MB or smaller");
+      e.target.value = "";
+      return;
+    }
+    if (attachPreview) URL.revokeObjectURL(attachPreview);
     setAttachFile(file);
     if (file.type.startsWith("image/")) {
       const url = URL.createObjectURL(file);
@@ -872,7 +909,16 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c8b8a2' fill-opacity='0.18'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
         }}
       >
-        {isLoading ? (
+        {isError ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
+            <MessageSquare className="h-8 w-8 text-red-300" />
+            <div>
+              <p className="text-sm font-medium text-slate-700">Couldn’t load this conversation</p>
+              <p className="text-xs text-slate-400 mt-1">{error?.message || "Please check your connection and try again."}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>Retry</Button>
+          </div>
+        ) : isLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
             <p className="text-sm text-slate-400">Loading messages...</p>
@@ -930,7 +976,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
               <p className="text-xs text-slate-400">{(attachFile.size / 1024).toFixed(1)} KB</p>
             </div>
             <button
-              onClick={() => { setAttachFile(null); setAttachPreview(null); }}
+              onClick={clearAttachment}
               className="p-1 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
             >
               <X className="h-4 w-4" />
@@ -963,7 +1009,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
             >
               <Paperclip className="h-5 w-5" />
             </button>
-            <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" />
+            <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,.doc,.docx,.txt" />
 
             {/* Text input */}
             <div className="flex-1 relative">

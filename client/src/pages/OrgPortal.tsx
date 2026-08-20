@@ -8,7 +8,7 @@ import {
   ChevronRight, Clock, CheckCircle2, ClipboardList,
 } from "lucide-react";
 import { CreateTaskFromMessageDialog } from "@/components/CreateTaskFromMessageDialog";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ReplyBar, ReplyButton, ReplyQuote, type ReplyTarget } from "@/components/ReplyBar";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
@@ -18,9 +18,14 @@ import { useNotificationToast } from "@/hooks/useNotificationToast";
 
 export default function OrgPortal() {
   const { user, loading, logout } = useAuth();
+  const [location] = useLocation();
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [activeView, setActiveView] = useState<"clients" | "chat">("clients");
+  const [activeView, setActiveView] = useState<"clients" | "chat">(() => location.includes("view=chat") ? "chat" : "clients");
+
+  useEffect(() => {
+    if (location.includes("view=chat")) setActiveView("chat");
+  }, [location]);
 
   // ── Auth guard ───────────────────────────────────────────────────────────────
   if (loading) {
@@ -271,14 +276,24 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
   const [taskDialogMsg, setTaskDialogMsg] = useState<any | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const utils = trpc.useUtils();
-  const { data: messages = [], isLoading } = trpc.org.groupMessages.useQuery(
+  const { data: messages = [], isLoading, isError, error, refetch } = trpc.org.groupMessages.useQuery(
     { orgId },
     { refetchInterval: 10_000, refetchIntervalInBackground: false },
   );
   const { data: staffListRaw = [] } = trpc.chat.staffList.useQuery(undefined, {
     staleTime: 60_000, refetchOnWindowFocus: false,
   });
-  const knownNames = (staffListRaw as { name: string }[]).map(u => u.name);
+  const staffList = staffListRaw as { id: number; name: string }[];
+  const knownNames = staffList.map(u => u.name);
+  const markReadMutation = trpc.org.markGroupRead.useMutation();
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      const latestId = Math.max(...messages.map((message: any) => message.id));
+      markReadMutation.mutate({ orgId, lastMessageId: latestId });
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages.length, orgId]);
   const sendMsg = trpc.org.sendGroupMessage.useMutation({
     onSuccess: () => {
       utils.org.groupMessages.invalidate({ orgId });
@@ -291,8 +306,11 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
 
   const handleSend = () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    sendMsg.mutate({ orgId, content: trimmed, replyToId: replyTarget?.id });
+    if (sendMsg.isPending || !trimmed) return;
+    const mentionedUserIds = staffList
+      .filter((staffUser) => staffUser.name.trim() && trimmed.includes(`@${staffUser.name.trim()}`))
+      .map((staffUser) => staffUser.id);
+    sendMsg.mutate({ orgId, content: trimmed, mentionedUserIds, replyToId: replyTarget?.id });
   };
 
   return (
@@ -319,12 +337,19 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c8b8a2' fill-opacity='0.18'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
         }}
       >
-        {isLoading && (
+        {isError && (
+          <div className="flex flex-col items-center justify-center h-32 gap-3 px-6 text-center">
+            <p className="text-sm font-medium text-slate-700">Couldn’t load this group chat</p>
+            <p className="text-xs text-slate-400">{error?.message || "Please try again."}</p>
+            <button onClick={() => refetch()} className="text-xs font-medium text-emerald-700 hover:underline">Retry</button>
+          </div>
+        )}
+        {isLoading && !isError && (
           <div className="flex items-center justify-center h-32">
             <div className="text-center text-slate-500 text-sm py-8">Loading messages…</div>
           </div>
         )}
-        {!isLoading && messages.length === 0 && (
+        {!isLoading && !isError && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
             <div className="text-center text-slate-500 text-sm py-8">No messages yet. Start the conversation!</div>
           </div>
@@ -383,12 +408,13 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
       <div className="px-3 py-2.5 bg-[#F0F0F0] border-t border-[#d9d9d9] flex-shrink-0">
         <ReplyBar replyTarget={replyTarget} onCancel={() => setReplyTarget(null)} />
         <div className="flex items-end gap-2">
-          <input
-            className="flex-1 rounded-3xl border-0 bg-white shadow-sm text-sm px-4 py-3 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors min-h-[44px]"
+          <textarea
+            className="flex-1 resize-none min-h-[44px] max-h-[120px] rounded-3xl border-0 bg-white shadow-sm text-sm px-4 py-3 focus:outline-none focus:ring-1 focus:ring-emerald-400 transition-colors"
             placeholder="Type a message..."
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+            onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+            rows={1}
           />
           <button
             onClick={handleSend}

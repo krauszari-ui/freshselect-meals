@@ -15,6 +15,7 @@ import {
 import { CreateTaskFromMessageDialog } from "@/components/CreateTaskFromMessageDialog";
 import { ReplyBar, ReplyButton, ReplyQuote, type ReplyTarget } from "@/components/ReplyBar";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -202,10 +203,11 @@ function OrgChannelRow({ org, isActive, onClick }: {
 
 // ─── Org Chat Panel ───────────────────────────────────────────────────────────
 
-function OrgChatPanel({ orgId, orgName, currentUserId }: {
+function OrgChatPanel({ orgId, orgName, currentUserId, canSend }: {
   orgId: number;
   orgName: string;
   currentUserId: number;
+  canSend: boolean;
 }) {
   const utils = trpc.useUtils();
   const [text, setText] = useState("");
@@ -217,7 +219,7 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Load messages with polling
-  const { data: messages = [], isLoading } = trpc.org.groupMessages.useQuery(
+  const { data: messages = [], isLoading, isError, error, refetch } = trpc.org.groupMessages.useQuery(
     { orgId, limit: 100 },
     { refetchInterval: 10_000, refetchIntervalInBackground: false },
   );
@@ -265,9 +267,16 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
       utils.org.allGroupsWithUnread.invalidate();
       setText("");
       setMentionQuery(null);
+      setReplyTarget(null);
     },
     onError: (e) => toast.error(e.message),
   });
+
+  useEffect(() => {
+    setText("");
+    setReplyTarget(null);
+    setMentionQuery(null);
+  }, [orgId]);
 
   // @mention input handling
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -305,7 +314,7 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
 
   const handleSend = useCallback(() => {
     const content = text.trim();
-    if (!content) return;
+    if (!canSend || sendMsg.isPending || !content) return;
 
     // Extract mentioned user IDs by scanning text against staff list
     const mentionedUserIds = staffListRef.current
@@ -318,8 +327,7 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
       .map(o => o.orgId);
 
     sendMsg.mutate({ orgId, content, mentionedUserIds, mentionedOrgIds, replyToId: replyTarget?.id });
-    setReplyTarget(null);
-  }, [text, orgId, sendMsg]);
+  }, [text, orgId, sendMsg, replyTarget, canSend]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -352,12 +360,19 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c8b8a2' fill-opacity='0.18'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
         }}
       >
-        {isLoading && (
+        {isError && (
+          <div className="flex flex-col items-center justify-center h-32 gap-3 px-6 text-center">
+            <p className="text-sm font-medium text-slate-700">Couldn’t load this group chat</p>
+            <p className="text-xs text-slate-400">{error?.message || "Please try again."}</p>
+            <button onClick={() => refetch()} className="text-xs font-medium text-emerald-700 hover:underline">Retry</button>
+          </div>
+        )}
+        {isLoading && !isError && (
           <div className="flex items-center justify-center h-32">
             <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
           </div>
         )}
-        {!isLoading && (messages as any[]).length === 0 && (
+        {!isLoading && !isError && (messages as any[]).length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
             <MessageSquare className="h-8 w-8 text-slate-200" />
             <p className="text-sm text-slate-400">No messages yet. Start the conversation!</p>
@@ -423,6 +438,7 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
 
       {/* Composer - WhatsApp style */}
       <div className="px-3 py-2.5 bg-[#F0F0F0] border-t border-[#d9d9d9] flex-shrink-0">
+        {canSend ? <>
         <ReplyBar replyTarget={replyTarget} onCancel={() => setReplyTarget(null)} />
         <div ref={inputWrapRef} className="relative flex items-end gap-2">
           {mentionQuery !== null && (
@@ -458,6 +474,9 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
             )}
           </button>
         </div>
+        </> : (
+          <p className="py-1 text-center text-xs text-slate-500">Viewers can read organization chats but cannot send messages.</p>
+        )}
       </div>
 
       {/* Create Task from Message dialog — org group chat messages don't have a submissionId,
@@ -484,6 +503,7 @@ function OrgChatPanel({ orgId, orgName, currentUserId }: {
 
 export default function AdminOrgChats() {
   const { user } = useAuth();
+  const [location] = useLocation();
   const [search, setSearch] = useState("");
   const [activeOrgId, setActiveOrgId] = useState<number | null>(null);
 
@@ -504,6 +524,13 @@ export default function AdminOrgChats() {
 
   const totalUnread = (orgChannels as OrgItem[]).reduce((sum: number, o: OrgItem) => sum + (o.unreadCount ?? 0), 0);
   const activeOrg = (orgChannels as OrgItem[]).find((o: OrgItem) => o.orgId === activeOrgId);
+
+  useEffect(() => {
+    const requestedOrgId = Number(new URLSearchParams(location.split("?")[1] ?? "").get("orgId"));
+    if (requestedOrgId && (orgChannels as OrgItem[]).some((org) => org.orgId === requestedOrgId)) {
+      setActiveOrgId(requestedOrgId);
+    }
+  }, [location, orgChannels]);
 
   return (
     <AdminLayout>
@@ -576,6 +603,7 @@ export default function AdminOrgChats() {
               orgId={activeOrg.orgId}
               orgName={activeOrg.orgName}
               currentUserId={user?.id ?? -1}
+              canSend={user?.role !== "viewer"}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center gap-6 p-8">

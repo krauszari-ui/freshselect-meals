@@ -1016,3 +1016,10 @@
 - [x] BACKEND: Confirm each Not Interested transition is validated server-side and recorded in the audit log
 - [x] FRONTEND: Confirm the Not Interested option is shown only where the existing authorization is present
 - [x] TESTS: Cover authorized and unauthorized Not Interested stage-transition behavior
+
+## Full Chat System Quality Audit (August 2026)
+- [x] AUDIT: Inventory client chat, admin inbox, organization group chat, assessor messaging, replies, mentions, attachments, unread state, and notification handoffs
+- [x] E2E: Validate core send/read/reply/mention/unread workflows across permitted role boundaries using role-scoped procedure tests; live browser walkthrough remains non-destructive and authentication-dependent
+- [x] BACKEND: Fix authorization and consistency defects — scoped thread/channel access, viewer posting restriction, cross-thread reply validation, cross-channel reply validation, targeted mention links, and secure attachment storage keys
+- [x] FRONTEND: Improve chat reliability with retry states, failed-send draft recovery, attachment validation, view-only group-chat behavior, URL-driven notification handoffs, read watermark updates, multi-line org messages, and manual @Name notification support
+- [x] TESTS: Add chat authorization/thread-integrity coverage and run the complete non-environment regression suite

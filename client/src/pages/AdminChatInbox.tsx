@@ -121,7 +121,7 @@ export default function AdminChatInbox() {
   const [activeThread, setActiveThread] = useState<{ submissionId: number; clientName: string } | null>(null);
 
   // Load inbox threads (all clients with unread counts + last message preview)
-  const { data: threads = [], isLoading } = trpc.chat.inbox.useQuery(undefined, {
+  const { data: threads = [], isLoading, isError, error, refetch } = trpc.chat.inbox.useQuery(undefined, {
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
   });
@@ -171,7 +171,16 @@ export default function AdminChatInbox() {
 
           {/* Thread list */}
           <div className="flex-1 overflow-y-auto">
-            {isLoading ? (
+            {isError ? (
+              <div className="flex flex-col items-center justify-center h-40 gap-3 px-4 text-center">
+                <MessageSquare className="h-8 w-8 text-red-200" />
+                <div>
+                  <p className="text-sm font-medium text-slate-700">Couldn’t load chat threads</p>
+                  <p className="text-xs text-slate-400 mt-1">{error?.message || "Please try again."}</p>
+                </div>
+                <button onClick={() => refetch()} className="text-xs font-medium text-emerald-700 hover:underline">Retry</button>
+              </div>
+            ) : isLoading ? (
               <div className="flex flex-col items-center justify-center h-40 gap-2">
                 <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
                 <p className="text-xs text-slate-400">Loading threads...</p>

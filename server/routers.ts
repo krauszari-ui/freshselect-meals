@@ -79,6 +79,27 @@ async function canAssessorAccessClient(
   return false;
 }
 
+/** Enforce assessor/org-staff visibility before any client-chat operation. */
+async function assertClientChatAccess(user: { id: number; role: string; orgId?: number | null }, submissionId: number) {
+  if (user.role !== "assessor") return;
+  const sub = await getSubmissionById(submissionId);
+  if (!sub || !(await canAssessorAccessClient(user, sub as any))) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client chat" });
+  }
+}
+
+function isFreshSelectStaffRole(role: string) {
+  return role === "admin" || role === "super_admin" || role === "worker" || role === "viewer";
+}
+
+/** Enforce that organization staff can only access their own group channel. */
+function assertOrgChatAccess(user: { role: string; orgId?: number | null }, orgId: number) {
+  if (isFreshSelectStaffRole(user.role)) return;
+  if (user.orgId !== orgId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this organization chat" });
+  }
+}
+
 // Admin-only guard middleware
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "super_admin")
@@ -2144,11 +2165,7 @@ export const appRouter = router({
     list: staffProcedure
       .input(z.object({ submissionId: z.number(), beforeId: z.number().optional(), limit: z.number().min(1).max(100).default(50) }))
       .query(async ({ input, ctx }) => {
-        // Assessors can only read chats for their assigned clients
-        if (ctx.user.role === "assessor") {
-          const sub = await getSubmissionById(input.submissionId);
-          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN" });
-        }
+        await assertClientChatAccess(ctx.user as any, input.submissionId);
         return listClientMessages(input.submissionId, { limit: input.limit, beforeId: input.beforeId });
       }),
 
@@ -2162,28 +2179,26 @@ export const appRouter = router({
       .input(z.object({
         submissionId: z.number(),
         content: z.string().min(0).max(4000),
-        attachmentUrl: z.string().optional(),
-        attachmentName: z.string().optional(),
-        attachmentType: z.string().optional(),
+        attachmentUrl: z.string().url().max(4096).optional(),
+        attachmentName: z.string().min(1).max(512).optional(),
+        attachmentType: z.string().min(1).max(128).optional(),
         mentionedUserIds: z.array(z.number()).optional(),
         replyToId: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role === "viewer") throw new TRPCError({ code: "FORBIDDEN", message: "Viewers cannot send messages" });
         if (!input.content.trim() && !input.attachmentUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Message cannot be empty" });
-        if (ctx.user.role === "assessor") {
-          const sub = await getSubmissionById(input.submissionId);
-          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN" });
-        }
+        await assertClientChatAccess(ctx.user as any, input.submissionId);
         // Look up the replied-to message for denormalised preview
         let replyToSenderName: string | null = null;
         let replyToContent: string | null = null;
         if (input.replyToId) {
           const replyMsg = await getClientMessageById(input.replyToId);
-          if (replyMsg) {
-            replyToSenderName = replyMsg.senderName;
-            replyToContent = (replyMsg.attachmentName ? `[${replyMsg.attachmentName}]` : replyMsg.content).slice(0, 300);
+          if (!replyMsg || replyMsg.submissionId !== input.submissionId || replyMsg.isDeleted) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "The message you are replying to is unavailable in this chat" });
           }
+          replyToSenderName = replyMsg.senderName;
+          replyToContent = (replyMsg.attachmentName ? `[${replyMsg.attachmentName}]` : replyMsg.content).slice(0, 300);
         }
         const msg = await createClientMessage({
           submissionId: input.submissionId,
@@ -2229,10 +2244,7 @@ export const appRouter = router({
     poll: staffProcedure
       .input(z.object({ submissionId: z.number(), afterId: z.number() }))
       .query(async ({ input, ctx }) => {
-        if (ctx.user.role === "assessor") {
-          const sub = await getSubmissionById(input.submissionId);
-          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN" });
-        }
+        await assertClientChatAccess(ctx.user as any, input.submissionId);
         return getNewClientMessages(input.submissionId, input.afterId);
       }),
 
@@ -2240,9 +2252,9 @@ export const appRouter = router({
     delete: staffProcedure
       .input(z.object({ messageId: z.number(), submissionId: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        const msgs = await listClientMessages(input.submissionId, { limit: 200 });
-        const msg = msgs.find(m => m.id === input.messageId);
-        if (!msg) throw new TRPCError({ code: "NOT_FOUND" });
+        await assertClientChatAccess(ctx.user as any, input.submissionId);
+        const msg = await getClientMessageById(input.messageId);
+        if (!msg || msg.submissionId !== input.submissionId || msg.isDeleted) throw new TRPCError({ code: "NOT_FOUND" });
         if (msg.senderId !== ctx.user.id && ctx.user.role !== "admin" && ctx.user.role !== "super_admin")
           throw new TRPCError({ code: "FORBIDDEN", message: "You can only delete your own messages" });
         await deleteClientMessage(input.messageId);
@@ -2254,6 +2266,9 @@ export const appRouter = router({
       .input(z.object({ messageId: z.number(), submissionId: z.number(), emoji: z.string().max(8) }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role === "viewer") throw new TRPCError({ code: "FORBIDDEN" });
+        await assertClientChatAccess(ctx.user as any, input.submissionId);
+        const message = await getClientMessageById(input.messageId);
+        if (!message || message.submissionId !== input.submissionId || message.isDeleted) throw new TRPCError({ code: "NOT_FOUND" });
         const updated = await toggleMessageReaction(input.messageId, ctx.user.id, input.emoji);
         if (!updated) throw new TRPCError({ code: "NOT_FOUND" });
         return updated;
@@ -2263,10 +2278,7 @@ export const appRouter = router({
     readWatermarks: staffProcedure
       .input(z.object({ submissionId: z.number() }))
       .query(async ({ input, ctx }) => {
-        if (ctx.user.role === "assessor") {
-          const sub = await getSubmissionById(input.submissionId);
-          if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) throw new TRPCError({ code: "FORBIDDEN" });
-        }
+        await assertClientChatAccess(ctx.user as any, input.submissionId);
         return getThreadReadWatermarks(input.submissionId);
       }),
 
@@ -2274,6 +2286,7 @@ export const appRouter = router({
     markRead: staffProcedure
       .input(z.object({ submissionId: z.number(), lastReadMessageId: z.number() }))
       .mutation(async ({ input, ctx }) => {
+        await assertClientChatAccess(ctx.user as any, input.submissionId);
         await markThreadRead(ctx.user.id, input.submissionId, input.lastReadMessageId);
         return { success: true };
       }),
@@ -2282,6 +2295,7 @@ export const appRouter = router({
     unreadCount: staffProcedure
       .input(z.object({ submissionId: z.number() }))
       .query(async ({ input, ctx }) => {
+        await assertClientChatAccess(ctx.user as any, input.submissionId);
         const count = await getThreadUnreadCount(ctx.user.id, input.submissionId);
         return { count };
       }),
@@ -2323,6 +2337,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role === "viewer") throw new TRPCError({ code: "FORBIDDEN" });
+        await assertClientChatAccess(ctx.user as any, input.submissionId);
         // SECURITY: MIME type whitelist — reject executables and other dangerous types
         const ALLOWED_CHAT_MIME_TYPES = new Set([
           "application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif",
@@ -2348,7 +2363,7 @@ export const appRouter = router({
           "text/plain": "txt",
         };
         const ext = MIME_TO_EXT[input.contentType] ?? "bin";
-        const key = `chat/${input.submissionId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const key = `chat/${input.submissionId}/${Date.now()}-${randomBytes(16).toString("hex")}.${ext}`;
         const { url } = await storagePut(key, buffer, input.contentType);
         return { url, key, fileName: input.fileName, contentType: input.contentType };
       }),
@@ -2473,13 +2488,7 @@ export const appRouter = router({
     groupMessages: staffProcedure
       .input(z.object({ orgId: z.number(), limit: z.number().optional().default(100) }))
       .query(async ({ ctx, input }) => {
-        const role = ctx.user.role;
-        const isFreshSelect = role === "admin" || role === "super_admin" || role === "worker" || role === "viewer";
-        // Org staff can only see their own org's channel
-        if (!isFreshSelect) {
-          const userOrgId = (ctx.user as any).orgId;
-          if (userOrgId !== input.orgId) throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
-        }
+        assertOrgChatAccess(ctx.user as any, input.orgId);
         return listOrgGroupMessages(input.orgId, input.limit);
       }),
 
@@ -2494,20 +2503,21 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const role = ctx.user.role;
-        const isFreshSelect = role === "admin" || role === "super_admin" || role === "worker" || role === "viewer";
-        const userOrgId = (ctx.user as any).orgId;
-        // Org staff can only post to their own org's channel
-        if (!isFreshSelect && userOrgId !== input.orgId) throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+        if (role === "viewer") throw new TRPCError({ code: "FORBIDDEN", message: "Viewers cannot send messages" });
+        assertOrgChatAccess(ctx.user as any, input.orgId);
+        const isFreshSelect = isFreshSelectStaffRole(role);
         const org = await getOrganizationById(input.orgId);
+        if (!org) throw new TRPCError({ code: "NOT_FOUND", message: "Organization not found" });
         // Look up the replied-to message for denormalised preview
         let replyToSenderName: string | null = null;
         let replyToContent: string | null = null;
         if (input.replyToId) {
           const replyMsg = await getOrgGroupMessageById(input.replyToId);
-          if (replyMsg) {
-            replyToSenderName = replyMsg.senderName;
-            replyToContent = (replyMsg.attachmentName ? `[${replyMsg.attachmentName}]` : replyMsg.content).slice(0, 300);
+          if (!replyMsg || replyMsg.orgId !== input.orgId || replyMsg.isDeleted) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "The message you are replying to is unavailable in this organization chat" });
           }
+          replyToSenderName = replyMsg.senderName;
+          replyToContent = (replyMsg.attachmentName ? `[${replyMsg.attachmentName}]` : replyMsg.content).slice(0, 300);
         }
         const msgId = await createOrgGroupMessage({
           orgId: input.orgId,
@@ -2522,11 +2532,15 @@ export const appRouter = router({
         });
         // Notify individually @mentioned users
         for (const uid of input.mentionedUserIds) {
+          if (uid === ctx.user.id) continue;
+          const mentionedUser = await getUserById(uid);
+          if (!mentionedUser || mentionedUser.isActive === 0) continue;
           await createNotification({
             userId: uid,
             type: "chat_mention",
             title: `${ctx.user.name ?? "Staff"} mentioned you in ${org?.name ?? "org"} group chat`,
             body: input.content.slice(0, 200),
+            link: (mentionedUser as any).orgId ? "/org?view=chat" : `/admin/org-chats?orgId=${input.orgId}`,
           }).catch(() => {});
         }
         // Notify all members of @mentioned orgs
@@ -2540,6 +2554,7 @@ export const appRouter = router({
               type: "chat_mention",
               title: `${ctx.user.name ?? "Staff"} mentioned @${mentionedOrg?.name ?? "your org"} in group chat`,
               body: input.content.slice(0, 200),
+              link: "/org?view=chat",
             }).catch(() => {});
           }
         }
@@ -2550,6 +2565,7 @@ export const appRouter = router({
     markGroupRead: staffProcedure
       .input(z.object({ orgId: z.number(), lastMessageId: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        assertOrgChatAccess(ctx.user as any, input.orgId);
         await markOrgGroupRead(ctx.user.id, input.orgId, input.lastMessageId);
         return { success: true };
       }),
@@ -2557,7 +2573,10 @@ export const appRouter = router({
     /** Get unread count for a specific org group channel */
     groupUnreadCount: staffProcedure
       .input(z.object({ orgId: z.number() }))
-      .query(async ({ ctx, input }) => getOrgGroupUnreadCount(ctx.user.id, input.orgId)),
+      .query(async ({ ctx, input }) => {
+        assertOrgChatAccess(ctx.user as any, input.orgId);
+        return getOrgGroupUnreadCount(ctx.user.id, input.orgId);
+      }),
 
     /** List all org group channels with unread counts (FreshSelect staff sees all, org staff sees only theirs) */
     allGroupsWithUnread: staffProcedure
@@ -2575,4 +2594,3 @@ export const appRouter = router({
   }),
 });
 export type AppRouter = typeof appRouter;
-

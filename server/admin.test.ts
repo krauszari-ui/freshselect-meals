@@ -138,6 +138,28 @@ vi.mock("./db", () => ({
   listClientEmails: vi.fn().mockResolvedValue([]),
   deleteClientEmailById: vi.fn().mockResolvedValue(undefined),
   getUserByEmail: vi.fn().mockResolvedValue(undefined),
+  createClientMessage: vi.fn().mockResolvedValue({ id: 10, submissionId: 1, senderId: 2, senderName: "Worker User", senderRole: "worker", content: "Test", isDeleted: 0, createdAt: new Date() }),
+  listClientMessages: vi.fn().mockResolvedValue([]),
+  getNewClientMessages: vi.fn().mockResolvedValue([]),
+  deleteClientMessage: vi.fn().mockResolvedValue(undefined),
+  getClientMessageById: vi.fn().mockResolvedValue({ id: 10, submissionId: 1, senderId: 2, senderName: "Worker User", senderRole: "worker", content: "Test", isDeleted: 0, createdAt: new Date() }),
+  getThreadReadWatermarks: vi.fn().mockResolvedValue({}),
+  toggleMessageReaction: vi.fn().mockResolvedValue({ id: 10, submissionId: 1, isDeleted: 0 }),
+  markThreadRead: vi.fn().mockResolvedValue(undefined),
+  getThreadUnreadCount: vi.fn().mockResolvedValue(0),
+  getAllUnreadCounts: vi.fn().mockResolvedValue({}),
+  getInboxThreads: vi.fn().mockResolvedValue([]),
+  listOrganizations: vi.fn().mockResolvedValue([]),
+  getOrganizationById: vi.fn().mockResolvedValue({ id: 7, name: "Rooprine", isActive: 1 }),
+  listOrgMembers: vi.fn().mockResolvedValue([]),
+  createOrgGroupMessage: vi.fn().mockResolvedValue(20),
+  listOrgGroupMessages: vi.fn().mockResolvedValue([]),
+  getOrgGroupUnreadCount: vi.fn().mockResolvedValue(0),
+  markOrgGroupRead: vi.fn().mockResolvedValue(undefined),
+  listAllOrgGroupsWithUnread: vi.fn().mockResolvedValue([]),
+  getOrgGroupMessageById: vi.fn().mockResolvedValue({ id: 20, orgId: 7, senderId: 2, senderName: "Worker User", content: "Test", isDeleted: 0 }),
+  getOrgGroupReadWatermarks: vi.fn().mockResolvedValue({}),
+  getUserById: vi.fn().mockResolvedValue(undefined),
   logAudit: vi.fn().mockResolvedValue(undefined),
   getAuditLogs: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
 }));
@@ -178,6 +200,26 @@ function createWorkerContext(canMarkNotInterested = false): TrpcContext {
     // Workers need canEdit:true to call editProcedure mutations
     permissions: { canView: true, canEdit: true, canExport: true, canDelete: false, showReferralLinks: true, canMarkNotInterested },
   } as any;
+
+  return {
+    user,
+    req: { protocol: "https", headers: {} } as TrpcContext["req"],
+    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
+  };
+}
+
+function createViewerContext(): TrpcContext {
+  const user: AuthenticatedUser = {
+    id: 4,
+    openId: "viewer-user",
+    email: "viewer@example.com",
+    name: "Viewer User",
+    loginMethod: "local",
+    role: "viewer",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    lastSignedIn: new Date(),
+  };
 
   return {
     user,
@@ -717,6 +759,41 @@ describe("admin.markNotInterested", () => {
 
     await expect(caller.admin.markNotInterested({ id: 1 })).rejects.toThrow(
       "You do not have permission to mark clients as Not Interested"
+    );
+  });
+});
+
+// ─── Chat authorization and thread integrity ───────────────────────────
+describe("chat workflow safeguards", () => {
+  it("blocks viewers from sending organization group-chat messages", async () => {
+    const caller = appRouter.createCaller(createViewerContext());
+
+    await expect(caller.org.sendGroupMessage({ orgId: 7, content: "Please review this update." })).rejects.toThrow(
+      "Viewers cannot send messages"
+    );
+  });
+
+  it("rejects a client-chat reply that references a message from a different client thread", async () => {
+    const { getClientMessageById } = await import("./db");
+    vi.mocked(getClientMessageById).mockResolvedValueOnce({
+      id: 99, submissionId: 2, senderId: 2, senderName: "Worker User", senderRole: "worker", content: "Other client", isDeleted: 0, createdAt: new Date(),
+    } as any);
+    const caller = appRouter.createCaller(createWorkerContext());
+
+    await expect(caller.chat.send({ submissionId: 1, content: "Reply", replyToId: 99 })).rejects.toThrow(
+      "unavailable in this chat"
+    );
+  });
+
+  it("rejects an organization-chat reply that references another organization channel", async () => {
+    const { getOrgGroupMessageById } = await import("./db");
+    vi.mocked(getOrgGroupMessageById).mockResolvedValueOnce({
+      id: 88, orgId: 8, senderId: 2, senderName: "Worker User", content: "Other organization", isDeleted: 0,
+    } as any);
+    const caller = appRouter.createCaller(createAdminContext());
+
+    await expect(caller.org.sendGroupMessage({ orgId: 7, content: "Reply", replyToId: 88 })).rejects.toThrow(
+      "unavailable in this organization chat"
     );
   });
 });
