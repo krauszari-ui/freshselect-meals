@@ -164,7 +164,7 @@ function createAdminContext(): TrpcContext {
   };
 }
 
-function createWorkerContext(): TrpcContext {
+function createWorkerContext(canMarkNotInterested = false): TrpcContext {
   const user: AuthenticatedUser = {
     id: 2,
     openId: "worker-user",
@@ -176,7 +176,7 @@ function createWorkerContext(): TrpcContext {
     updatedAt: new Date(),
     lastSignedIn: new Date(),
     // Workers need canEdit:true to call editProcedure mutations
-    permissions: { canView: true, canEdit: true, canExport: true, canDelete: false, showReferralLinks: true },
+    permissions: { canView: true, canEdit: true, canExport: true, canDelete: false, showReferralLinks: true, canMarkNotInterested },
   } as any;
 
   return {
@@ -692,3 +692,31 @@ describe("admin.updateAdminNotes", () => {
   });
 });
 
+// ─── Not Interested authorization ─────────────────────────────────────
+describe("admin.markNotInterested", () => {
+  it("allows a worker with canMarkNotInterested to move a client out of the active list and records the action", async () => {
+    const { updateSubmissionFields, logAudit } = await import("./db");
+    const caller = appRouter.createCaller(createWorkerContext(true));
+
+    const result = await caller.admin.markNotInterested({ id: 1 });
+
+    expect(result.success).toBe(true);
+    expect(updateSubmissionFields).toHaveBeenCalledWith(1, expect.objectContaining({
+      notInterested: true,
+      notInterestedBy: 2,
+    }));
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "marked_not_interested",
+      actorId: 2,
+      clientId: 1,
+    }));
+  });
+
+  it("blocks a worker without canMarkNotInterested from moving a client", async () => {
+    const caller = appRouter.createCaller(createWorkerContext(false));
+
+    await expect(caller.admin.markNotInterested({ id: 1 })).rejects.toThrow(
+      "You do not have permission to mark clients as Not Interested"
+    );
+  });
+});

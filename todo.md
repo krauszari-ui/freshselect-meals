@@ -1006,7 +1006,13 @@
 ## Real-Time Notification Toasts (July 2026)
 - [x] FRONTEND: Create useNotificationToast hook (client/src/hooks/useNotificationToast.ts)
 - [x] FRONTEND: Hook polls notifications.list every 15s; on first fetch sets baseline (no toast); on subsequent fetches toasts each new notification
-- [x] FRONTEND: Toast shows notification title, truncated body, type icon (emoji), and "View" action button linking to notification.link
+- [x] FRONTEND: Toast shows notification title, body preview, type icon (emoji), and "View" action button linking to notification.link
 - [x] FRONTEND: Wire hook into AdminLayout — enabled for admin/worker/viewer, disabled for assessors (per policy)
 - [x] FRONTEND: Wire hook into OrgPortal — enabled for all org staff
 - [x] TESTS: All 308 tests passing, 0 TypeScript errors
+
+## Scoped Not Interested Permission (July 2026)
+- [x] BACKEND: Identify the existing stage transition permission path and grant the existing narrowly scoped authorization to blevy@freshselectmeals.com
+- [x] BACKEND: Confirm each Not Interested transition is validated server-side and recorded in the audit log
+- [x] FRONTEND: Confirm the Not Interested option is shown only where the existing authorization is present
+- [x] TESTS: Cover authorized and unauthorized Not Interested stage-transition behavior
