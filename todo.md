@@ -1023,3 +1023,17 @@
 - [x] BACKEND: Fix authorization and consistency defects — scoped thread/channel access, viewer posting restriction, cross-thread reply validation, cross-channel reply validation, targeted mention links, and secure attachment storage keys
 - [x] FRONTEND: Improve chat reliability with retry states, failed-send draft recovery, attachment validation, view-only group-chat behavior, URL-driven notification handoffs, read watermark updates, multi-line org messages, and manual @Name notification support
 - [x] TESTS: Add chat authorization/thread-integrity coverage and run the complete non-environment regression suite
+
+## High-Severity Security & Workflow Audit (August 2026)
+- [x] AUDIT: Review recent high-blast-radius changes for concrete auth, authorization, upload, notification, and data-write vulnerabilities
+- [x] WORKFLOW: Trace new application submission, document upload, assessor notes, assessment, tasks, client chat, org chat, and notification handoff paths
+- [x] FIXES: Apply narrowly scoped remediations for confirmed high-severity security or correctness defects
+- [x] TESTS: Add regression coverage for confirmed authorization and workflow defects and run security/workflow validation
+- [x] SECURITY FIX: Prevent ordinary authenticated users from invoking the daily-digest test endpoint and receiving operational summary data
+- [x] WORKFLOW FIX: Align client-detail authorization with organization visibility so assessors can open and note clients assigned to a teammate in their organization
+- [x] SECURITY FIX: Prevent assessor access to unscoped duplicate, assessment-export, and bulk-client endpoints that can disclose unrelated client PII
+- [x] SECURITY FIX: Prevent assessor access to unscoped global task lists and task statistics that can disclose unrelated client work
+- [x] WORKFLOW FIX: Retry rare reference-number collisions without misreporting them as duplicate Medicaid applications
+- [x] SECURITY FIX: Enforce assigned-organization scope before an assessor can mark a client Not Eligible
+- [x] E2E: Submit one clearly labeled QA application with non-real contact details and verify its staff intake path without sending team communications
+- [x] WORKFLOW FIX: Restore generated attestation PDF opening from the client detail after successful public submission

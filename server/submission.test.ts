@@ -114,7 +114,7 @@ describe("submission.submit", () => {
 
     expect(result.success).toBe(true);
     expect(result.referenceNumber).toBeDefined();
-    expect(result.referenceNumber.length).toBe(6);
+    expect(result.referenceNumber).toMatch(/^FSM-[A-F0-9]{12}$/);
   });
 
   it("saves submission to local database", async () => {
@@ -133,6 +133,21 @@ describe("submission.submit", () => {
     expect(savedData.status).toBe("new");
     expect(savedData.stage).toBe("referral");
     expect(savedData.formData).toBeDefined();
+  });
+
+  it("retries a rare reference-number collision without treating it as a duplicate application", async () => {
+    const { getSubmissionByMedicaidId } = await import("./db");
+    mockCreateSubmission
+      .mockRejectedValueOnce({ code: "ER_DUP_ENTRY", errno: 1062 })
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(getSubmissionByMedicaidId).mockResolvedValueOnce(undefined);
+    const caller = appRouter.createCaller(createPublicContext());
+
+    const result = await caller.submission.submit(validInput());
+
+    expect(result.success).toBe(true);
+    expect(mockCreateSubmission).toHaveBeenCalledTimes(2);
+    expect(mockCreateSubmission.mock.calls[0][0].referenceNumber).not.toBe(mockCreateSubmission.mock.calls[1][0].referenceNumber);
   });
 
   it("sends confirmation emails after submission", async () => {

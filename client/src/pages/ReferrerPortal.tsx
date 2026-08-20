@@ -58,6 +58,7 @@ export default function ReferrerPortal() {
       setLoginError(err.message || "Invalid email or password");
     },
   });
+  const logoutMutation = trpc.admin.referrerPortal.logout.useMutation();
 
   const { data: clients, isLoading: clientsLoading } = trpc.admin.referrerPortal.myClients.useQuery(
     { code: session?.code || "" },
@@ -147,6 +148,7 @@ export default function ReferrerPortal() {
   };
 
   const handleLogout = () => {
+    logoutMutation.mutate();
     setSession(null);
     setLoginForm({ email: "", password: "" });
     setSearch("");

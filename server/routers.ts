@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
-import { randomUUID, randomBytes, createHash } from "crypto";
+import { randomUUID, randomBytes, createHash, createHmac, timingSafeEqual } from "crypto";
 import { getSessionCookieOptions } from "./_core/cookies";
 
 import { systemRouter } from "./_core/systemRouter";
@@ -77,6 +77,38 @@ async function canAssessorAccessClient(
     if (orgMembers.some((m) => m.id === submission.assessorId)) return true;
   }
   return false;
+}
+
+function getAssessmentCompletionMissingFields(formData: Record<string, unknown> | null | undefined) {
+  const fd = formData ?? {};
+  const screening = (fd.screeningQuestions ?? fd.screening ?? {}) as Record<string, unknown>;
+  const healthCategories = Array.isArray(fd.healthCategories) ? fd.healthCategories : [];
+  const missing: string[] = [];
+  const isBlank = (value: unknown) => value === undefined || value === null || String(value).trim() === "";
+  const requireField = (value: unknown, label: string) => { if (isBlank(value)) missing.push(label); };
+
+  requireField(screening.livingSituation, "Q1: Living situation");
+  requireField(screening.utilityShutoff, "Q2: Utility shutoff threat");
+  requireField(screening.receivesSnap ?? fd.receivesSnap ?? fd.hasSnap, "Q3: Receives SNAP");
+  requireField(screening.receivesWic ?? fd.receivesWic ?? fd.hasWic, "Q4: Receives WIC");
+  requireField(screening.receivesTanf, "Q5: Receives TANF");
+  requireField(screening.enrolledHealthHome, "Q6: Enrolled in Health Home");
+  requireField(screening.householdMembersCount || fd.householdMembersCount || fd.householdMemberCount || screening.householdMemberCount, "Q7: Household members count");
+  requireField(screening.householdMembersWithMedicaid, "Q8: Members with Medicaid");
+  requireField(screening.needsWorkAssistance, "Q9: Needs work assistance");
+  requireField(screening.wantsSchoolHelp ?? screening.wantsSchoolTraining ?? fd.wantsSchoolHelp ?? fd.wantsSchoolTraining, "Q10: Wants school/training help");
+  requireField(screening.transportationBarrier, "Q11: Transportation barrier");
+  requireField(screening.hasChronicIllness, "Q12: Has chronic illness");
+  requireField(screening.otherHealthIssues, "Q13: Other health issues");
+  requireField(screening.medicationsRequireRefrigeration, "Q14: Medications require refrigeration");
+  const pregnantOrPostpartum = screening.pregnantOrPostpartum || (healthCategories.includes("Pregnant") || healthCategories.some((item) => typeof item === "string" && item.startsWith("Postpartum")) ? "Yes" : undefined);
+  requireField(pregnantOrPostpartum, "Q15: Pregnant or postpartum");
+  if (String(pregnantOrPostpartum).toLowerCase() === "yes" || pregnantOrPostpartum === true) {
+    requireField(fd.dueDate || screening.dueDate, "Due date (required when pregnant/postpartum)");
+  }
+  requireField(screening.breastmilkRefrigeration, "Q16: Breastmilk refrigeration needed");
+  requireField(fd.foodAllergies, "Food allergies");
+  return missing;
 }
 
 /** Enforce assessor/org-staff visibility before any client-chat operation. */
@@ -204,6 +236,52 @@ const submissionInputSchema = z.object({
 
 const SESSION_ID_COOKIE = "admin_session_id";
 const IMPERSONATION_COOKIE = "impersonation_original_session";
+const REFERRER_SESSION_COOKIE = "referrer_session";
+const REFERRER_SESSION_MS = 8 * 60 * 60 * 1000;
+
+type ReferrerSession = { referrerId: number; code: string; expiresAt: number };
+
+function getReferrerSessionSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Referrer sessions are not configured" });
+  return secret;
+}
+
+function signReferrerSession(payload: ReferrerSession) {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", getReferrerSessionSecret()).update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+function readReferrerSession(cookieHeader?: string): ReferrerSession | null {
+  const token = parseCookieHeader(cookieHeader ?? "")[REFERRER_SESSION_COOKIE];
+  if (!token) return null;
+  const [encoded, suppliedSignature] = token.split(".");
+  if (!encoded || !suppliedSignature) return null;
+  const expectedSignature = createHmac("sha256", getReferrerSessionSecret()).update(encoded).digest("base64url");
+  const supplied = Buffer.from(suppliedSignature);
+  const expected = Buffer.from(expectedSignature);
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as ReferrerSession;
+    if (!Number.isInteger(payload.referrerId) || !payload.code || payload.expiresAt <= Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+async function requireReferrerSession(req: { headers: { cookie?: string } }, code: string) {
+  const session = readReferrerSession(req.headers.cookie);
+  if (!session || session.code !== code) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Please sign in to access the referrer portal" });
+  }
+  const link = await getReferralLinkByCode(code);
+  if (!link || !link.isActive || link.id !== session.referrerId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "This referrer account is not active" });
+  }
+  return link;
+}
 
 export const appRouter = router({
   system: systemRouter,
@@ -333,49 +411,50 @@ export const appRouter = router({
   // ─── Submission ───────────────────────────────────────────────────────────
   submission: router({
     submit: publicProcedure.input(submissionInputSchema).mutation(async ({ input }) => {
-      const refNumber = Math.random().toString(36).substring(2, 8).toUpperCase();
+      let refNumber = "";
       const consentAt = new Date();
 
-      console.log(`[Submission] Processing new submission (ref: ${refNumber})`);
-
       // Step 1: Save to database (this is the ONLY critical step)
-      // Duplicate detection is now handled by the UNIQUE index on medicaidId (ER_DUP_ENTRY / errno 1062).
-      // The pre-INSERT lookup has been removed to eliminate the read-before-write race condition under load.
-      try {
-        await createSubmission({
-          referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName,
-          email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId,
-          supermarket: input.supermarket, referralSource: input.ref ?? null,
-          status: "new", stage: "referral",
-          formData: input as unknown as Record<string, unknown>,
-          hipaaConsentAt: consentAt,
-          borough: input.city === "Brooklyn" ? "Brooklyn" : input.city,
-          neighborhood: input.neighborhood || null,
-          additionalMembersCount: parseInt(input.additionalMembersCount || "0") || 0,
-          newApplicant: input.newApplicant || null,
-          transferAgencyName: (input as any).transferAgencyName || null,
-          zipcode: input.zipcode ? String(input.zipcode).trim().substring(0, 5) : null,
-        });
-        console.log(`[Submission] ✓ Saved to database (ref: ${refNumber})`);
-      } catch (dbErr: any) {
-        // MySQL duplicate-key error (UNIQUE constraint on medicaidId)
-        // Drizzle wraps the mysql2 error in dbErr.cause, so check both levels
-        const isDupEntry = dbErr?.code === "ER_DUP_ENTRY" || dbErr?.errno === 1062
-          || dbErr?.cause?.code === "ER_DUP_ENTRY" || dbErr?.cause?.errno === 1062;
-        if (isDupEntry) {
-          const dup = await getSubmissionByMedicaidId(input.medicaidId);
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: `DUPLICATE:${dup?.referenceNumber ?? "UNKNOWN"}`,
+      // Retry only when the duplicate belongs to the generated reference number, never for a duplicate Medicaid ID.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        refNumber = `FSM-${randomBytes(6).toString("hex").toUpperCase()}`;
+        console.log(`[Submission] Processing new submission (ref: ${refNumber})`);
+        try {
+          await createSubmission({
+            referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName,
+            email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId,
+            supermarket: input.supermarket, referralSource: input.ref ?? null,
+            status: "new", stage: "referral",
+            formData: input as unknown as Record<string, unknown>,
+            hipaaConsentAt: consentAt,
+            borough: input.city === "Brooklyn" ? "Brooklyn" : input.city,
+            neighborhood: input.neighborhood || null,
+            additionalMembersCount: parseInt(input.additionalMembersCount || "0") || 0,
+            newApplicant: input.newApplicant || null,
+            transferAgencyName: (input as any).transferAgencyName || null,
+            zipcode: input.zipcode ? String(input.zipcode).trim().substring(0, 5) : null,
           });
+          console.log(`[Submission] ✓ Saved to database (ref: ${refNumber})`);
+          break;
+        } catch (dbErr: any) {
+          // Drizzle wraps mysql2 duplicate-key errors in `cause`. A matching Medicaid record is a true
+          // duplicate application; otherwise the only remaining unique constraint is the generated reference.
+          const isDupEntry = dbErr?.code === "ER_DUP_ENTRY" || dbErr?.errno === 1062
+            || dbErr?.cause?.code === "ER_DUP_ENTRY" || dbErr?.cause?.errno === 1062;
+          if (isDupEntry) {
+            const duplicate = await getSubmissionByMedicaidId(input.medicaidId);
+            if (duplicate) {
+              throw new TRPCError({ code: "CONFLICT", message: `DUPLICATE:${duplicate.referenceNumber}` });
+            }
+            if (attempt < 2) continue;
+          }
+          const errMsg = dbErr?.message || String(dbErr);
+          console.error(`[Submission] ✗ Database save failed (ref: ${refNumber}): ${errMsg}`);
+          if (errMsg.includes("DATABASE_URL")) {
+            console.error("[Submission] CRITICAL: DATABASE_URL environment variable is not configured on this server!");
+          }
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to save application. Please try again." });
         }
-        const errMsg = dbErr?.message || String(dbErr);
-        console.error(`[Submission] ✗ Database save failed (ref: ${refNumber}): ${errMsg}`);
-        // Surface DB_URL missing error clearly in logs
-        if (errMsg.includes("DATABASE_URL")) {
-          console.error("[Submission] CRITICAL: DATABASE_URL environment variable is not configured on this server!");
-        }
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to save application. Please try again." });
       }
 
       // ── Everything below is FIRE-AND-FORGET ──
@@ -594,7 +673,7 @@ export const appRouter = router({
     }),
 
     filterCounts: staffProcedure.query(async () => getFilterCounts()),
-    getDuplicates: staffProcedure.query(async () => {
+    getDuplicates: adminProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
       const { sql, eq, and } = await import('drizzle-orm');
@@ -647,22 +726,28 @@ export const appRouter = router({
       return { success: true };
     }),
 
-    assessmentReport: staffProcedure.query(async () => getAssessmentReport()),
-    exportCompletedAssessments: staffProcedure.query(async () => getCompletedAssessmentsExport()),
+    assessmentReport: adminProcedure.query(async () => getAssessmentReport()),
+    exportCompletedAssessments: adminProcedure.query(async () => getCompletedAssessmentsExport()),
 
-    bulkGetByIds: staffProcedure.input(z.object({ ids: z.array(z.number()).min(1).max(200) })).query(async ({ input }) => {
-      return getSubmissionsByIds(input.ids);
+    bulkGetByIds: staffProcedure.input(z.object({ ids: z.array(z.number()).min(1).max(200) })).query(async ({ input, ctx }) => {
+      const submissions = await getSubmissionsByIds(input.ids);
+      if (ctx.user.role === "assessor") {
+        for (const submission of submissions) {
+          if (!(await canAssessorAccessClient(ctx.user as any, submission as any))) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to one or more requested clients" });
+          }
+        }
+      }
+      return submissions;
     }),
 
     getById: staffProcedure.input(z.object({ id: z.number() })).query(async ({ input, ctx }) => {
       const submission = await getSubmissionById(input.id);
       if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
-      // SECURITY: Assessors can only view clients assigned to them OR referred to their org
+      // SECURITY: Assessors can only view clients permitted by the shared organization visibility policy.
+      // This includes directly assigned clients, referred-org clients, and clients assigned to a teammate in their org.
       if (ctx.user.role === "assessor") {
-        const userOrgId = (ctx.user as any).orgId as number | null;
-        const isAssignedAssessor = submission.assessorId === ctx.user.id;
-        const isOrgReferral = userOrgId != null && (submission as any).referredOrgId === userOrgId;
-        if (!isAssignedAssessor && !isOrgReferral) {
+        if (!(await canAssessorAccessClient(ctx.user as any, submission as any))) {
           throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
         }
       }
@@ -930,9 +1015,19 @@ export const appRouter = router({
         completedFrom: z.string().optional(),
         completedTo: z.string().optional(),
         page: z.number().min(1).optional(), pageSize: z.number().min(1).max(100).optional(),
-      })).query(async ({ input }) => listTasks(input)),
+      })).query(async ({ input, ctx }) => {
+        if (ctx.user.role === "assessor") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Use a client record to view tasks assigned to your accessible clients" });
+        }
+        return listTasks(input);
+      }),
 
-      stats: staffProcedure.query(async () => getTaskStats()),
+      stats: staffProcedure.query(async ({ ctx }) => {
+        if (ctx.user.role === "assessor") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to organization-wide task statistics" });
+        }
+        return getTaskStats();
+      }),
 
       byClient: staffProcedure.input(z.object({ submissionId: z.number() })).query(async ({ input, ctx }) => {
         // SECURITY: Assessors can only view tasks for their assigned clients
@@ -1432,6 +1527,10 @@ export const appRouter = router({
       reason: z.string().min(1),
     })).mutation(async ({ input, ctx }) => {
       const existing = await getSubmissionById(input.id);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      if (!(await canAssessorAccessClient(ctx.user as any, existing as any))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+      }
       await updateSubmissionStage(input.id, "not_eligible");
       await updateSubmissionFields(input.id, { notEligibleReason: input.reason } as any);
       await logAudit({
@@ -1450,9 +1549,17 @@ export const appRouter = router({
       completed: z.boolean(),
     })).mutation(async ({ input, ctx }) => {
       const existing = await getSubmissionById(input.id);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      if (input.completed) {
+        const missing = getAssessmentCompletionMissingFields(existing.formData as Record<string, unknown>);
+        if (missing.length > 0) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `Assessment is incomplete: ${missing.join(", ")}` });
+        }
+      }
       await updateSubmissionFields(input.id, {
         assessmentCompletedAt: input.completed ? new Date() : null,
       } as any);
+      if (input.completed) await updateSubmissionStage(input.id, "assessment");
       await logAudit({
         actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
         action: input.completed ? "assessment_completed" : "assessment_incomplete",
@@ -1593,15 +1700,20 @@ export const appRouter = router({
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid email or password" });
         }
         await logAudit({ action: "login_success", actorName: input.email, details: { referrerId: link.id, ip, portal: "referrer" } });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        const token = signReferrerSession({ referrerId: link.id, code: link.code, expiresAt: Date.now() + REFERRER_SESSION_MS });
+        ctx.res.cookie(REFERRER_SESSION_COOKIE, token, { ...cookieOptions, maxAge: REFERRER_SESSION_MS });
         return { success: true, referrerId: link.id, referrerName: link.referrerName, code: link.code };
       }),
+      logout: publicProcedure.mutation(({ ctx }) => {
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.clearCookie(REFERRER_SESSION_COOKIE, { ...cookieOptions, maxAge: -1 });
+        return { success: true } as const;
+      }),
       myClients: publicProcedure.input(z.object({
-        code: z.string(),
-      })).query(async ({ input }) => {
-        const link = await getReferralLinkByCode(input.code);
-        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
-        // SECURITY: reject deactivated referrer accounts — they should not be able to read client data
-        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This referral account has been deactivated" });
+        code: z.string().min(1).max(64),
+      })).query(async ({ ctx, input }) => {
+        const link = await requireReferrerSession(ctx.req, input.code);
         const clients = await getClientsByReferralCode(link.code);
         return clients.map((c) => ({
           id: c.id,
@@ -1617,11 +1729,9 @@ export const appRouter = router({
         }));
       }),
       myStats: publicProcedure.input(z.object({
-        code: z.string(),
-      })).query(async ({ input }) => {
-        const link = await getReferralLinkByCode(input.code);
-        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
-        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This referral account has been deactivated" });
+        code: z.string().min(1).max(64),
+      })).query(async ({ ctx, input }) => {
+        const link = await requireReferrerSession(ctx.req, input.code);
         const clients = await getClientsByReferralCode(link.code);
         const stages: Record<string, number> = {};
         clients.forEach((c) => { stages[c.stage] = (stages[c.stage] || 0) + 1; });
@@ -1629,22 +1739,18 @@ export const appRouter = router({
         return { totalClients: clients.length, stages, referrerName: link.referrerName, code: link.code, totalMembers };
       }),
       myMessages: publicProcedure.input(z.object({
-        code: z.string(),
-      })).query(async ({ input }) => {
-        const link = await getReferralLinkByCode(input.code);
-        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
-        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This referral account has been deactivated" });
+        code: z.string().min(1).max(64),
+      })).query(async ({ ctx, input }) => {
+        const link = await requireReferrerSession(ctx.req, input.code);
         return listReferrerMessages(link.id);
       }),
       reply: publicProcedure.input(z.object({
-        code: z.string(),
+        code: z.string().min(1).max(64),
         message: z.string().min(1).max(2000),
         submissionId: z.number().optional(),
         attachmentUrl: z.string().url().startsWith("https://").optional(),
-      })).mutation(async ({ input }) => {
-        const link = await getReferralLinkByCode(input.code);
-        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
-        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This referral account has been deactivated" });
+      })).mutation(async ({ ctx, input }) => {
+        const link = await requireReferrerSession(ctx.req, input.code);
         // SECURITY: verify the submissionId (if provided) actually belongs to this referrer.
         // Without this check, any referrer with a valid code could tag a message to any
         // client in the system, polluting another referrer's client thread.
@@ -1689,21 +1795,17 @@ export const appRouter = router({
         return { success: true, id };
       }),
       markAllRead: publicProcedure.input(z.object({
-        code: z.string(),
-      })).mutation(async ({ input }) => {
-        const link = await getReferralLinkByCode(input.code);
-        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
-        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This referral account has been deactivated" });
+        code: z.string().min(1).max(64),
+      })).mutation(async ({ ctx, input }) => {
+        const link = await requireReferrerSession(ctx.req, input.code);
         await markAllReferrerMessagesRead(link.id);
         return { success: true };
       }),
       deleteMessage: publicProcedure.input(z.object({
-        code: z.string(),
+        code: z.string().min(1).max(64),
         messageId: z.number(),
-      })).mutation(async ({ input }) => {
-        const link = await getReferralLinkByCode(input.code);
-        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
-        if (!link.isActive) throw new TRPCError({ code: "FORBIDDEN", message: "This referral account has been deactivated" });
+      })).mutation(async ({ ctx, input }) => {
+        const link = await requireReferrerSession(ctx.req, input.code);
         // Pass referralLinkId so the DB helper verifies ownership before deleting
         await deleteReferrerMessage(input.messageId, link.id);
         return { success: true };

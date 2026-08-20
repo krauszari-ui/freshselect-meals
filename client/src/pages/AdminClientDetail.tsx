@@ -327,6 +327,7 @@ export default function AdminClientDetail() {
   });
   const addNoteMutation = trpc.admin.notes.create.useMutation({
     onSuccess: () => { utils.admin.notes.byClient.invalidate({ submissionId: id }); setNoteText(""); toast.success("Note added"); },
+    onError: (err) => toast.error(err.message || "Unable to add the note. Please try again."),
   });
   const addTaskMutation = trpc.admin.tasks.create.useMutation({
     onSuccess: () => { utils.admin.tasks.byClient.invalidate({ submissionId: id }); setShowAddTask(false); setTaskForm(""); toast.success("Task added"); },
@@ -1614,11 +1615,11 @@ export default function AdminClientDetail() {
                       const consentDoc = (clientDocs as any[]).find((d: any) => d.category === "consent" && d.mimeType === "application/pdf");
                       return consentDoc ? (
                         <button
-                          onClick={() => openDocument(consentDoc.fileKey, id)}
-                          disabled={docOpenLoading === consentDoc.fileKey}
+                          onClick={() => openDocument(consentDoc.url ?? consentDoc.fileKey, id)}
+                          disabled={docOpenLoading === (consentDoc.url ?? consentDoc.fileKey)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-medium rounded-md transition-colors"
                         >
-                          {docOpenLoading === consentDoc.fileKey ? <Loader2 className="h-3 w-3 animate-spin" /> : <ExternalLink className="h-3 w-3" />} View PDF
+                          {docOpenLoading === (consentDoc.url ?? consentDoc.fileKey) ? <Loader2 className="h-3 w-3 animate-spin" /> : <ExternalLink className="h-3 w-3" />} View PDF
                         </button>
                       ) : null;
                     })()}
@@ -1650,10 +1651,10 @@ export default function AdminClientDetail() {
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Submitted with Application</p>
                     <div className="space-y-2">
                       {Object.entries(uploadedDocuments).map(([docKey, docVal]) => {
-                        // New format: { url, key } — use fileKey for getFreshUrl
-                        // Old format: plain URL string — pass the URL directly to getFreshUrl (server extracts key)
+                        // New format: { url, key } — prefer the permanent URL; fall back to the storage key.
+                        // Old format: plain URL string — pass it directly to getFreshUrl (server extracts a key when needed).
                         const isNewFormat = typeof docVal === "object" && docVal !== null && "key" in docVal;
-                        const fileKeyOrUrl = isNewFormat ? (docVal as any).key : (docVal as string);
+                        const fileKeyOrUrl = isNewFormat ? ((docVal as any).url ?? (docVal as any).key) : (docVal as string);
                         const isOpening = docOpenLoading === fileKeyOrUrl;
                         return (
                           <div key={docKey} className="flex items-center justify-between p-2 rounded bg-emerald-50 border border-emerald-100">
@@ -1694,12 +1695,12 @@ export default function AdminClientDetail() {
                             <span className="text-sm text-slate-700">{doc.name}</span>
                           </div>
                           <button
-                            onClick={() => openDocument(doc.fileKey, id)}
-                            disabled={docOpenLoading === doc.fileKey}
+                            onClick={() => openDocument(doc.url ?? doc.fileKey, id)}
+                            disabled={docOpenLoading === (doc.url ?? doc.fileKey)}
                             className="p-1 hover:bg-slate-100 rounded disabled:opacity-60"
                             title="Open document"
                           >
-                            {docOpenLoading === doc.fileKey
+                            {docOpenLoading === (doc.url ?? doc.fileKey)
                               ? <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                               : <ExternalLink className="h-4 w-4 text-blue-500 hover:text-blue-600" />}
                           </button>

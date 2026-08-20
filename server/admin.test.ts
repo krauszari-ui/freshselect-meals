@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { createHmac } from "crypto";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
@@ -67,6 +68,7 @@ vi.mock("./db", () => ({
   updateSubmissionStage: vi.fn().mockResolvedValue(undefined),
   updateSubmissionAssignment: vi.fn().mockResolvedValue(undefined),
   getAllSubmissions: vi.fn().mockResolvedValue([]),
+  getSubmissionsByIds: vi.fn().mockResolvedValue([]),
   getSubmissionByRef: vi.fn().mockResolvedValue(undefined),
   listStaffUsers: vi.fn().mockResolvedValue([
     { id: 1, name: "Admin User", email: "admin@freshselect.com", role: "admin" },
@@ -228,6 +230,27 @@ function createViewerContext(): TrpcContext {
   };
 }
 
+function createOrgAssessorContext(): TrpcContext {
+  const user: AuthenticatedUser = {
+    id: 5,
+    openId: "org-assessor-user",
+    email: "assessor@example.com",
+    name: "Org Assessor",
+    loginMethod: "local",
+    role: "assessor",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    lastSignedIn: new Date(),
+    orgId: 11,
+  } as any;
+
+  return {
+    user,
+    req: { protocol: "https", headers: {} } as TrpcContext["req"],
+    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
+  };
+}
+
 function createUserContext(): TrpcContext {
   const user: AuthenticatedUser = {
     id: 3,
@@ -254,6 +277,16 @@ function createAnonContext(): TrpcContext {
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
   };
+}
+
+function createReferrerSessionContext(code = "abc123", referrerId = 1): TrpcContext {
+  const secret = process.env.JWT_SECRET || "test-referrer-session-secret";
+  process.env.JWT_SECRET = secret;
+  const encoded = Buffer.from(JSON.stringify({ referrerId, code, expiresAt: Date.now() + 60_000 })).toString("base64url");
+  const signature = createHmac("sha256", secret).update(encoded).digest("base64url");
+  const ctx = createAnonContext();
+  ctx.req.headers.cookie = `referrer_session=${encoded}.${signature}`;
+  return ctx;
 }
 
 // ─── Dashboard Stats ───────────────────────────────────────────────────
@@ -684,16 +717,16 @@ describe("admin.referrals", () => {
 
 // ─── Referrer Portal ─────────────────────────────────────────────────
 describe("admin.referrerPortal", () => {
-  it("returns clients for a valid referral code", async () => {
-    const caller = appRouter.createCaller(createAnonContext());
+  it("returns clients for an authenticated referrer session", async () => {
+    const caller = appRouter.createCaller(createReferrerSessionContext());
     const result = await caller.admin.referrerPortal.myClients({ code: "abc123" });
     expect(Array.isArray(result)).toBe(true);
     expect(result.length).toBe(1);
     expect(result[0].firstName).toBe("Sarah");
   });
 
-  it("returns stats for a valid referral code", async () => {
-    const caller = appRouter.createCaller(createAnonContext());
+  it("returns stats for an authenticated referrer session", async () => {
+    const caller = appRouter.createCaller(createReferrerSessionContext());
     const result = await caller.admin.referrerPortal.myStats({ code: "abc123" });
     expect(result.totalClients).toBe(1);
     expect(result.referrerName).toBe("John Smith");
@@ -795,5 +828,132 @@ describe("chat workflow safeguards", () => {
     await expect(caller.org.sendGroupMessage({ orgId: 7, content: "Reply", replyToId: 88 })).rejects.toThrow(
       "unavailable in this organization chat"
     );
+  });
+});
+
+describe("organization assessor client access", () => {
+  it("allows an assessor to open a client assigned to a teammate in the same organization", async () => {
+    const { getSubmissionById, listOrgMembers } = await import("./db");
+    vi.mocked(getSubmissionById).mockResolvedValueOnce({
+      id: 1,
+      firstName: "Sarah",
+      lastName: "Cohen",
+      assessorId: 99,
+      referredOrgId: null,
+    } as any);
+    vi.mocked(listOrgMembers).mockResolvedValueOnce([{ id: 99, name: "Teammate Assessor" }] as any);
+    const caller = appRouter.createCaller(createOrgAssessorContext());
+
+    await expect(caller.admin.getById({ id: 1 })).resolves.toMatchObject({ id: 1 });
+  });
+});
+
+describe("referrer portal session protection", () => {
+  it("rejects client-list access when a caller has only a public referral code", async () => {
+    const caller = appRouter.createCaller(createAnonContext());
+
+    await expect(caller.admin.referrerPortal.myClients({ code: "abc123" })).rejects.toThrow(
+      "Please sign in to access the referrer portal"
+    );
+  });
+});
+
+describe("assessor PII scope protection", () => {
+  it("blocks assessors from organization-wide duplicate analytics", async () => {
+    const caller = appRouter.createCaller(createOrgAssessorContext());
+
+    await expect(caller.admin.getDuplicates()).rejects.toThrow("Admin access required");
+  });
+
+  it("blocks assessors from bulk-fetching a client outside their organization scope", async () => {
+    const { getSubmissionsByIds, listOrgMembers } = await import("./db");
+    vi.mocked(getSubmissionsByIds).mockResolvedValueOnce([
+      { id: 44, firstName: "Other", lastName: "Client", assessorId: 88, referredOrgId: null },
+    ] as any);
+    vi.mocked(listOrgMembers).mockResolvedValueOnce([] as any);
+    const caller = appRouter.createCaller(createOrgAssessorContext());
+
+    await expect(caller.admin.bulkGetByIds({ ids: [44] })).rejects.toThrow(
+      "You do not have access to one or more requested clients"
+    );
+  });
+
+  it("blocks assessors from organization-wide task lists and statistics", async () => {
+    const caller = appRouter.createCaller(createOrgAssessorContext());
+
+    await expect(caller.admin.tasks.list({})).rejects.toThrow("Use a client record to view tasks assigned to your accessible clients");
+    await expect(caller.admin.tasks.stats()).rejects.toThrow("You do not have access to organization-wide task statistics");
+  });
+});
+
+describe("assessment completion integrity", () => {
+  it("rejects completion when required assessment answers are missing", async () => {
+    const { getSubmissionById } = await import("./db");
+    vi.mocked(getSubmissionById).mockResolvedValueOnce({ id: 1, firstName: "Sarah", lastName: "Cohen", formData: {} } as any);
+    const caller = appRouter.createCaller(createWorkerContext());
+
+    await expect(caller.admin.updateAssessmentCompleted({ id: 1, completed: true })).rejects.toThrow("Assessment is incomplete");
+  });
+
+  it("records a complete assessment only after all required answers and due date are present", async () => {
+    const { getSubmissionById, updateSubmissionFields, updateSubmissionStage } = await import("./db");
+    vi.mocked(getSubmissionById).mockResolvedValueOnce({
+      id: 1,
+      firstName: "Sarah",
+      lastName: "Cohen",
+      formData: {
+        healthCategories: ["Pregnant"],
+        dueDate: "2026-12-01",
+        foodAllergies: "None",
+        screeningQuestions: {
+          livingSituation: "Stable", utilityShutoff: "No", receivesSnap: "Yes", receivesWic: "No",
+          receivesTanf: "No", enrolledHealthHome: "No", householdMembersCount: "2",
+          householdMembersWithMedicaid: "2", needsWorkAssistance: "No", wantsSchoolHelp: "No",
+          transportationBarrier: "No", hasChronicIllness: "No", otherHealthIssues: "No",
+          medicationsRequireRefrigeration: "No", pregnantOrPostpartum: "Yes", breastmilkRefrigeration: "No",
+        },
+      },
+    } as any);
+    const caller = appRouter.createCaller(createWorkerContext());
+
+    await expect(caller.admin.updateAssessmentCompleted({ id: 1, completed: true })).resolves.toEqual({ success: true });
+    expect(updateSubmissionFields).toHaveBeenCalledWith(1, expect.objectContaining({ assessmentCompletedAt: expect.any(Date) }));
+    expect(updateSubmissionStage).toHaveBeenCalledWith(1, "assessment");
+  });
+});
+
+describe("assessor case notes", () => {
+  it("allows an assessor to add a note to a directly assigned client", async () => {
+    const { getSubmissionById, createCaseNote } = await import("./db");
+    vi.mocked(getSubmissionById).mockResolvedValueOnce({
+      id: 1,
+      firstName: "Sarah",
+      lastName: "Cohen",
+      assessorId: 5,
+      referredOrgId: null,
+    } as any);
+    const caller = appRouter.createCaller(createOrgAssessorContext());
+
+    await expect(caller.admin.notes.create({ submissionId: 1, content: "Called client and confirmed the assessment date." })).resolves.toEqual({ success: true, id: 1 });
+    expect(createCaseNote).toHaveBeenCalledWith(expect.objectContaining({ submissionId: 1, createdBy: 5 }));
+  });
+});
+
+describe("assessor stage transitions", () => {
+  it("blocks an assessor from marking an unrelated client Not Eligible", async () => {
+    const { getSubmissionById, listOrgMembers, updateSubmissionStage } = await import("./db");
+    vi.mocked(getSubmissionById).mockResolvedValueOnce({
+      id: 77,
+      firstName: "Other",
+      lastName: "Client",
+      assessorId: 88,
+      referredOrgId: null,
+    } as any);
+    vi.mocked(listOrgMembers).mockResolvedValueOnce([] as any);
+    vi.mocked(updateSubmissionStage).mockClear();
+    const caller = appRouter.createCaller(createOrgAssessorContext());
+
+    await expect(caller.admin.markNotEligible({ id: 77, reason: "Missing eligibility documentation" })).rejects.toThrow("You do not have access to this client");
+    expect(updateSubmissionStage).not.toHaveBeenCalled();
   });
 });

@@ -124,8 +124,8 @@ export default function AdminDocuments() {
                   <FileText className="h-5 w-5 text-slate-400 mt-0.5 shrink-0" />
                   <div>
                     <button
-                      onClick={() => openDocument(doc.fileKey || doc.fileUrl || doc.url, null)}
-                      disabled={docOpenLoading === (doc.fileKey || doc.fileUrl || doc.url)}
+                      onClick={() => openDocument(doc.url || doc.fileUrl || doc.fileKey, null)}
+                      disabled={docOpenLoading === (doc.url || doc.fileUrl || doc.fileKey)}
                       className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline text-left disabled:opacity-60"
                     >
                       {doc.fileName || doc.name}
@@ -144,12 +144,12 @@ export default function AdminDocuments() {
                   </div>
                 </div>
                 <button
-                  onClick={() => openDocument(doc.fileKey || doc.fileUrl || doc.url, null)}
-                  disabled={docOpenLoading === (doc.fileKey || doc.fileUrl || doc.url)}
+                  onClick={() => openDocument(doc.url || doc.fileUrl || doc.fileKey, null)}
+                  disabled={docOpenLoading === (doc.url || doc.fileUrl || doc.fileKey)}
                   title="Download document"
                   className="disabled:opacity-60"
                 >
-                  {docOpenLoading === (doc.fileKey || doc.fileUrl || doc.url)
+                  {docOpenLoading === (doc.url || doc.fileUrl || doc.fileKey)
                     ? <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
                     : <Download className="h-4 w-4 text-slate-400 hover:text-slate-600" />}
                 </button>

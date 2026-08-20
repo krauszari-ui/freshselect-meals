@@ -242,7 +242,7 @@ async function startServer() {
     // callers from triggering DB queries and owner notifications.
     try {
       const user = await sdk.authenticateRequest(req).catch(() => null);
-      if (!user) {
+      if (!user || !(user as any).isCron) {
         res.status(401).json({ ok: false, error: "Unauthorized" });
         return;
       }
@@ -424,13 +424,14 @@ async function startServer() {
   app.post("/api/scheduled/daily-digest", async (req, res) => {
     try {
       const isTest = req.query.test === "true";
-      // For test sends: allow CRON_SECRET header bypass (sandbox-triggered previews)
+      // For test sends: allow only the CRON_SECRET header bypass (sandbox-triggered previews).
+      // A normal staff session must never be sufficient to trigger an operational email.
       const cronSecret = process.env.CRON_SECRET;
       const headerSecret = req.headers["x-cron-secret"] as string | undefined;
       const hasSecretBypass = cronSecret && headerSecret && headerSecret === cronSecret;
       if (!hasSecretBypass) {
         const user = await sdk.authenticateRequest(req).catch(() => null);
-        if (!user || (!(user as any).isCron && !isTest)) {
+        if (!user || !(user as any).isCron) {
           res.status(401).json({ ok: false, error: "cron-only" });
           return;
         }
