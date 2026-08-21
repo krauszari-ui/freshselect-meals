@@ -134,6 +134,8 @@ export async function getSubmissionByMedicaidId(medicaidId: string): Promise<Sub
 export interface ListSubmissionsOptions {
   search?: string;
   status?: Submission["status"] | "all";
+  /** Exclude one workflow status while preserving all other matching clients. */
+  excludeStatus?: Submission["status"] | "all";
   stage?: string;
   excludeStage?: string;
   excludeStages?: string[];
@@ -162,7 +164,7 @@ export interface ListSubmissionsOptions {
 export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const { search, status, stage, excludeStage, excludeStages, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, assessorId, notInterested, orgId, sortDir = "desc", page = 1, pageSize = 20 } = opts;
+  const { search, status, excludeStatus, stage, excludeStage, excludeStages, supermarket, neighborhood, program, newApplicant, language, borough, assignedTo, intakeRep, referralSource, assessmentCompleted, zipcode, priority, assessorId, notInterested, orgId, sortDir = "desc", page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
   const conditions = [];
 
@@ -175,6 +177,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
     ));
   }
   if (status && status !== "all") conditions.push(eq(submissions.status, status));
+  if (excludeStatus && excludeStatus !== "all") conditions.push(ne(submissions.status, excludeStatus));
   if (stage && stage !== "all") conditions.push(eq(submissions.stage, stage as Submission["stage"]));
   if (excludeStage && excludeStage !== "all") conditions.push(ne(submissions.stage, excludeStage as Submission["stage"]));
   if (excludeStages && excludeStages.length > 0) conditions.push(notInArray(submissions.stage, excludeStages as Submission["stage"][]));

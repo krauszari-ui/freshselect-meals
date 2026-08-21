@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { createHmac } from "crypto";
 import { appRouter } from "./routers";
+import { listSubmissions } from "./db";
 import type { TrpcContext } from "./_core/context";
 
 // Mock the db module
@@ -387,6 +388,22 @@ describe("admin.list", () => {
       page: 1,
     });
     expect(result.rows).toBeDefined();
+  });
+
+  it("forwards approved and active-folder status filters to the server-side list query", async () => {
+    const caller = appRouter.createCaller(createAdminContext());
+
+    await caller.admin.list({ status: "approved", notInterested: false });
+    expect(listSubmissions).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: "approved",
+      notInterested: false,
+    }));
+
+    await caller.admin.list({ excludeStatus: "approved", notInterested: false });
+    expect(listSubmissions).toHaveBeenLastCalledWith(expect.objectContaining({
+      excludeStatus: "approved",
+      notInterested: false,
+    }));
   });
 
   it("throws FORBIDDEN for non-staff", async () => {

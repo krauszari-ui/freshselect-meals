@@ -12,7 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText, Trash2, Users, FileDown, FilterX, EyeOff, RotateCcw,
+  Search, Loader2, Plus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Download, FileSpreadsheet, FileText, Trash2, Users, FileDown, FilterX, EyeOff, RotateCcw, CheckCircle2,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -512,13 +512,15 @@ export default function AdminClients() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
 
-  // Not Interested tab
-  const activeTab = (up.get("tab") as "active" | "not_interested") || "active";
-  const setActiveTab = (t: "active" | "not_interested") => {
+  // Client folders: active clients, approved clients, and soft-deleted Not Interested clients.
+  const activeTab = (up.get("tab") as "active" | "approved" | "not_interested") || "active";
+  const setActiveTab = (t: "active" | "approved" | "not_interested") => {
     const next = new URLSearchParams();
     if (t !== "active") next.set("tab", t);
     navigate("/admin/clients" + (next.toString() ? "?" + next.toString() : ""), { replace: true });
   };
+  const isActiveClientsTab = activeTab === "active";
+  const isApprovedTab = activeTab === "approved";
   const isNotInterestedTab = activeTab === "not_interested";
 
   // Permission check: can current user mark/restore Not Interested?
@@ -596,6 +598,8 @@ export default function AdminClients() {
   // All filters are now passed to the DB — no client-side filtering
   const listQuery = trpc.admin.list.useQuery({
     search: debouncedSearch || undefined,
+    status: isApprovedTab ? "approved" : undefined,
+    excludeStatus: isActiveClientsTab ? "approved" : undefined,
     stage: effectiveStageFilter !== "all" ? effectiveStageFilter : undefined,
     language: languageFilter !== "all" ? languageFilter : undefined,
     borough: boroughFilter !== "all" ? boroughFilter : undefined,
@@ -614,7 +618,8 @@ export default function AdminClients() {
       sortDir,
       page,
       pageSize: 25,
-      // Pass notInterested filter based on active tab
+      // Keep each client in the correct folder: approved is separated from active,
+      // and Not Interested remains a separate soft-delete view.
       notInterested: isNotInterestedTab ? true : false,
     });
 
@@ -894,18 +899,28 @@ export default function AdminClients() {
           </div>
         </div>
 
-        {/* Tab Switcher: Active Clients / Not Interested */}
+        {/* Tab Switcher: Active Clients / Approved Clients / Not Interested */}
         {!isAssessor && (
           <div className="flex gap-1 border-b border-slate-200">
             <button
               onClick={() => setActiveTab("active")}
               className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                !isNotInterestedTab
+                isActiveClientsTab
                   ? "border-green-600 text-green-700"
                   : "border-transparent text-slate-500 hover:text-slate-700"
               }`}
             >
               Active Clients
+            </button>
+            <button
+              onClick={() => setActiveTab("approved")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                isApprovedTab
+                  ? "border-emerald-600 text-emerald-700"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Approved Clients
             </button>
             <button
               onClick={() => setActiveTab("not_interested")}
@@ -1249,6 +1264,15 @@ export default function AdminClients() {
           </div>
         )}
 
+        {isApprovedTab && (
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+            <span className="text-sm text-emerald-800">
+              This folder contains every client with an <strong>Approved</strong> status. Approved clients are kept separate from the active-client view.
+            </span>
+          </div>
+        )}
+
         {/* Table */}
         <div className="bg-white rounded-lg border border-slate-200 overflow-hidden admin-table-wrap">
           {listQuery.isLoading ? (
@@ -1262,6 +1286,12 @@ export default function AdminClients() {
                   <EyeOff className="h-8 w-8 mx-auto mb-3 text-slate-300" />
                   <p className="text-sm font-medium">No clients marked as Not Interested</p>
                   <p className="text-xs text-slate-400 mt-1">Clients you mark as Not Interested will appear here.</p>
+                </>
+              ) : isApprovedTab ? (
+                <>
+                  <CheckCircle2 className="h-8 w-8 mx-auto mb-3 text-emerald-300" />
+                  <p className="text-sm font-medium">No approved clients yet</p>
+                  <p className="text-xs text-slate-400 mt-1">Clients will appear here when their status is marked Approved.</p>
                 </>
               ) : (
                 <p className="text-sm">No clients found</p>

@@ -1037,3 +1037,8 @@
 - [x] SECURITY FIX: Enforce assigned-organization scope before an assessor can mark a client Not Eligible
 - [x] E2E: Submit one clearly labeled QA application with non-real contact details and verify its staff intake path without sending team communications
 - [x] WORKFLOW FIX: Restore generated attestation PDF opening from the client detail after successful public submission
+
+## Approved Clients Tab (August 2026)
+- [x] BACKEND: Add a server-side approved-status filter and active-folder exclusion to the client list query
+- [x] FRONTEND: Add an Approved Clients tab between active clients and Not Interested, with approved clients shown exclusively in that view
+- [x] TESTS: Cover the approved-status and active-folder filter contracts

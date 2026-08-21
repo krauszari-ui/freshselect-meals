@@ -635,6 +635,7 @@ export const appRouter = router({
     list: staffProcedure.input(z.object({
       search: z.string().optional(),
       status: z.enum(["all", "new", "in_review", "approved", "rejected", "on_hold"]).optional(),
+      excludeStatus: z.enum(["new", "in_review", "approved", "rejected", "on_hold"]).optional(),
       stage: z.string().optional(),
       supermarket: z.string().optional(),
       neighborhood: z.string().optional(),
