@@ -1061,3 +1061,8 @@
 - [x] WORKFLOW FIX: Replace the referral admin dialog's session-bound client query with an authorized staff client lookup
 - [ ] AUTHENTICATED E2E: Complete the assessor browser note-entry walkthrough with an assessor test session
 - [x] WORKFLOW FIX: Gate global Admin Clients filter queries while an assessor redirect is resolving
+
+## Administrator Login Outage (August 2026)
+- [x] BUG: Diagnose the production user lookup failure shown during administrator sign-in — Vercel was connected to a stale database schema
+- [x] FIX: Rotate Vercel Production/Preview/Development DATABASE_URL to the current FreshSelect database and redeploy; invalid-login request now returns expected 401 instead of 500
+- [x] VERIFY: Confirm a real administrator credential signs in successfully after recovery
