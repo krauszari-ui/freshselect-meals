@@ -1068,3 +1068,12 @@
 - [x] BUG: Diagnose the production user lookup failure shown during administrator sign-in — Vercel was connected to a stale database schema
 - [x] FIX: Rotate Vercel Production/Preview/Development DATABASE_URL to the current FreshSelect database and redeploy; invalid-login request now returns expected 401 instead of 500
 - [x] VERIFY: Confirm a real administrator credential signs in successfully after recovery
+
+## August 11 Missing Records Investigation (August 2026)
+- [x] INVESTIGATE: Compare current application, document, and audit records around August 11 without altering data — no physical deletion recorded on that date
+- [ ] RECOVERY: Restore the five August 11 clients currently in the Not Interested folder, if the user confirms they should return to the main list
+- [x] INVESTIGATE: Compare August 11 chats, case notes, tasks, stage history, and audit updates with their current retention state
+- [x] RECOVERY: Identify a safe restoration source for any confirmed missing history before reconstructing or overwriting records — no newer backup or prior database connection is currently available
+- [x] INVESTIGATE: Confirm whether the Vercel DATABASE_URL rotation switched the public app away from the historical chat and update dataset
+- [x] RECOVERY: Locate the previous Vercel database connection or provider snapshot without overwriting the current database — Vercel metadata preserves only the change history, not the historical secret
+- [x] INVESTIGATE: Confirm whether the active Manus database reflects an August 11 restoration snapshot rather than the prior live history — core tables were recreated on August 25 and retained history ends at the snapshot boundary
