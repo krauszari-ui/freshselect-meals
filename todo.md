@@ -1060,3 +1060,4 @@
 - [x] SECURITY FIX: Enforce the existing worker referral-links permission on the server, not only in sidebar navigation
 - [x] WORKFLOW FIX: Replace the referral admin dialog's session-bound client query with an authorized staff client lookup
 - [ ] AUTHENTICATED E2E: Complete the assessor browser note-entry walkthrough with an assessor test session
+- [x] WORKFLOW FIX: Gate global Admin Clients filter queries while an assessor redirect is resolving

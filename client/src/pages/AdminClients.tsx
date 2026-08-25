@@ -427,6 +427,7 @@ function CountBadge({ count }: { count: number | undefined }) {
 export default function AdminClients() {
   const { user } = useAuth();
   const isAssessor = user?.role === "assessor";
+  const canViewReferralLinks = !(user?.role === "worker" && (user as any).permissions?.showReferralLinks === false);
   const searchParams = useSearch();
   const [, navigate] = useLocation();
 
@@ -625,14 +626,15 @@ export default function AdminClients() {
 
   // Filter counts — loaded once, used to show per-option counts in dropdowns
   const filterCountsQuery = trpc.admin.filterCounts.useQuery(undefined, {
+    enabled: !isAssessor,
     staleTime: 60_000, // refresh every 60s
   });
   const fc = filterCountsQuery.data as any;
 
-  const staffQuery = trpc.admin.staffList.useQuery();
-  const { data: assessorList } = trpc.admin.listAssessors.useQuery();
+  const staffQuery = trpc.admin.staffList.useQuery(undefined, { enabled: !isAssessor });
+  const { data: assessorList } = trpc.admin.listAssessors.useQuery(undefined, { enabled: !isAssessor });
   const { data: orgList, isLoading: orgListLoading } = trpc.org.list.useQuery({ includeInactive: false });
-  const referralLinksQuery = trpc.admin.referrals.list.useQuery();
+  const referralLinksQuery = trpc.admin.referrals.list.useQuery(undefined, { enabled: !isAssessor && canViewReferralLinks });
   const referralLinks = (referralLinksQuery.data ?? []) as any[];
 
   const handleExportPdf = async (ids: number[]) => {
