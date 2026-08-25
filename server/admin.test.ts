@@ -290,6 +290,30 @@ function createReferrerSessionContext(code = "abc123", referrerId = 1): TrpcCont
   return ctx;
 }
 
+describe("role boundaries for global data and case notes", () => {
+  it("blocks assessors from global staff, filter, assessor-directory, and referral data", async () => {
+    const caller = appRouter.createCaller(createOrgAssessorContext());
+
+    await expect(caller.admin.staffList()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.admin.filterCounts()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.admin.listAssessors()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.admin.referrals.list()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("blocks read-only viewers from writing a case note", async () => {
+    const caller = appRouter.createCaller(createViewerContext());
+    await expect(caller.admin.notes.create({ submissionId: 1, content: "Viewer write attempt" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("enforces the server-side referral permission for restricted workers", async () => {
+    const ctx = createWorkerContext() as any;
+    ctx.user.permissions.showReferralLinks = false;
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.admin.referrals.list()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});
+
 // ─── Dashboard Stats ───────────────────────────────────────────────────
 describe("admin.stats", () => {
   it("returns stats with total and stages for admin users", async () => {

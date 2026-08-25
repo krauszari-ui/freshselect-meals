@@ -27,11 +27,17 @@
 
 The full suite completed with **23 test files and 330 tests passing** when supplied with non-production values required by configuration-only tests. TypeScript completed without errors, and the repository’s Vercel Build Output API build completed successfully. The public Vercel site and its tRPC authentication endpoint were also previously confirmed reachable.
 
+After the production database recovery, direct tRPC caller tests were added for assessor global-data restrictions, viewer case-note write denial, and the restricted-worker referral permission. The suite now completes with **23 test files and 333 tests passing** using validation-only configuration values. [1]
+
 > The audit did **not** send messages to clients, alter real client records, or use real personal information. The one database record is clearly identified as a QA audit entry and uses an invalid `.example.invalid` address plus a `ZZ` test CIN.
 
 ## Remaining Operational Verification
 
 The only unreproducible interaction is the final in-browser assessor note entry because the connected browser session is not signed in as an assessor. The server-side note path has a direct role regression test, but a live browser walkthrough should be completed with an assessor test account before declaring the UI click path fully audited.
+
+## Production Login Recovery Addendum
+
+On August 25, the Vercel production login endpoint returned a database `500` while the Manus-managed deployment returned the expected invalid-credential `401`. Vercel runtime output showed that its configured database was missing current application schema objects, including `emailBlasts`. The production, preview, and development Vercel `DATABASE_URL` values were rotated to the current managed database and the latest `main` deployment was redeployed. Post-recovery checks returned `200` for the public domain and login page, `401` for an invalid-credential administrator-login request, and a real administrator login succeeded. [6]
 
 ## References
 
@@ -40,3 +46,4 @@ The only unreproducible interaction is the final in-browser assessor note entry 
 [3]: https://github.com/krauszari-ui/freshselect-meals/blob/main/client/src/pages/AdminReferrals.tsx "FreshSelect Meals referral management workflow"
 [4]: https://github.com/krauszari-ui/freshselect-meals/blob/main/server/_core/index.ts "FreshSelect Meals inbound email webhook verification"
 [5]: https://github.com/krauszari-ui/freshselect-meals/blob/main/server/admin.test.ts "FreshSelect Meals assessor case-note regression test"
+[6]: https://vercel.com/scn1/freshselect-meals "FreshSelect Meals Vercel project"
