@@ -1042,3 +1042,9 @@
 - [x] BACKEND: Add a server-side approved-status filter and active-folder exclusion to the client list query
 - [x] FRONTEND: Add an Approved Clients tab between active clients and Not Interested, with approved clients shown exclusively in that view
 - [x] TESTS: Cover the approved-status and active-folder filter contracts
+
+## GitHub and Vercel Recovery (August 2026)
+- [ ] RECOVERY: Sync and inspect the latest connected GitHub project state
+- [ ] RECOVERY: Compare the latest GitHub commit with the restored local state and identify missing changes
+- [ ] RECOVERY: Inspect and restore the Vercel deployment and external website availability
+- [ ] VERIFY: Validate the Vercel site after recovery
