@@ -240,15 +240,11 @@ export default function AdminReferrals() {
   const stats = statsQuery.data as any;
   const unreadCounts = (unreadCountsQuery.data ?? {}) as Record<number, number>;
 
-  // Load clients for the selected referrer (for message tagging)
-  const selectedLinkClients = trpc.admin.referrals.listMessages.useQuery(
+  // Load clients through the authenticated staff procedure. The referrer-portal
+  // procedure correctly requires a referrer session and must not be reused here.
+  const referrerClientsQuery = trpc.admin.referrals.clients.useQuery(
     { referralLinkId: selectedLink?.id ?? 0 },
-    { enabled: false } // we'll use a separate query below
-  );
-
-  const referrerClientsQuery = trpc.admin.referrerPortal.myClients.useQuery(
-    { code: selectedLink?.code ?? "" },
-    { enabled: showMessages && !!selectedLink?.code }
+    { enabled: showMessages && !!selectedLink?.id }
   );
   const referrerClients = (referrerClientsQuery.data ?? []) as any[];
 

@@ -1048,3 +1048,15 @@
 - [x] RECOVERY: Compare the latest GitHub commit with the restored local state and identify missing changes
 - [x] RECOVERY: Inspect and restore the Vercel deployment and external website availability
 - [x] VERIFY: Validate the Vercel site after recovery
+
+## High-Severity Security and Workflow Audit (August 2026)
+- [x] AUDIT: Trace recent commits through authentication, authorization, uploads, email, notifications, and client data mutations
+- [x] E2E: Exercise public intake, safe upload validation, attestation generation, storage retrieval, outbound email, and inbound-webhook rejection with safe QA data
+- [x] FIXES: Apply minimal high-confidence remediation for confirmed critical security or workflow defects
+- [x] TESTS: Add regression coverage and run full validation for confirmed findings
+- [x] SECURITY FIX: Remove sensitive referral-link fields from public code lookup and rate-limit that lookup
+- [x] WORKFLOW FIX: Prevent assessor client-detail pages from issuing the admin-only staff-list request before notes load
+- [x] SECURITY FIX: Block assessors from unscoped global dashboard, client-list, staff-roster, referral, and filter-count procedures
+- [x] SECURITY FIX: Enforce the existing worker referral-links permission on the server, not only in sidebar navigation
+- [x] WORKFLOW FIX: Replace the referral admin dialog's session-bound client query with an authorized staff client lookup
+- [ ] AUTHENTICATED E2E: Complete the assessor browser note-entry walkthrough with an assessor test session

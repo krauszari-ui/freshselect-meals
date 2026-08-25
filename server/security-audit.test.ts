@@ -13,7 +13,7 @@ describe("BUG-SEC-A: referrer portal code-based rate limiter", () => {
     expect(typeof (security as any).referrerCodeLimiter).toBe("function");
   });
 
-  it("index.ts applies referrerCodeLimiter to all 6 code-based endpoints", () => {
+  it("index.ts applies referrerCodeLimiter to every public referral-code endpoint", () => {
     const indexSrc = readFileSync(join(__dirname, "_core/index.ts"), "utf8");
     const endpoints = [
       "admin.referrerPortal.myClients",
@@ -22,10 +22,55 @@ describe("BUG-SEC-A: referrer portal code-based rate limiter", () => {
       "admin.referrerPortal.reply",
       "admin.referrerPortal.markAllRead",
       "admin.referrerPortal.deleteMessage",
+      "admin.referrals.getByCode",
     ];
     for (const ep of endpoints) {
       expect(indexSrc).toContain(`"/api/trpc/${ep}", referrerCodeLimiter`);
     }
+  });
+
+  it("public referral lookup returns only non-sensitive validation metadata", () => {
+    const routersSrc = readFileSync(join(__dirname, "routers.ts"), "utf8");
+    const lookupStart = routersSrc.indexOf("getByCode: publicProcedure");
+    const lookupEnd = routersSrc.indexOf("create: adminProcedure", lookupStart);
+    const lookupBlock = routersSrc.slice(lookupStart, lookupEnd);
+    expect(lookupBlock).toContain("return { code: link.code, isActive: true }");
+    expect(lookupBlock).not.toContain("safeLink");
+    expect(lookupBlock).not.toContain("referrerName");
+    expect(lookupBlock).not.toContain("link.email");
+  });
+});
+
+// ─── BUG-SEC-G: assessor global-data isolation and viewer read-only access ──
+describe("BUG-SEC-G: role-scoped staff procedures", () => {
+  it("uses a non-assessor guard for global dashboards and staff/referral directories", () => {
+    const routersSrc = readFileSync(join(__dirname, "routers.ts"), "utf8");
+    const required = [
+      "stats: nonAssessorStaffProcedure",
+      "taskStats: nonAssessorStaffProcedure",
+      "recentClients: nonAssessorStaffProcedure",
+      "recentlyUpdated: nonAssessorStaffProcedure",
+      "addedCount: nonAssessorStaffProcedure",
+      "staffList: nonAssessorStaffProcedure",
+      "filterCounts: nonAssessorStaffProcedure",
+      "listAssessors: nonAssessorStaffProcedure",
+      "list: referralStaffProcedure.query(async () => listReferralLinks())",
+      "stats: referralStaffProcedure.query(async () => getReferralStats())",
+    ];
+    for (const marker of required) expect(routersSrc).toContain(marker);
+  });
+
+  it("blocks viewers from case-note and referrer-note writes", () => {
+    const routersSrc = readFileSync(join(__dirname, "routers.ts"), "utf8");
+    expect(routersSrc).toContain("sendReferrerNote: writableStaffProcedure");
+    expect(routersSrc).toContain("create: writableStaffProcedure.input(z.object({ submissionId: z.number(), content: z.string().min(1) }))");
+  });
+
+  it("enforces the worker referral permission and exposes a staff-only client lookup", () => {
+    const routersSrc = readFileSync(join(__dirname, "routers.ts"), "utf8");
+    expect(routersSrc).toContain("permissions?.showReferralLinks === false");
+    expect(routersSrc).toContain("clients: referralStaffProcedure.input");
+    expect(routersSrc).toContain("sendMessage: referralWriteProcedure.input");
   });
 });
 

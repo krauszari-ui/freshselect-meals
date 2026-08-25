@@ -16,7 +16,7 @@ import {
   createDocument, getDocumentsBySubmission, getLibraryDocuments, deleteDocument,
   createService, getServicesBySubmission, updateServiceStatus,
   updateSubmissionFields, updateSubmissionPriority, deleteSubmission, bulkDeleteSubmissions,
-  createReferralLink, listReferralLinks, getReferralLinkByCode,
+  createReferralLink, listReferralLinks, getReferralLinkByCode, getReferralLinkById,
   recordFailedLogin, clearFailedLogins,
   updateReferralLink, deleteReferralLink, incrementReferralUsage, getReferralStats,
   getReferralLinkByEmail, getClientsByReferralCode, getUserByEmail,
@@ -150,6 +150,45 @@ const superAdminProcedure = protectedProcedure.use(({ ctx, next }) => {
 const staffProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin" && ctx.user.role !== "worker" && ctx.user.role !== "super_admin" && ctx.user.role !== "viewer" && ctx.user.role !== "assessor")
     throw new TRPCError({ code: "FORBIDDEN", message: "Staff access required" });
+  return next({ ctx });
+});
+
+// Staff-only global data is not available to assessors, whose access is scoped
+// to assigned or organization-visible clients. Viewers retain their read-only
+// dashboard access.
+const nonAssessorStaffProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!isFreshSelectStaffRole(ctx.user.role)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Staff access required" });
+  }
+  return next({ ctx });
+});
+
+// Viewers are intentionally read-only. Assessors may use only mutations that
+// perform an additional client-scope check in their respective handlers.
+const writableStaffProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role === "viewer" || !isFreshSelectStaffRole(ctx.user.role) && ctx.user.role !== "assessor") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Write access required" });
+  }
+  return next({ ctx });
+});
+
+// Referral-link visibility is an explicit worker permission. The sidebar already
+// reflects it; this server-side guard prevents a worker from bypassing the UI by
+// calling the referral procedures directly.
+const referralStaffProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!isFreshSelectStaffRole(ctx.user.role)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Staff access required" });
+  }
+  if (ctx.user.role === "worker" && (ctx.user as any).permissions?.showReferralLinks === false) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to referral links" });
+  }
+  return next({ ctx });
+});
+
+const referralWriteProcedure = referralStaffProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role === "viewer") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Referral write access required" });
+  }
   return next({ ctx });
 });
 
@@ -567,14 +606,14 @@ export const appRouter = router({
     }),
 
     // Dashboard stats
-    stats: staffProcedure.query(async () => getSubmissionStats()),
-    taskStats: staffProcedure.query(async () => getTaskStats()),
+    stats: nonAssessorStaffProcedure.query(async () => getSubmissionStats()),
+    taskStats: nonAssessorStaffProcedure.query(async () => getTaskStats()),
     // BUG-SEC4-B FIX: add .int().min(1).max() bounds to prevent a compromised staff account
     // from passing limit=999999 to dump the entire submissions table in one query.
-    recentClients: staffProcedure.input(z.object({ days: z.number().int().min(1).max(365).optional(), limit: z.number().int().min(1).max(200).optional() }).optional()).query(async ({ input }) => getRecentSubmissions(input?.days ?? 7, input?.limit ?? 10)),
-    recentlyUpdated: staffProcedure.input(z.object({ days: z.number().int().min(1).max(365).optional(), limit: z.number().int().min(1).max(200).optional() }).optional()).query(async ({ input }) => getRecentlyUpdated(input?.days ?? 7, input?.limit ?? 10)),
-    addedCount: staffProcedure.input(z.object({ days: z.number().int().min(1).max(365).optional() }).optional()).query(async ({ input }) => getAddedCount(input?.days ?? 7)),
-    staffList: staffProcedure.query(async () => listStaffUsers()),
+    recentClients: nonAssessorStaffProcedure.input(z.object({ days: z.number().int().min(1).max(365).optional(), limit: z.number().int().min(1).max(200).optional() }).optional()).query(async ({ input }) => getRecentSubmissions(input?.days ?? 7, input?.limit ?? 10)),
+    recentlyUpdated: nonAssessorStaffProcedure.input(z.object({ days: z.number().int().min(1).max(365).optional(), limit: z.number().int().min(1).max(200).optional() }).optional()).query(async ({ input }) => getRecentlyUpdated(input?.days ?? 7, input?.limit ?? 10)),
+    addedCount: nonAssessorStaffProcedure.input(z.object({ days: z.number().int().min(1).max(365).optional() }).optional()).query(async ({ input }) => getAddedCount(input?.days ?? 7)),
+    staffList: nonAssessorStaffProcedure.query(async () => listStaffUsers()),
 
     // Assessor: list all clients assigned to this assessor (no assessment-completion filter)
     assessorStats: assessorProcedure.query(async ({ ctx }) => {
@@ -673,7 +712,7 @@ export const appRouter = router({
       return { success: true };
     }),
 
-    filterCounts: staffProcedure.query(async () => getFilterCounts()),
+    filterCounts: nonAssessorStaffProcedure.query(async () => getFilterCounts()),
     getDuplicates: adminProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
@@ -755,7 +794,7 @@ export const appRouter = router({
       return submission;
     }),
     // ─── Referrer Notes (per client) ──────────────────────────────────────
-    sendReferrerNote: staffProcedure.input(z.object({
+    sendReferrerNote: writableStaffProcedure.input(z.object({
       submissionId: z.number(),
       message: z.string().min(1).max(2000),
       attachmentUrl: z.string().url().startsWith("https://").optional(),
@@ -928,7 +967,7 @@ export const appRouter = router({
       return { success: true };
     }),
     // ─── Assessor Assignment ─────────────────────────────────────────────────
-    listAssessors: staffProcedure.query(async () => {
+    listAssessors: nonAssessorStaffProcedure.query(async () => {
       return listAssessors();
     }),
     assignAssessor: editProcedure.input(z.object({
@@ -1129,7 +1168,7 @@ export const appRouter = router({
         }
         return getCaseNotesBySubmission(input.submissionId);
       }),
-      create: staffProcedure.input(z.object({ submissionId: z.number(), content: z.string().min(1) }))
+      create: writableStaffProcedure.input(z.object({ submissionId: z.number(), content: z.string().min(1) }))
         .mutation(async ({ ctx, input }) => {
           // SECURITY: Assessors can only add notes for their assigned clients
           if (ctx.user.role === "assessor") {
@@ -1604,15 +1643,28 @@ export const appRouter = router({
 
     // ─── Referral Links ──────────────────────────────────────────────────
     referrals: router({
-      list: staffProcedure.query(async () => listReferralLinks()),
-      stats: staffProcedure.query(async () => getReferralStats()),
-      getByCode: publicProcedure.input(z.object({ code: z.string() })).query(async ({ input }) => {
+      list: referralStaffProcedure.query(async () => listReferralLinks()),
+      stats: referralStaffProcedure.query(async () => getReferralStats()),
+      clients: referralStaffProcedure.input(z.object({ referralLinkId: z.number().int().positive() }))
+        .query(async ({ input }) => {
+          const link = await getReferralLinkById(input.referralLinkId);
+          if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+          const clients = await getClientsByReferralCode(link.code);
+          return clients.map((client) => ({
+            id: client.id,
+            firstName: client.firstName,
+            lastName: client.lastName,
+            stage: client.stage,
+            status: client.status,
+          }));
+        }),
+      getByCode: publicProcedure.input(z.object({ code: z.string().min(2).max(64) })).query(async ({ input }) => {
         const link = await getReferralLinkByCode(input.code);
-        if (!link) return null;
-        // SECURITY: never expose the bcrypt hash to the client
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { passwordHash: _ph, ...safeLink } = link;
-        return safeLink;
+        // Public referral-code validation is intentionally metadata-free. Referral
+        // records contain contact, usage, and creator information that must never
+        // be exposed to an anonymous caller who guesses a short referral code.
+        if (!link || !link.isActive) return null;
+        return { code: link.code, isActive: true };
       }),
       create: adminProcedure.input(z.object({
         code: z.string().min(2).max(64),
@@ -1650,7 +1702,7 @@ export const appRouter = router({
         return { success: true };
       }),
       // ─── Referrer Messages ───────────────────────────────────────────
-      sendMessage: staffProcedure.input(z.object({
+      sendMessage: referralWriteProcedure.input(z.object({
         referralLinkId: z.number(),
         submissionId: z.number().optional(),
         message: z.string().min(1).max(2000),
@@ -1663,18 +1715,18 @@ export const appRouter = router({
         });
         return { success: true, id };
       }),
-      listMessages: staffProcedure.input(z.object({
+      listMessages: referralStaffProcedure.input(z.object({
         referralLinkId: z.number(),
       })).query(async ({ input }) => {
         return listReferrerMessages(input.referralLinkId);
       }),
-      markRead: staffProcedure.input(z.object({
+      markRead: referralWriteProcedure.input(z.object({
         messageId: z.number(),
       })).mutation(async ({ input }) => {
         await markReferrerMessageRead(input.messageId);
         return { success: true };
       }),
-      unreadCounts: staffProcedure.query(async () => {
+      unreadCounts: referralStaffProcedure.query(async () => {
         return getUnreadCountByReferrer();
       }),
     }),

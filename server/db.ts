@@ -766,6 +766,13 @@ export async function getReferralLinkByCode(code: string) {
   return result[0];
 }
 
+export async function getReferralLinkById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.select().from(referralLinks).where(eq(referralLinks.id, id)).limit(1);
+  return result[0];
+}
+
 export async function updateReferralLink(id: number, data: Partial<InsertReferralLink>): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

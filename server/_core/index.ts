@@ -323,6 +323,9 @@ async function startServer() {
   app.use("/api/trpc/admin.referrerPortal.reply", referrerCodeLimiter);
   app.use("/api/trpc/admin.referrerPortal.markAllRead", referrerCodeLimiter);
   app.use("/api/trpc/admin.referrerPortal.deleteMessage", referrerCodeLimiter);
+  // Public referral-code validation must be rate-limited too: codes can be as
+  // short as two characters, and this route previously returned link metadata.
+  app.use("/api/trpc/admin.referrals.getByCode", referrerCodeLimiter);
 
   app.use("/api/trpc/upload.document", uploadLimiter);
   // Password reset: 5 requests / 15 min per IP — prevents inbox flooding

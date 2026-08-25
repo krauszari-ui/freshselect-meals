@@ -204,8 +204,10 @@ export default function AdminClientDetail() {
   const { data: tasks } = trpc.admin.tasks.byClient.useQuery({ submissionId: id }, { enabled: id > 0 });
   const { data: clientServices } = trpc.admin.services.byClient.useQuery({ submissionId: id }, { enabled: id > 0 });
   const { data: clientDocs } = trpc.admin.documents.byClient.useQuery({ submissionId: id }, { enabled: id > 0 });
-  const staffQuery = trpc.admin.staffList.useQuery();
-  const { data: assessorList } = trpc.admin.listAssessors.useQuery();
+  // The assessor route reuses this detail page. Do not issue the global staff
+  // roster request for an assessor while they read or add an authorized note.
+  const staffQuery = trpc.admin.staffList.useQuery(undefined, { enabled: !isAssessor });
+  const { data: assessorList } = trpc.admin.listAssessors.useQuery(undefined, { enabled: !isAssessor });
   const { data: orgList = [] } = trpc.org.list.useQuery({ includeInactive: false });
   const { data: stageHistoryData } = trpc.admin.stageHistory.useQuery({ id }, { enabled: id > 0 });
 
