@@ -1044,7 +1044,7 @@
 - [x] TESTS: Cover the approved-status and active-folder filter contracts
 
 ## GitHub and Vercel Recovery (August 2026)
-- [ ] RECOVERY: Sync and inspect the latest connected GitHub project state
-- [ ] RECOVERY: Compare the latest GitHub commit with the restored local state and identify missing changes
-- [ ] RECOVERY: Inspect and restore the Vercel deployment and external website availability
-- [ ] VERIFY: Validate the Vercel site after recovery
+- [x] RECOVERY: Sync and inspect the latest connected GitHub project state
+- [x] RECOVERY: Compare the latest GitHub commit with the restored local state and identify missing changes
+- [x] RECOVERY: Inspect and restore the Vercel deployment and external website availability
+- [x] VERIFY: Validate the Vercel site after recovery
