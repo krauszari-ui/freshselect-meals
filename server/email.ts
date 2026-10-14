@@ -288,8 +288,8 @@ function buildEmailHtml(data: SubmissionEmailData, isAdmin: boolean): string {
 /**
  * Generic email sender — use for transactional emails outside the submission flow.
  */
-export async function sendEmail(params: { to: string; subject: string; html: string; replyTo?: string; from?: string }): Promise<boolean> {
-  const idempotencyKey = `generic-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+export async function sendEmail(params: { to: string; subject: string; html: string; replyTo?: string; from?: string; idempotencyKey?: string }): Promise<boolean> {
+  const idempotencyKey = params.idempotencyKey ?? `generic-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return sendWithRetry(
     (key) => getResend().emails.send({
       from: params.from ?? getFromEmail(),

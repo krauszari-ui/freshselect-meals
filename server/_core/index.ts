@@ -555,6 +555,7 @@ async function startServer() {
         to: isTest ? "a.krausz@levelupresources.org" : "a.krausz@levelupresources.org",
         subject: `FreshSelect Meals Daily Report${isTest ? " [TEST]" : ""} — ${data.date}`,
         html,
+        idempotencyKey: `daily-digest-${data.date}${isTest ? "-test" : ""}`,
       });
 
       console.log(`[DailyDigest] ${data.date} sent=${ok} actions=${data.totalActions}`);

@@ -27,6 +27,20 @@ describe("Resend idempotency options", () => {
     );
   });
 
+  it("uses a caller-provided stable idempotency key for scheduled messages", async () => {
+    await expect(sendEmail({
+      to: "recipient@example.invalid",
+      subject: "Daily report",
+      html: "<p>Test</p>",
+      idempotencyKey: "daily-digest-2026-10-13",
+    })).resolves.toBe(true);
+
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "recipient@example.invalid" }),
+      { idempotencyKey: "daily-digest-2026-10-13" },
+    );
+  });
+
   it("uses stable idempotency keys for application confirmation and internal alert", async () => {
     const data = {
       referenceNumber: "FSM-TEST123456",

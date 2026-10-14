@@ -17,6 +17,7 @@ import {
   referrerCodeLimiter,
 } from "../server/_core/security";
 import { requestLogger } from "../server/_core/logger";
+import { sdk } from "../server/_core/sdk";
 import { createClientEmail, getSubmissionById } from "../server/db";
 import { Webhook } from "svix";
 import { Resend } from "resend";
@@ -192,6 +193,70 @@ registerOAuthRoutes(app);
 // Health check (no auth required, excluded from rate limiting)
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", ts: Date.now() });
+});
+
+// ─── Daily staff digest ─────────────────────────────────────────────────────
+// Called by the Manus scheduled task at 08:00 America/New_York. This route must
+// live in the Vercel entrypoint as well as the development server; otherwise a
+// successful local preview would leave production daily reports unsent.
+app.post("/api/scheduled/daily-digest", async (req, res) => {
+  try {
+    const cronSecret = process.env.CRON_SECRET;
+    const headerSecret = req.headers["x-cron-secret"] as string | undefined;
+    const hasSecretBypass = Boolean(cronSecret && headerSecret && headerSecret === cronSecret);
+    if (!hasSecretBypass) {
+      const user = await sdk.authenticateRequest(req).catch(() => null);
+      if (!user || !user.isCron) {
+        res.status(401).json({ ok: false, error: "cron-only" });
+        return;
+      }
+    }
+
+    const { getDailyDigestData } = await import("../server/db");
+    const { sendEmail } = await import("../server/email");
+    const targetDate = new Date();
+    targetDate.setUTCDate(targetDate.getUTCDate() - 1);
+    const data = await getDailyDigestData(targetDate.toISOString().slice(0, 10));
+    const esc = (value: unknown) => String(value ?? "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const fmtTime = (value: Date) => new Date(value).toLocaleTimeString("en-US", {
+      timeZone: "America/New_York", hour: "2-digit", minute: "2-digit",
+    });
+    const section = (title: string, rows: string[]) => rows.length === 0
+      ? `<tr><td style="padding:12px 20px"><b>${esc(title)}</b><br/><span style="color:#6b7280;font-size:13px">Nothing to report.</span></td></tr>`
+      : `<tr><td style="padding:12px 20px"><b>${esc(title)}</b><ul style="margin:6px 0 0;padding-left:20px;font-size:13px">${rows.map((row) => `<li>${row}</li>`).join("")}</ul></td></tr>`;
+
+    const meaningfulActions = new Set([
+      "stage_changed", "task_created", "task_completed", "task_updated", "task_deleted",
+      "document_uploaded", "document_deleted", "message_sent", "note_added", "note_updated",
+      "client_updated", "client_created", "referral_sent", "assessment_submitted",
+      "org_message_sent", "task_assigned",
+    ]);
+    const staffActions = new Map<string, Array<{ action: string; clientName: string | null; createdAt: Date }>>();
+    for (const action of data.allActions) {
+      if (!action.actorName || !meaningfulActions.has(action.action)) continue;
+      const entries = staffActions.get(action.actorName) ?? [];
+      entries.push({ action: action.action, clientName: action.clientName, createdAt: action.createdAt });
+      staffActions.set(action.actorName, entries);
+    }
+    const staffSections = [...staffActions.entries()].map(([name, entries]) => section(
+      `${name} (${entries.length} action${entries.length === 1 ? "" : "s"})`,
+      entries.map((entry) => `${fmtTime(entry.createdAt)} — ${esc(entry.action.replace(/_/g, " "))}${entry.clientName ? ` — <i>${esc(entry.clientName)}</i>` : ""}`),
+    )).join("");
+
+    const html = `<!doctype html><html><body style="font-family:sans-serif;background:#f9fafb;padding:20px"><div style="max-width:680px;margin:auto;background:#fff;border-radius:8px;overflow:hidden"><div style="background:#16a34a;padding:20px;color:#fff"><h1 style="margin:0;font-size:20px">FreshSelect Meals — Daily Report</h1><p style="margin:4px 0 0">${esc(data.date)} · New York time</p></div><table style="width:100%;border-collapse:collapse">${section(`New Clients (${data.newClients.length})`, data.newClients.map((client) => `<b>${esc(client.name)}</b> — ${esc(client.referralSource ?? "Unknown source")} → ${esc(client.stage)}`))}${section(`Stage Changes (${data.stageChanges.length})`, data.stageChanges.map((change) => `<b>${esc(change.clientName ?? "Unknown")}</b>: ${esc(change.fromStage ?? "start")} → ${esc(change.toStage)} <span style="color:#6b7280">(${esc(change.actorName ?? "Staff")}, ${fmtTime(change.createdAt)})</span>`))}${section(`Tasks Created (${data.tasksCreated.length})`, data.tasksCreated.map((task) => `${esc(task.title)}${task.clientName ? ` — <i>${esc(task.clientName)}</i>` : ""}`))}${section(`Tasks Completed (${data.tasksCompleted.length})`, data.tasksCompleted.map((task) => `${esc(task.title)}${task.clientName ? ` — <i>${esc(task.clientName)}</i>` : ""}`))}${section(`Documents Uploaded (${data.documentsUploaded.length})`, data.documentsUploaded.map((document) => `${esc(document.fileName)}${document.clientName ? ` — <i>${esc(document.clientName)}</i>` : ""}`))}</table>${staffSections ? `<div style="border-top:2px solid #16a34a"><div style="padding:10px 20px;background:#f0fdf4"><b>Staff Activity Breakdown</b></div><table style="width:100%;border-collapse:collapse">${staffSections}</table></div>` : ""}<div style="padding:12px 20px;background:#f9fafb;border-top:1px solid #e5e7eb;color:#6b7280;font-size:11px">FreshSelect Meals automated daily digest</div></div></body></html>`;
+    const ok = await sendEmail({
+      to: "a.krausz@levelupresources.org",
+      subject: `FreshSelect Meals Daily Report — ${data.date}`,
+      html,
+      idempotencyKey: `daily-digest-${data.date}`,
+    });
+    console.log(`[DailyDigest] ${data.date} sent=${ok} actions=${data.totalActions}`);
+    res.json({ ok, date: data.date, totalActions: data.totalActions });
+  } catch (err: any) {
+    console.error("[DailyDigest] Error:", err);
+    res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+  }
 });
 
 // ─── Vercel Cron: fire due email blasts ────────────────────────────────────

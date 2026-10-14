@@ -22,4 +22,17 @@ describe("daily digest authorization", () => {
 
     expect(authorizationBlock).toContain('if (!user || !(user as any).isCron)');
   });
+
+  it("registers the daily digest in the Vercel entrypoint with cron-only access", async () => {
+    const fs = await import("fs");
+    const source = fs.readFileSync(new URL("../src/index.ts", import.meta.url).pathname, "utf8");
+    const start = source.indexOf('app.post("/api/scheduled/daily-digest"');
+    const end = source.indexOf("// ─── Vercel Cron", start);
+    const route = source.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(route).toContain("if (!user || !user.isCron)");
+    expect(route).toContain('req.headers["x-cron-secret"]');
+    expect(route).toContain("a.krausz@levelupresources.org");
+  });
 });

@@ -1093,4 +1093,5 @@
 - [x] WORKFLOW: Match full @mention tokens so similarly named users and organizations are not notified accidentally
 - [x] INTAKE: Complete attempted email, notification, referral, and attestation persistence before a serverless response ends
 - [x] EMAIL: Pass stable idempotency keys through the Resend SDK instead of inert custom headers
+- [x] EMAIL: Register the daily staff digest in the Vercel server entrypoint and make daily sends idempotent
 - [x] VERIFY: Run safe production browser checks, full 347-test suite, TypeScript, Vercel build, and Resend test-sink delivery
