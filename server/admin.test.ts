@@ -4,6 +4,14 @@ import { appRouter } from "./routers";
 import { listSubmissions } from "./db";
 import type { TrpcContext } from "./_core/context";
 
+const mockSendEmail = vi.fn().mockResolvedValue(true);
+
+vi.mock("./email", () => ({
+  sendEmail: (...args: unknown[]) => mockSendEmail(...args),
+  sendApplicantConfirmation: vi.fn().mockResolvedValue(true),
+  sendAdminNotification: vi.fn().mockResolvedValue(true),
+}));
+
 // Mock the db module
 vi.mock("./db", () => ({
   createSubmission: vi.fn().mockResolvedValue(undefined),
@@ -187,6 +195,12 @@ function createAdminContext(): TrpcContext {
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
   };
+}
+
+function createSuperAdminContext(): TrpcContext {
+  const ctx = createAdminContext() as TrpcContext & { user: AuthenticatedUser };
+  ctx.user.role = "super_admin";
+  return ctx;
 }
 
 function createWorkerContext(canMarkNotInterested = false): TrpcContext {
@@ -387,6 +401,43 @@ describe("admin.staffList", () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result.length).toBe(2);
     expect(result[0].name).toBe("Admin User");
+  });
+});
+
+describe("admin.workers invitation delivery status", () => {
+  beforeEach(() => {
+    mockSendEmail.mockReset();
+    mockSendEmail.mockResolvedValue(true);
+  });
+
+  it("reports a failed provider send instead of falsely confirming an invite email", async () => {
+    const { logAudit } = await import("./db");
+    mockSendEmail.mockResolvedValueOnce(false);
+    const caller = appRouter.createCaller(createSuperAdminContext());
+
+    const result = await caller.admin.workers.createStaff({
+      email: "invite-failure@example.invalid",
+      name: "Invite Failure",
+      role: "worker",
+      origin: "https://www.freshselectmeals.com",
+    });
+
+    expect(result).toMatchObject({ success: true, id: 1, emailSent: false });
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "staff_invite_email_failed",
+      details: expect.objectContaining({ targetEmail: "invite-failure@example.invalid" }),
+    }));
+  });
+
+  it("reports successful invite delivery when the provider accepts the message", async () => {
+    const caller = appRouter.createCaller(createSuperAdminContext());
+
+    await expect(caller.admin.workers.createStaff({
+      email: "invite-success@example.invalid",
+      name: "Invite Success",
+      role: "worker",
+      origin: "https://www.freshselectmeals.com",
+    })).resolves.toMatchObject({ success: true, id: 1, emailSent: true });
   });
 });
 

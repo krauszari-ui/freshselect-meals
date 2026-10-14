@@ -1951,7 +1951,7 @@ export const appRouter = router({
         const setupUrl = `${originToUse}/admin/reset-password?token=${token}`;
         const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
         const safeName = escHtml(input.name || "there");
-        await sendEmail({
+        const emailSent = await sendEmail({
           to: input.email,
           subject: "You've been invited to FreshSelect Meals",
           html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
@@ -1965,8 +1965,13 @@ export const appRouter = router({
   <p style="color:#666;font-size:13px">Or copy this link: ${setupUrl}</p>
 </div>`,
         });
-        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "staff_invite_sent", details: { targetEmail: input.email, role: input.role } });
-        return { success: true, id };
+        await logAudit({
+          actorId: ctx.user.id,
+          actorName: ctx.user.name ?? ctx.user.email ?? "Admin",
+          action: emailSent ? "staff_invite_sent" : "staff_invite_email_failed",
+          details: { targetEmail: input.email, role: input.role },
+        });
+        return { success: true, id, emailSent };
       }),
       // Update an existing staff member's name, role, or permissions
       updateStaff: superAdminProcedure.input(z.object({
@@ -2016,7 +2021,7 @@ export const appRouter = router({
         const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
         const safeName = escHtml(user.name || "there");
         const isNewAccount = !user.passwordHash;
-        await sendEmail({
+        const emailSent = await sendEmail({
           to: user.email,
           subject: isNewAccount ? "You've been invited to FreshSelect Meals" : "Reset your FreshSelect Meals password",
           html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
@@ -2030,8 +2035,13 @@ export const appRouter = router({
   <p style="color:#666;font-size:13px">Or copy this link: ${setupUrl}</p>
 </div>`,
         });
-        await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Admin", action: "staff_invite_resent", details: { targetEmail: user.email, targetId: user.id } });
-        return { success: true };
+        await logAudit({
+          actorId: ctx.user.id,
+          actorName: ctx.user.name ?? ctx.user.email ?? "Admin",
+          action: emailSent ? "staff_invite_resent" : "staff_invite_resend_failed",
+          details: { targetEmail: user.email, targetId: user.id },
+        });
+        return { success: true, emailSent };
       }),
     }),
   }),

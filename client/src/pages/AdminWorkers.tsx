@@ -78,8 +78,12 @@ export default function AdminWorkers() {
     onError: (err) => toast.error(err.message),
   });
   const createMutation = trpc.admin.workers.createStaff.useMutation({
-    onSuccess: () => {
-      toast.success("Invite email sent! Staff member can now set their password.");
+    onSuccess: (data) => {
+      if (data.emailSent) {
+        toast.success("Invite email sent! Staff member can now set their password.");
+      } else {
+        toast.error("Staff account was created, but the invite email could not be sent. Check email settings, then use Resend invite.");
+      }
       utils.admin.workers.listStaff.invalidate();
       setShowCreateModal(false);
       setCreateForm({ email: "", name: "", role: "worker", permissions: { ...DEFAULT_PERMISSIONS } });
@@ -91,7 +95,10 @@ export default function AdminWorkers() {
     onError: (err) => toast.error(err.message),
   });
   const resendInviteMutation = trpc.admin.workers.resendInvite.useMutation({
-    onSuccess: () => toast.success("Invite email resent successfully!"),
+    onSuccess: (data) => {
+      if (data.emailSent) toast.success("Invite email resent successfully!");
+      else toast.error("The account link was renewed, but the email could not be sent. Check email settings before trying again.");
+    },
     onError: (err) => toast.error(err.message),
   });
   const [, navigate] = useLocation();
