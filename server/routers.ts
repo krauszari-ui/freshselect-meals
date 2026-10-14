@@ -498,84 +498,62 @@ export const appRouter = router({
         }
       }
 
-      // ── Everything below is FIRE-AND-FORGET ──
-      // These run in the background and NEVER affect the response to the user.
-      // We use setTimeout(0) to fully detach from the request lifecycle.
-      setTimeout(() => {
-        try {
-          // Track referral link usage
-          if (input.ref) {
-            incrementReferralUsage(input.ref).catch((err) => console.warn("[Referral] Failed to track:", err));
-          }
-          // Send emails (non-blocking, with individual try-catch)
-          // _skipEmail: true suppresses Resend calls during load tests / CI
-          const skipEmail = (input as any)._skipEmail === true;
-          const emailPayload = { referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName, email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId, supermarket: input.supermarket, formData: input as unknown as Record<string, unknown> };
-          if (!skipEmail) {
-            sendApplicantConfirmation(emailPayload).catch((err) => console.warn("[Email] Applicant confirmation failed:", err));
-            sendAdminNotification(emailPayload).catch((err) => console.warn("[Email] Admin notification failed:", err));
-          } else {
-            console.log(`[Email] Skipped (load test mode) for ref: ${refNumber}`);
-          }
-          // In-app notification for new submission — send to each admin/worker individually
-          getAdminWorkerUserIds().then((adminIds) => {
-            for (const uid of adminIds) {
-              createNotification({
-                type: "new_submission",
-                title: `New application from ${input.firstName} ${input.lastName}`,
-                body: `Ref #${refNumber} — ${input.supermarket} — ${input.email}`,
-                link: `/admin/clients`,
-                submissionId: null,
-                userId: uid,
-              }).catch((e: unknown) => console.warn("[Notification] new_submission:", e));
-            }
-          }).catch((e: unknown) => console.warn("[Notification] getAdminWorkerUserIds failed:", e));
+      // Serverless functions can stop after the response finishes. Attempt all non-critical
+      // follow-up work before returning while keeping the saved application successful even
+      // when an individual email, notification, or PDF operation fails.
+      const skipEmail = (input as any)._skipEmail === true;
+      const emailPayload = { referenceNumber: refNumber, firstName: input.firstName, lastName: input.lastName, email: input.email, cellPhone: input.cellPhone, medicaidId: input.medicaidId, supermarket: input.supermarket, formData: input as unknown as Record<string, unknown> };
+      const followUps: Promise<unknown>[] = [];
+      if (input.ref) followUps.push(incrementReferralUsage(input.ref));
+      if (!skipEmail) {
+        followUps.push(sendApplicantConfirmation(emailPayload));
+        followUps.push(sendAdminNotification(emailPayload));
+      } else {
+        console.log(`[Email] Skipped (load test mode) for ref: ${refNumber}`);
+      }
+      followUps.push((async () => {
+        const adminIds = await getAdminWorkerUserIds();
+        await Promise.all(adminIds.map((userId) => createNotification({
+          type: "new_submission",
+          title: `New application from ${input.firstName} ${input.lastName}`,
+          body: `Ref #${refNumber} — ${input.supermarket} — ${input.email}`,
+          link: `/admin/clients`,
+          submissionId: null,
+          userId,
+        })));
+      })());
+      followUps.push((async () => {
+        const pdfBytes = await generateAttestationPdf({
+          applicantName: `${input.firstName} ${input.lastName}`,
+          guardianName: input.guardianName,
+          referenceNumber: refNumber,
+          signatureDataUrl: input.signatureDataUrl,
+          hipaaConsentAt: consentAt,
+          householdMembers: input.householdMembers || [],
+          medicaidId: input.medicaidId,
+          supermarket: input.supermarket,
+        });
+        if (!pdfBytes) throw new Error("Attestation PDF generation returned no document");
+        const key = `attestations/${refNumber}-${randomBytes(16).toString("hex")}.pdf`;
+        const { url } = await storagePut(key, Buffer.from(pdfBytes), "application/pdf");
+        const submission = await getSubmissionByRef(refNumber);
+        if (!submission) throw new Error("Saved submission could not be reloaded for attestation linking");
+        await createDocument({
+          submissionId: submission.id,
+          name: `Attestation & HIPAA Consent - ${input.firstName} ${input.lastName}`,
+          category: "consent",
+          url,
+          fileKey: key,
+          mimeType: "application/pdf",
+          fileSize: pdfBytes.length,
+        });
+        console.log(`[PDF] ✓ Attestation PDF linked to submission ${submission.id}`);
+      })());
+      const followUpResults = await Promise.allSettled(followUps);
+      for (const result of followUpResults) {
+        if (result.status === "rejected") console.error(`[Submission] Follow-up failed (ref: ${refNumber}):`, result.reason);
+      }
 
-          // Generate Household Attestation + HIPAA PDF (non-blocking)
-          generateAttestationPdf({
-            applicantName: `${input.firstName} ${input.lastName}`,
-            guardianName: input.guardianName,
-            referenceNumber: refNumber,
-            signatureDataUrl: input.signatureDataUrl,
-            hipaaConsentAt: consentAt,
-            householdMembers: input.householdMembers || [],
-            medicaidId: input.medicaidId,
-            supermarket: input.supermarket,
-          }).then(async (pdfBytes) => {
-            if (!pdfBytes) {
-              console.warn(`[PDF] Attestation PDF generation returned null (ref: ${refNumber})`);
-              return;
-            }
-            try {
-              const suffix = Math.random().toString(36).substring(2, 8);
-              const key = `attestations/${refNumber}-${suffix}.pdf`;
-              const { url } = await storagePut(key, Buffer.from(pdfBytes), "application/pdf");
-              console.log(`[PDF] ✓ Attestation PDF uploaded (ref: ${refNumber}): ${url}`);
-
-              // Link the PDF to the submission in the documents table
-              const submission = await getSubmissionByRef(refNumber);
-              if (submission) {
-                await createDocument({
-                  submissionId: submission.id,
-                  name: `Attestation & HIPAA Consent - ${input.firstName} ${input.lastName}`,
-                  category: "consent",
-                  url,
-                  fileKey: key,
-                  mimeType: "application/pdf",
-                  fileSize: pdfBytes.length,
-                });
-                console.log(`[PDF] ✓ Attestation PDF linked to submission ${submission.id}`);
-              }
-            } catch (uploadErr) {
-              console.error(`[PDF] Failed to upload/link attestation PDF (ref: ${refNumber}):`, uploadErr);
-            }
-          }).catch((pdfErr) => console.error(`[PDF] Attestation generation error (ref: ${refNumber}):`, pdfErr));
-        } catch (bgErr) {
-          console.warn("[Submission] Background tasks error (non-blocking):", bgErr);
-        }
-      }, 0);
-
-      // Return success IMMEDIATELY after DB save
       return { success: true, referenceNumber: refNumber };
     }),
   }),

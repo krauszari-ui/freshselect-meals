@@ -297,8 +297,7 @@ export async function sendEmail(params: { to: string; subject: string; html: str
       subject: params.subject,
       html: params.html,
       replyTo: params.replyTo,
-      headers: { "Idempotency-Key": key },
-    }),
+    }, { idempotencyKey: key }),
     idempotencyKey
   );
 }
@@ -317,8 +316,7 @@ export async function sendApplicantConfirmation(data: SubmissionEmailData): Prom
         to: [data.email],
         subject,
         html,
-        headers: { "X-Idempotency-Key": key },
-      }),
+      }, { idempotencyKey: key }),
     idempotencyKey
   );
 
@@ -343,8 +341,7 @@ export async function sendAdminNotification(data: SubmissionEmailData): Promise<
         to: [ADMIN_EMAIL],
         subject,
         html,
-        headers: { "X-Idempotency-Key": key },
-      }),
+      }, { idempotencyKey: key }),
     idempotencyKey
   );
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
@@ -6,6 +6,12 @@ import type { TrpcContext } from "./_core/context";
 const mockCreateSubmission = vi.fn().mockResolvedValue(undefined);
 const mockIncrementReferralUsage = vi.fn().mockResolvedValue(undefined);
 const mockGetReferralLinkByCode = vi.fn().mockResolvedValue(null);
+const mockGetSubmissionByRef = vi.fn().mockResolvedValue({ id: 1 });
+const mockGetAdminWorkerUserIds = vi.fn().mockResolvedValue([11, 12]);
+const mockCreateNotification = vi.fn().mockResolvedValue(undefined);
+const mockCreateDocument = vi.fn().mockResolvedValue(1);
+const mockGenerateAttestationPdf = vi.fn().mockResolvedValue(Buffer.from("test-pdf"));
+const mockStoragePut = vi.fn().mockResolvedValue({ url: "https://storage.example.test/attestation.pdf" });
 
 vi.mock("./db", () => ({
   createSubmission: (...args: unknown[]) => mockCreateSubmission(...args),
@@ -26,7 +32,10 @@ vi.mock("./db", () => ({
   getFilterCounts: vi.fn().mockResolvedValue({}),
   listStaffUsers: vi.fn().mockResolvedValue([]),
   listReferralLinks: vi.fn().mockResolvedValue([]),
-  getSubmissionByRef: vi.fn().mockResolvedValue(undefined),
+  getSubmissionByRef: (...args: unknown[]) => mockGetSubmissionByRef(...args),
+  getAdminWorkerUserIds: (...args: unknown[]) => mockGetAdminWorkerUserIds(...args),
+  createNotification: (...args: unknown[]) => mockCreateNotification(...args),
+  createDocument: (...args: unknown[]) => mockCreateDocument(...args),
 }));
 
 // Mock the email module
@@ -36,6 +45,15 @@ const mockSendAdminNotification = vi.fn().mockResolvedValue(true);
 vi.mock("./email", () => ({
   sendApplicantConfirmation: (...args: unknown[]) => mockSendApplicantConfirmation(...args),
   sendAdminNotification: (...args: unknown[]) => mockSendAdminNotification(...args),
+}));
+
+vi.mock("./generateAttestationPdf", () => ({
+  generateAttestationPdf: (...args: unknown[]) => mockGenerateAttestationPdf(...args),
+}));
+
+vi.mock("./storage", () => ({
+  storagePut: (...args: unknown[]) => mockStoragePut(...args),
+  storageGet: vi.fn(),
 }));
 
 function validInput() {
@@ -81,29 +99,19 @@ function createPublicContext(): TrpcContext {
   };
 }
 
-/**
- * Helper: flush the setTimeout(0) background tasks that the submit procedure schedules.
- * Uses fake timers to advance, then lets microtasks (Promises) settle.
- */
-async function flushBackgroundTasks() {
-  // Advance fake timers to fire the setTimeout(0) callback
-  vi.advanceTimersByTime(1);
-  // Let any resulting Promises (email sends, referral tracking) settle
-  await vi.advanceTimersByTimeAsync(10);
-}
-
 describe("submission.submit", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
     vi.clearAllMocks();
     mockCreateSubmission.mockResolvedValue(undefined);
     mockIncrementReferralUsage.mockResolvedValue(undefined);
     mockSendApplicantConfirmation.mockResolvedValue(true);
     mockSendAdminNotification.mockResolvedValue(true);
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
+    mockGetSubmissionByRef.mockResolvedValue({ id: 1 });
+    mockGetAdminWorkerUserIds.mockResolvedValue([11, 12]);
+    mockCreateNotification.mockResolvedValue(undefined);
+    mockCreateDocument.mockResolvedValue(1);
+    mockGenerateAttestationPdf.mockResolvedValue(Buffer.from("test-pdf"));
+    mockStoragePut.mockResolvedValue({ url: "https://storage.example.test/attestation.pdf" });
   });
 
   it("accepts valid input and returns a reference number", async () => {
@@ -156,9 +164,6 @@ describe("submission.submit", () => {
 
     await caller.submission.submit(validInput());
 
-    // Flush the setTimeout(0) background tasks
-    await flushBackgroundTasks();
-
     expect(mockSendApplicantConfirmation).toHaveBeenCalledTimes(1);
     expect(mockSendAdminNotification).toHaveBeenCalledTimes(1);
 
@@ -168,14 +173,26 @@ describe("submission.submit", () => {
     expect(emailPayload.referenceNumber).toBeDefined();
   });
 
+  it("completes notifications and attestation persistence before returning", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+
+    await caller.submission.submit(validInput());
+
+    expect(mockCreateNotification).toHaveBeenCalledTimes(2);
+    expect(mockGenerateAttestationPdf).toHaveBeenCalledTimes(1);
+    expect(mockStoragePut).toHaveBeenCalledTimes(1);
+    expect(mockCreateDocument).toHaveBeenCalledWith(expect.objectContaining({
+      submissionId: 1,
+      category: "consent",
+      mimeType: "application/pdf",
+    }));
+  });
+
   it("tracks referral usage when ref is provided", async () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
     await caller.submission.submit({ ...validInput(), ref: "community_center" });
-
-    // Flush the setTimeout(0) background tasks
-    await flushBackgroundTasks();
 
     expect(mockIncrementReferralUsage).toHaveBeenCalledTimes(1);
     expect(mockIncrementReferralUsage).toHaveBeenCalledWith("community_center");
@@ -186,8 +203,6 @@ describe("submission.submit", () => {
     const caller = appRouter.createCaller(ctx);
 
     await caller.submission.submit(validInput());
-
-    await flushBackgroundTasks();
 
     expect(mockIncrementReferralUsage).not.toHaveBeenCalled();
   });
@@ -368,9 +383,6 @@ describe("submission.submit", () => {
     const result = await caller.submission.submit(validInput());
     expect(result.success).toBe(true);
     expect(result.referenceNumber).toBeTruthy();
-
-    // Flush background tasks so rejected promises are handled before test ends
-    await flushBackgroundTasks();
   });
 
   it("succeeds even when referral tracking fails (non-blocking)", async () => {
@@ -382,9 +394,6 @@ describe("submission.submit", () => {
     const result = await caller.submission.submit({ ...validInput(), ref: "test_ref" });
     expect(result.success).toBe(true);
     expect(result.referenceNumber).toBeTruthy();
-
-    // Flush background tasks so rejected promises are handled before test ends
-    await flushBackgroundTasks();
   });
 
   it("fails when database save fails", async () => {
