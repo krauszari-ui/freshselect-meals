@@ -154,7 +154,7 @@ function AddClientDialog({
       spouseEmployed: "No",
       hasWic: "No",
       hasSnap: "No",
-      newApplicant: "Yes",
+      newApplicant: "New",
       householdMembers: [],
       mealFocus: ["Lunch"],
       needsRefrigerator: "No",
@@ -454,6 +454,10 @@ function CountBadge({ count }: { count: number | undefined }) {
 export default function AdminClients() {
   const { user } = useAuth();
   const isAssessor = user?.role === "assessor";
+  const canEditClients = user?.role === "admin" || user?.role === "super_admin" ||
+    (user?.role === "worker" && (user as any).permissions?.canEdit === true);
+  const canExportClients = user?.role === "admin" || user?.role === "super_admin" ||
+    (user?.role === "worker" && (user as any).permissions?.canExport === true);
   const canViewReferralLinks = !(user?.role === "worker" && (user as any).permissions?.showReferralLinks === false);
   const searchParams = useSearch();
   const [, navigate] = useLocation();
@@ -634,7 +638,7 @@ export default function AdminClients() {
     neighborhood: neighborhoodFilter !== "all" ? neighborhoodFilter : undefined,
     supermarket: vendorFilter !== "all" ? vendorFilter : undefined,
     program: programFilter !== "all" ? programFilter : undefined,
-    newApplicant: applicantTypeFilter !== "all" ? (applicantTypeFilter as "new" | "transfer") : undefined,
+    newApplicant: applicantTypeFilter !== "all" ? (applicantTypeFilter as "New" | "Transfer") : undefined,
     assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
     intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
       assessorId: assessorFilter !== "all" ? parseInt(assessorFilter) : undefined,
@@ -903,20 +907,30 @@ export default function AdminClients() {
             <p className="text-slate-500 text-sm mt-0.5">{totalCount} total clients</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <ExportDropdown filters={{
-              stage: (stageFilter !== "all" && stageFilter !== "assessment_completed") ? stageFilter : undefined,
-              supermarket: vendorFilter !== "all" ? vendorFilter : undefined,
-              neighborhood: neighborhoodFilter !== "all" ? neighborhoodFilter : undefined,
-              program: programFilter !== "all" ? programFilter : undefined,
-              language: languageFilter !== "all" ? languageFilter : undefined,
-              borough: boroughFilter !== "all" ? boroughFilter : undefined,
-              search: debouncedSearch || undefined,
-              assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
-              intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
-              referralSource: referralFilter !== "all" ? referralFilter : undefined,
-              assessmentCompleted: isAssessor ? true : stageFilter === "assessment_completed" ? true : assessmentCompletedFilter === "completed" ? true : assessmentCompletedFilter === "not_completed" ? false : undefined,
-            }} />
-            {!isAssessor && (
+            {canExportClients && (
+              <ExportDropdown filters={{
+                status: isApprovedTab ? "approved" : undefined,
+                excludeStatus: isActiveClientsTab ? "approved" : undefined,
+                notInterested: isNotInterestedTab,
+                stage: (stageFilter !== "all" && stageFilter !== "assessment_completed") ? stageFilter : undefined,
+                supermarket: vendorFilter !== "all" ? vendorFilter : undefined,
+                neighborhood: neighborhoodFilter !== "all" ? neighborhoodFilter : undefined,
+                program: programFilter !== "all" ? programFilter : undefined,
+                newApplicant: applicantTypeFilter !== "all" ? applicantTypeFilter : undefined,
+                language: languageFilter !== "all" ? languageFilter : undefined,
+                borough: boroughFilter !== "all" ? boroughFilter : undefined,
+                zipcode: zipcodeFilter !== "all" ? zipcodeFilter : undefined,
+                priority: priorityFilter !== "all" ? priorityFilter : undefined,
+                assessorId: assessorFilter !== "all" ? parseInt(assessorFilter) : undefined,
+                orgId: orgFilter !== "all" ? parseInt(orgFilter) : undefined,
+                search: debouncedSearch || undefined,
+                assignedTo: workerFilter !== "all" ? parseInt(workerFilter) : undefined,
+                intakeRep: repFilter !== "all" ? parseInt(repFilter) : undefined,
+                referralSource: referralFilter !== "all" ? referralFilter : undefined,
+                assessmentCompleted: isAssessor ? true : stageFilter === "assessment_completed" ? true : assessmentCompletedFilter === "completed" ? true : assessmentCompletedFilter === "not_completed" ? false : undefined,
+              }} />
+            )}
+            {canEditClients && (
               <Button
                 onClick={() => setShowAddDialog(true)}
                 className="bg-green-700 hover:bg-green-800 text-white gap-1.5 h-9 px-4 text-sm"
@@ -1425,6 +1439,19 @@ export default function AdminClients() {
                           {new Date(client.createdAt).toLocaleDateString("en-US")}
                         </td>
                         <td className="px-4 py-3">
+                          {(() => {
+                            const p = client.priority || "normal";
+                            const cfg: Record<string, { label: string; cls: string }> = {
+                              urgent: { label: "Urgent", cls: "bg-red-100 text-red-700" },
+                              high:   { label: "High",   cls: "bg-orange-100 text-orange-700" },
+                              normal: { label: "Normal", cls: "bg-slate-100 text-slate-600" },
+                              low:    { label: "Low",    cls: "bg-slate-50 text-slate-400" },
+                            };
+                            const { label, cls } = cfg[p] ?? cfg.normal;
+                            return <Badge className={`${cls} text-[11px] font-medium border-0`}>{label}</Badge>;
+                          })()}
+                        </td>
+                        <td className="px-4 py-3">
                           {client.newApplicant === "Transfer" ? (
                             <span className="inline-flex items-center gap-1">
                               <Badge className="bg-amber-100 text-amber-700 text-[11px] font-medium border-0">Transfer</Badge>
@@ -1437,19 +1464,6 @@ export default function AdminClients() {
                           ) : (
                             <span className="text-xs text-slate-400">—</span>
                           )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {(() => {
-                            const p = client.priority || "normal";
-                            const cfg: Record<string, { label: string; cls: string }> = {
-                              urgent: { label: "Urgent", cls: "bg-red-100 text-red-700" },
-                              high:   { label: "High",   cls: "bg-orange-100 text-orange-700" },
-                              normal: { label: "Normal", cls: "bg-slate-100 text-slate-600" },
-                              low:    { label: "Low",    cls: "bg-slate-50 text-slate-400" },
-                            };
-                            const { label, cls } = cfg[p] ?? cfg.normal;
-                            return <Badge className={`${cls} text-[11px] font-medium border-0`}>{label}</Badge>;
-                          })()}
                         </td>
                         <td className="px-4 py-3 text-xs text-indigo-700">
                           {client.assessorId

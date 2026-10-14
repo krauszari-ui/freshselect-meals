@@ -213,7 +213,6 @@ function OrgChatPanel({ orgId, orgName, currentUserId, canSend }: {
   const [text, setText] = useState("");
   const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
-  const [taskDialogMsg, setTaskDialogMsg] = useState<any | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -224,28 +223,23 @@ function OrgChatPanel({ orgId, orgName, currentUserId, canSend }: {
     { refetchInterval: 10_000, refetchIntervalInBackground: false },
   );
 
-  // Load staff for @mention
-  const { data: staffList = [] } = trpc.chat.staffList.useQuery(undefined, {
+  // Only members of this channel may be suggested or notified by @mention.
+  const { data: staffList = [] } = trpc.org.mentionableMembers.useQuery({ orgId }, {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
   const staffListRef = useRef<StaffUser[]>([]);
   staffListRef.current = staffList as StaffUser[];
 
-  // Load org list for @OrgName mention
-  const { data: orgListRaw = [] } = trpc.org.list.useQuery({ includeInactive: false }, {
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  });
   const orgListRef = useRef<OrgItem[]>([]);
-  orgListRef.current = (orgListRaw as any[]).map((o: any) => ({
-    orgId: o.id,
-    orgName: o.name,
+  orgListRef.current = [{
+    orgId,
+    orgName,
     unreadCount: 0,
     lastMessageContent: null,
     lastMessageSender: null,
     lastMessageAt: null,
-  }));
+  }];
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -417,16 +411,9 @@ function OrgChatPanel({ orgId, orgName, currentUserId, canSend }: {
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>
-                  {/* Reply + Create Task buttons on hover */}
+                  {/* Reply control */}
                   <div className={`absolute top-0 ${isMe ? "right-full mr-2" : "left-full ml-2"} hidden group-hover:flex items-center gap-1 bg-white border border-slate-200 rounded-full px-2 py-1 shadow-md z-10`}>
                     <ReplyButton onClick={() => setReplyTarget({ id: msg.id, senderName: msg.senderName, content: msg.content.slice(0, 300) })} />
-                    <button
-                      onClick={() => setTaskDialogMsg(msg)}
-                      className="p-1 rounded-full hover:bg-blue-50 text-slate-500 hover:text-blue-600 transition-colors"
-                      title="Create task from this message"
-                    >
-                      <ClipboardList className="h-3.5 w-3.5" />
-                    </button>
                   </div>
                 </div>
               </div>
@@ -478,23 +465,6 @@ function OrgChatPanel({ orgId, orgName, currentUserId, canSend }: {
           <p className="py-1 text-center text-xs text-slate-500">Viewers can read organization chats but cannot send messages.</p>
         )}
       </div>
-
-      {/* Create Task from Message dialog — org group chat messages don't have a submissionId,
-          so we use orgId as a stand-in and require the user to pick a client in the dialog */}
-      {taskDialogMsg && (
-        <CreateTaskFromMessageDialog
-          open={!!taskDialogMsg}
-          onClose={() => setTaskDialogMsg(null)}
-          messageContent={taskDialogMsg.content ?? ""}
-          messageId={taskDialogMsg.id}
-          messageType="org_group"
-          submissionId={0}
-          clientName={`${orgName} group chat`}
-          onCreated={() => {
-            utils.org.groupMessages.invalidate({ orgId });
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -117,6 +117,7 @@ vi.mock("./db", () => ({
     { id: 1, code: "abc123", referrerName: "John Smith", description: "Community partner", isActive: 1, usageCount: 5, createdAt: new Date() },
   ]),
   getReferralLinkByCode: vi.fn().mockResolvedValue({ id: 1, code: "abc123", referrerName: "John Smith", isActive: 1, usageCount: 5 }),
+  getReferralLinkById: vi.fn().mockResolvedValue({ id: 1, code: "sha", referrerName: "John Smith", isActive: 1, usageCount: 5 }),
   createReferralLink: vi.fn().mockResolvedValue(1),
   updateReferralLink: vi.fn().mockResolvedValue(undefined),
   deleteReferralLink: vi.fn().mockResolvedValue(undefined),
@@ -565,6 +566,19 @@ describe("admin.updateStage", () => {
       toStage: "assessment",
     }));
   });
+
+  it("does not write duplicate history for an unchanged stage", async () => {
+    const { createStageHistoryEntry, updateSubmissionStage } = await import("./db");
+    vi.mocked(createStageHistoryEntry).mockClear();
+    vi.mocked(updateSubmissionStage).mockClear();
+    const caller = appRouter.createCaller(createAdminContext());
+
+    const result = await caller.admin.updateStage({ id: 1, stage: "referral" });
+
+    expect(result).toEqual({ success: true, unchanged: true });
+    expect(createStageHistoryEntry).not.toHaveBeenCalled();
+    expect(updateSubmissionStage).not.toHaveBeenCalled();
+  });
 });
 
 // ─── Stage History ─────────────────────────────────────────────────────
@@ -608,6 +622,19 @@ describe("admin.tasks", () => {
     });
     expect(result.success).toBe(true);
     expect(result.id).toBe(1);
+  });
+
+  it("rejects a task for a nonexistent client instead of creating an orphan", async () => {
+    const { getSubmissionById } = await import("./db");
+    vi.mocked(getSubmissionById).mockResolvedValueOnce(undefined);
+    const caller = appRouter.createCaller(createAdminContext());
+
+    await expect(caller.admin.tasks.create({
+      submissionId: 9999,
+      title: "Invalid client task",
+      description: "",
+      area: "intake_rep",
+    })).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
   it("updates task status", async () => {
@@ -699,6 +726,14 @@ describe("admin.exportCsv", () => {
     expect(result.csv).toBeDefined();
     expect(typeof result.csv).toBe("string");
     expect(result.count).toBeDefined();
+  });
+
+  it("blocks workers who were not granted export permission", async () => {
+    const ctx = createWorkerContext() as any;
+    ctx.user.permissions.canExport = false;
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(caller.admin.exportCsv({})).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });
 
@@ -805,6 +840,19 @@ describe("admin.referrals", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it("rejects a staff message that attaches a client to the wrong referrer", async () => {
+    const { getReferralLinkById, getSubmissionById } = await import("./db");
+    vi.mocked(getReferralLinkById).mockResolvedValueOnce({ id: 2, code: "other-referrer" } as any);
+    vi.mocked(getSubmissionById).mockResolvedValueOnce({ id: 1, referralSource: "sha" } as any);
+    const caller = appRouter.createCaller(createAdminContext());
+
+    await expect(caller.admin.referrals.sendMessage({
+      referralLinkId: 2,
+      submissionId: 1,
+      message: "Please provide the missing document.",
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });
 
 // ─── Referrer Portal ─────────────────────────────────────────────────
@@ -896,6 +944,16 @@ describe("chat workflow safeguards", () => {
     await expect(caller.org.sendGroupMessage({ orgId: 7, content: "Please review this update." })).rejects.toThrow(
       "Viewers cannot send messages"
     );
+  });
+
+  it("blocks group-chat mentions for users outside the current organization", async () => {
+    const caller = appRouter.createCaller(createOrgAssessorContext());
+
+    await expect(caller.org.sendGroupMessage({
+      orgId: 11,
+      content: "@Other Organization member",
+      mentionedUserIds: [99],
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("rejects a client-chat reply that references a message from a different client thread", async () => {

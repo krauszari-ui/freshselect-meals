@@ -249,6 +249,7 @@ const submissionInputSchema = z.object({
   email: z.string().email(),
   streetAddress: z.string().min(1), aptUnit: z.string().optional(),
   city: z.string().min(1), state: z.string().min(1), zipcode: z.string().min(1),
+  language: z.string().optional().default("English"),
   healthCategories: z.array(z.string()).min(1, "At least one health category is required"),
   dueDate: z.string().optional(), miscarriageDate: z.string().optional(),
   infantName: z.string().optional(), infantDateOfBirth: z.string().optional(), infantMedicaidId: z.string().optional(),
@@ -466,6 +467,7 @@ export const appRouter = router({
             status: "new", stage: "referral",
             formData: input as unknown as Record<string, unknown>,
             hipaaConsentAt: consentAt,
+            language: input.language,
             borough: input.city === "Brooklyn" ? "Brooklyn" : input.city,
             neighborhood: input.neighborhood || null,
             additionalMembersCount: parseInt(input.additionalMembersCount || "0") || 0,
@@ -641,7 +643,7 @@ export const appRouter = router({
       pageSize: z.number().min(1).max(200).optional(),
       tab: z.enum(["pending", "recorded", "missing_information", "not_eligible"]).optional(),
       priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
-      newApplicant: z.enum(["new", "transfer"]).optional(),
+      newApplicant: z.enum(["New", "Transfer"]).optional(),
     })).query(async ({ input, ctx }) => {
       const tab = input.tab ?? "pending";
       // "pending": assessment completed, not yet categorised into a terminal assessor stage
@@ -679,7 +681,7 @@ export const appRouter = router({
       supermarket: z.string().optional(),
       neighborhood: z.string().optional(),
       program: z.string().optional(),
-      newApplicant: z.enum(["new", "transfer"]).optional(),
+      newApplicant: z.enum(["New", "Transfer"]).optional(),
       language: z.string().optional(),
       borough: z.string().optional(),
       assignedTo: z.number().optional(),
@@ -926,14 +928,16 @@ export const appRouter = router({
     updateStage: editProcedure.input(z.object({
       id: z.number(),
       stage: z.enum(["referral", "assessment", "assessment_recorded", "missing_information", "not_eligible", "level_one_only", "level_one_household", "level_2_active", "ineligible", "provider_attestation_required", "flagged"]),
-    })).mutation(async ({ input, ctx }) => {
-      // Fetch current stage for history
-      const existing = await getSubmissionById(input.id);
-      await updateSubmissionStage(input.id, input.stage);
+      })).mutation(async ({ input, ctx }) => {
+        // Fetch current stage for history
+        const existing = await getSubmissionById(input.id);
+        if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+        if (existing.stage === input.stage) return { success: true, unchanged: true };
+        await updateSubmissionStage(input.id, input.stage);
       // Log stage change to history
       await createStageHistoryEntry({
         submissionId: input.id,
-        fromStage: existing?.stage ?? null,
+          fromStage: existing.stage,
         toStage: input.stage,
         changedBy: ctx.user.id,
         changedByName: ctx.user.name ?? ctx.user.email ?? "Staff",
@@ -943,8 +947,8 @@ export const appRouter = router({
         actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
         action: "stage_changed",
         clientId: input.id,
-        clientName: existing ? `${existing.firstName} ${existing.lastName}` : undefined,
-        details: { from: existing?.stage ?? null, to: input.stage },
+        clientName: `${existing.firstName} ${existing.lastName}`,
+        details: { from: existing.stage, to: input.stage },
       });
       return { success: true };
     }),
@@ -1003,33 +1007,31 @@ export const appRouter = router({
 
     // CSV Export
     exportCsv: staffProcedure.input(z.object({
-      status: z.string().optional(), supermarket: z.string().optional(), stage: z.string().optional(),
+      status: z.string().optional(), excludeStatus: z.string().optional(), supermarket: z.string().optional(), stage: z.string().optional(),
       neighborhood: z.string().optional(), language: z.string().optional(), borough: z.string().optional(),
-      search: z.string().optional(),
+      search: z.string().optional(), newApplicant: z.enum(["New", "Transfer"]).optional(),
       assignedTo: z.number().optional(), intakeRep: z.number().optional(),
       referralSource: z.string().optional(), program: z.string().optional(),
       assessmentCompleted: z.boolean().optional(),
+      zipcode: z.string().optional(), priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
+      assessorId: z.number().optional(), orgId: z.number().optional(), notInterested: z.boolean().optional(),
     }))
       .mutation(async ({ ctx, input }) => {
-        // SECURITY: assessors and viewers cannot export client PII
-        if (ctx.user.role === "assessor" || ctx.user.role === "viewer") {
+        // SECURITY: only administrators and workers explicitly granted canExport may export client PII.
+        if (ctx.user.role === "assessor" || ctx.user.role === "viewer" ||
+          (ctx.user.role === "worker" && (ctx.user.permissions as any)?.canExport !== true)) {
           throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to export client data" });
         }
-        // 'assessment_completed' is a virtual filter — maps to assessmentCompletedAt IS NOT NULL
-        const { assessmentCompleted, program, assignedTo, intakeRep, referralSource, ...baseFilters } = input;
-        let rows = await getAllSubmissions({ ...baseFilters, assignedTo, intakeRep, referralSource });
-        if (assessmentCompleted === true) rows = rows.filter((r: any) => r.assessmentCompletedAt != null);
-        if (assessmentCompleted === false) rows = rows.filter((r: any) => r.assessmentCompletedAt == null);
-        if (program && program !== "all") rows = rows.filter((r: any) => r.program === program);
+        const rows = await getAllSubmissions(input);
         const headers = ["Reference #", "First Name", "Last Name", "Email", "Phone", "Medicaid ID", "DOB", "Address", "City", "State", "Zip", "Language", "Neighborhood", "Vendor", "Stage", "Status", "Household Members", "Health Categories", "Referral Source", "Guardian Name", "Submitted"];
         const csvRows = rows.map((r) => {
           const fd = (r.formData as any) || {};
-          const householdNames = (fd.householdMembers || []).map((m: any) => `${m.firstName || ""} ${m.lastName || ""} (${m.relationship || ""})`.trim()).join("; ");
+          const householdNames = (fd.householdMembers || []).map((m: any) => `${m.name || ""}${m.relationship ? ` (${m.relationship})` : ""}`.trim()).join("; ");
           const healthCats = (fd.healthCategories || []).join("; ");
           return [
             r.referenceNumber, r.firstName, r.lastName, r.email, r.cellPhone, r.medicaidId,
-            fd.dateOfBirth || "", fd.address || "", fd.city || "", fd.state || "", fd.zipCode || "",
-            fd.language || r.language || "English", fd.neighborhood || "", r.supermarket, r.stage, r.status,
+            fd.dateOfBirth || "", fd.streetAddress || "", fd.city || "", fd.state || "", fd.zipcode || r.zipcode || "",
+            r.language || fd.language || "English", r.neighborhood || fd.neighborhood || "", r.supermarket, r.stage, r.status,
             householdNames, healthCats, r.referralSource || "", fd.guardianName || "",
             r.createdAt.toISOString()
           ];
@@ -1087,7 +1089,7 @@ export const appRouter = router({
       }),
 
       create: editProcedure.input(z.object({
-        submissionId: z.number(),
+        submissionId: z.number().int().positive(),
         title: z.string().min(1).max(256),
         description: z.string().default(""),
         area: z.enum(["intake_rep", "assigned_worker"]),
@@ -1097,6 +1099,8 @@ export const appRouter = router({
         sourceMessageId: z.number().optional(),
         sourceMessageType: z.enum(["client", "org_group"]).optional(),
       })).mutation(async ({ ctx, input }) => {
+        const client = await getSubmissionById(input.submissionId);
+        if (!client) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
         const id = await createTask({
           submissionId: input.submissionId,
           title: input.title,
@@ -1109,7 +1113,6 @@ export const appRouter = router({
           sourceMessageType: input.sourceMessageType ?? null,
           createdBy: ctx.user.id,
         });
-        const client = await getSubmissionById(input.submissionId);
         await logAudit({ actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff", action: "task_created", clientId: input.submissionId, clientName: client ? `${client.firstName} ${client.lastName}` : undefined, details: { title: input.title, description: input.description, area: input.area, sourceMessageId: input.sourceMessageId } });
         return { success: true, id };
       }),
@@ -1741,6 +1744,14 @@ export const appRouter = router({
         submissionId: z.number().optional(),
         message: z.string().min(1).max(2000),
       })).mutation(async ({ ctx, input }) => {
+        const link = await getReferralLinkById(input.referralLinkId);
+        if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Referral link not found" });
+        if (input.submissionId) {
+          const submission = await getSubmissionById(input.submissionId);
+          if (!submission || submission.referralSource !== link.code) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "This client is not attributed to that referrer" });
+          }
+        }
         const id = await createReferrerMessage({
           referralLinkId: input.referralLinkId,
           submissionId: input.submissionId ?? null,
@@ -2585,6 +2596,14 @@ export const appRouter = router({
         if (!userOrgId) return null;
         return getOrganizationById(userOrgId);
       }),
+    /** Mention directory for an organization group channel; never exposes other organizations' members. */
+    mentionableMembers: staffProcedure
+      .input(z.object({ orgId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        assertOrgChatAccess(ctx.user as any, input.orgId);
+        const members = await listOrgMembers(input.orgId);
+        return members.map((member) => ({ id: member.id, name: member.name ?? "", role: member.role }));
+      }),
     /** List all active organizations (staff can see, admin can see inactive too) */
     list: staffProcedure
       .input(z.object({ includeInactive: z.boolean().optional().default(false) }))
@@ -2707,6 +2726,14 @@ export const appRouter = router({
         const isFreshSelect = isFreshSelectStaffRole(role);
         const org = await getOrganizationById(input.orgId);
         if (!org) throw new TRPCError({ code: "NOT_FOUND", message: "Organization not found" });
+        const channelMembers = await listOrgMembers(input.orgId);
+        const channelMemberIds = new Set(channelMembers.map((member) => member.id));
+        if (input.mentionedUserIds.some((id) => !channelMemberIds.has(id))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You can only mention members of this organization" });
+        }
+        if (input.mentionedOrgIds.some((id) => id !== input.orgId)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You can only mention this organization in its group chat" });
+        }
         // Look up the replied-to message for denormalised preview
         let replyToSenderName: string | null = null;
         let replyToContent: string | null = null;
@@ -2732,14 +2759,14 @@ export const appRouter = router({
         // Notify individually @mentioned users
         for (const uid of input.mentionedUserIds) {
           if (uid === ctx.user.id) continue;
-          const mentionedUser = await getUserById(uid);
-          if (!mentionedUser || mentionedUser.isActive === 0) continue;
+          const mentionedUser = channelMembers.find((member) => member.id === uid);
+          if (!mentionedUser) continue;
           await createNotification({
             userId: uid,
             type: "chat_mention",
             title: `${ctx.user.name ?? "Staff"} mentioned you in ${org?.name ?? "org"} group chat`,
             body: input.content.slice(0, 200),
-            link: (mentionedUser as any).orgId ? "/org?view=chat" : `/admin/org-chats?orgId=${input.orgId}`,
+            link: `/org?view=chat`,
           }).catch(() => {});
         }
         // Notify all members of @mentioned orgs

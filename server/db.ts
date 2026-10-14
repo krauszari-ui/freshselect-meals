@@ -214,6 +214,7 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
       id: submissions.id, firstName: submissions.firstName, lastName: submissions.lastName,
       email: submissions.email, cellPhone: submissions.cellPhone, medicaidId: submissions.medicaidId,
       referenceNumber: submissions.referenceNumber, status: submissions.status, stage: submissions.stage,
+      formData: submissions.formData,
       supermarket: submissions.supermarket, neighborhood: submissions.neighborhood, borough: submissions.borough,
       zipcode: submissions.zipcode, newApplicant: submissions.newApplicant, program: submissions.program,
       language: submissions.language, additionalMembersCount: submissions.additionalMembersCount,
@@ -243,19 +244,43 @@ export async function listSubmissions(opts: ListSubmissionsOptions = {}) {
   return { rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize), totalMembers };
 }
 
-export async function getAllSubmissions(opts: { status?: string; supermarket?: string; stage?: string; neighborhood?: string; language?: string; borough?: string; search?: string; assignedTo?: number; intakeRep?: number; referralSource?: string } = {}) {
+export async function getAllSubmissions(opts: {
+  status?: string; excludeStatus?: string; supermarket?: string; stage?: string;
+  neighborhood?: string; language?: string; borough?: string; program?: string;
+  newApplicant?: string; search?: string; assignedTo?: number; intakeRep?: number;
+  referralSource?: string; assessmentCompleted?: boolean; zipcode?: string;
+  priority?: Submission["priority"]; assessorId?: number; orgId?: number;
+  notInterested?: boolean;
+} = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const conditions = [];
   if (opts.status && opts.status !== "all") conditions.push(eq(submissions.status, opts.status as Submission["status"]));
+  if (opts.excludeStatus && opts.excludeStatus !== "all") conditions.push(ne(submissions.status, opts.excludeStatus as Submission["status"]));
   if (opts.supermarket && opts.supermarket !== "all") conditions.push(eq(submissions.supermarket, opts.supermarket));
   if (opts.stage && opts.stage !== "all") conditions.push(eq(submissions.stage, opts.stage as Submission["stage"]));
   if (opts.language && opts.language !== "all") conditions.push(eq(submissions.language, opts.language));
   if (opts.borough && opts.borough !== "all") conditions.push(eq(submissions.borough, opts.borough));
   if (opts.neighborhood && opts.neighborhood !== "all") conditions.push(eq(submissions.neighborhood, opts.neighborhood));
+  if (opts.program && opts.program !== "all") conditions.push(eq(submissions.program, opts.program));
+  if (opts.newApplicant && opts.newApplicant !== "all") conditions.push(eq(submissions.newApplicant, opts.newApplicant));
   if (opts.assignedTo) conditions.push(eq(submissions.assignedTo, opts.assignedTo));
   if (opts.intakeRep) conditions.push(eq(submissions.intakeRep, opts.intakeRep));
+  if (opts.assessorId) conditions.push(eq(submissions.assessorId, opts.assessorId));
   if (opts.referralSource && opts.referralSource !== "all") conditions.push(eq(submissions.referralSource, opts.referralSource));
+  if (opts.assessmentCompleted === true) conditions.push(sql`${submissions.assessmentCompletedAt} IS NOT NULL`);
+  else if (opts.assessmentCompleted === false) conditions.push(sql`${submissions.assessmentCompletedAt} IS NULL`);
+  if (opts.zipcode && opts.zipcode !== "all") conditions.push(eq(submissions.zipcode, opts.zipcode));
+  if (opts.priority) conditions.push(eq(submissions.priority, opts.priority));
+  if (opts.notInterested === true) conditions.push(eq(submissions.notInterested, true));
+  else conditions.push(eq(submissions.notInterested, false));
+  if (opts.orgId) {
+    const orgStaff = await db.select({ id: users.id }).from(users).where(and(eq(users.orgId, opts.orgId), eq(users.isActive, 1)));
+    const orgStaffIds = orgStaff.map((u) => u.id);
+    conditions.push(orgStaffIds.length > 0
+      ? or(eq(submissions.referredOrgId, opts.orgId), inArray(submissions.assessorId, orgStaffIds)) as any
+      : eq(submissions.referredOrgId, opts.orgId) as any);
+  }
   if (opts.search) {
     const term = `%${opts.search}%`;
     conditions.push(or(like(submissions.firstName, term), like(submissions.lastName, term), like(submissions.medicaidId, term)) as any);
@@ -336,7 +361,7 @@ export async function updateSubmissionStatus(id: number, status: Submission["sta
 export async function updateSubmissionStage(id: number, stage: Submission["stage"]): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(submissions).set({ stage }).where(eq(submissions.id, id));
+  await db.update(submissions).set({ stage, stageUpdatedAt: new Date() }).where(eq(submissions.id, id));
 }
 
 export async function updateSubmissionAssignment(id: number, assignedTo: number | null, intakeRep?: number | null): Promise<void> {
@@ -489,6 +514,7 @@ export async function updateTaskStatus(id: number, status: Task["status"]): Prom
   if (!db) throw new Error("Database not available");
   const data: Record<string, unknown> = { status };
   if (status === "completed") data.completedAt = new Date();
+  if (status === "open") data.completedAt = null;
   await db.update(tasks).set(data).where(eq(tasks.id, id));
 }
 
@@ -645,7 +671,13 @@ export async function getUserByResetToken(token: string) {
 export async function clearPasswordResetToken(userId: number, newPasswordHash: string): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(users).set({ passwordHash: newPasswordHash, passwordResetToken: null, passwordResetExpires: null }).where(eq(users.id, userId));
+  await db.update(users).set({
+    passwordHash: newPasswordHash,
+    passwordResetToken: null,
+    passwordResetExpires: null,
+    failedLoginAttempts: 0,
+    lockedUntil: null,
+  }).where(eq(users.id, userId));
 }
 
 export async function updateWorkerPermissions(userId: number, permissions: WorkerPermissions): Promise<void> {
@@ -1388,7 +1420,7 @@ export async function cancelEmailBlast(id: number, taskUid?: string | null): Pro
 export async function getClientEmailsForBlast(filterStatus?: string | null): Promise<{ id: number; email: string; firstName: string; lastName: string }[]> {
   const db = await getDb();
   if (!db) return [];
-  const conditions: ReturnType<typeof eq>[] = [];
+  const conditions: any[] = [eq(submissions.notInterested, false)];
   if (filterStatus && filterStatus !== "all") {
     // filterStatus is a stage value (e.g. 'not_eligible', 'level_2_active')
     // Must filter by submissions.stage, not submissions.status
@@ -1427,7 +1459,7 @@ export async function getBlastReplies(blastId: number) {
     })
     .from(clientEmails)
     .leftJoin(submissions, eq(clientEmails.submissionId, submissions.id))
-    .where(eq(clientEmails.blastId, blastId))
+    .where(and(eq(clientEmails.blastId, blastId), eq(clientEmails.direction, "inbound")))
     .orderBy(desc(clientEmails.sentAt));
   return rows;
 }
@@ -1559,7 +1591,13 @@ export async function markThreadRead(userId: number, submissionId: number, lastR
   if (!db) throw new Error("Database not available");
   await db.insert(messageReads)
     .values({ userId, submissionId, lastReadMessageId })
-    .onDuplicateKeyUpdate({ set: { lastReadMessageId, updatedAt: new Date() } });
+    .onDuplicateKeyUpdate({
+      set: {
+        // A delayed request from another tab must never move the watermark backwards.
+        lastReadMessageId: sql`GREATEST(lastReadMessageId, VALUES(lastReadMessageId))`,
+        updatedAt: new Date(),
+      },
+    });
 }
 
 /** Get all read watermarks for a thread (returns userId → lastReadMessageId map for read receipts). */
@@ -1771,7 +1809,12 @@ export async function markOrgGroupRead(userId: number, orgId: number, lastMessag
   const db = await getDb();
   if (!db) return;
   await db.insert(orgMessageReads).values({ userId, orgId, lastReadMessageId: lastMessageId })
-    .onDuplicateKeyUpdate({ set: { lastReadMessageId: lastMessageId } });
+    .onDuplicateKeyUpdate({
+      set: {
+        // Keep the highest known message ID when requests arrive out of order.
+        lastReadMessageId: sql`GREATEST(lastReadMessageId, VALUES(lastReadMessageId))`,
+      },
+    });
 }
 
 export async function listAllOrgGroupsWithUnread(userId: number) {
