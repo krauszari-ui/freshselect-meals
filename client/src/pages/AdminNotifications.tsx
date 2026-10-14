@@ -30,7 +30,10 @@ export default function AdminNotifications() {
 
   const { data: notifications, isLoading } = trpc.notifications.list.useQuery({ limit: 100 });
   const markRead = trpc.notifications.markRead.useMutation({
-    onSuccess: () => utils.notifications.unreadCount.invalidate(),
+    onSuccess: () => {
+      utils.notifications.list.invalidate();
+      utils.notifications.unreadCount.invalidate();
+    },
   });
   const markAllRead = trpc.notifications.markAllRead.useMutation({
     onSuccess: () => {

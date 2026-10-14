@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useLocation } from "wouter";
 
 /**
  * Icon map for notification types — returns a single emoji that renders
@@ -29,6 +30,7 @@ const TYPE_ICON: Record<string, string> = {
  */
 export function useNotificationToast(enabled = true) {
   const POLL_MS = 15_000;
+  const [, navigate] = useLocation();
 
   // Highest notification ID we have already shown a toast for.
   // Initialised to -1 so the first fetch sets the baseline without toasting.
@@ -88,11 +90,11 @@ export function useNotificationToast(enabled = true) {
           ? {
               label: "View",
               onClick: () => {
-                window.location.href = n.link as string;
+                navigate(n.link as string);
               },
             }
           : undefined,
       });
     }
-  }, [data]);
+  }, [data, navigate]);
 }

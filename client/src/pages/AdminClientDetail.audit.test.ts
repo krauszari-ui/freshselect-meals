@@ -9,3 +9,13 @@ describe("assessor client-detail access", () => {
     expect(source).toContain("trpc.admin.listAssessors.useQuery(undefined, { enabled: !isAssessor })");
   });
 });
+
+describe("client-detail navigation and refresh", () => {
+  it("opens supported tabs from notification query parameters and refreshes stage history", () => {
+    const source = readFileSync(join(__dirname, "AdminClientDetail.tsx"), "utf8");
+    expect(source).toContain('import { Link, useParams, useLocation, useSearch } from "wouter"');
+    expect(source).toContain('tab === "assessment" || tab === "services" || tab === "activity" || tab === "chat"');
+    expect(source).toContain("utils.admin.stageHistory.invalidate({ id })");
+    expect(source).toContain("utils.auditLog.list.invalidate()");
+  });
+});

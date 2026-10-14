@@ -70,6 +70,7 @@ interface AddClientForm {
   language: string;
   neighborhood: string;
   supermarket: string;
+  healthCategories: string[];
 }
 
 const NEIGHBORHOODS_LIST = [
@@ -81,11 +82,16 @@ const NEIGHBORHOODS_LIST = [
 ];
 
 const ALL_VENDORS = NEIGHBORHOODS_LIST.flatMap(n => n.vendors);
+const HEALTH_CATEGORY_OPTIONS = [
+  "Pregnant", "Had a Miscarriage", "Postpartum (Within the last 12 months)",
+  "Substance Use Disorder", "HIV / AIDS", "Diabetes", "Hypertension",
+  "Serious Mental Illness (SMI)", "Chronic Condition", "Other",
+];
 
 const INITIAL_ADD_FORM: AddClientForm = {
   firstName: "", lastName: "", dateOfBirth: "", medicaidId: "",
   cellPhone: "", email: "", streetAddress: "", city: "Brooklyn",
-  state: "NY", zipcode: "", language: "English", neighborhood: "Williamsburg", supermarket: "Foodoo Kosher",
+  state: "NY", zipcode: "", language: "English", neighborhood: "Williamsburg", supermarket: "Foodoo Kosher", healthCategories: [],
 };
 
 function AddClientDialog({
@@ -117,7 +123,7 @@ function AddClientDialog({
     },
   });
 
-  const update = (key: keyof AddClientForm, value: string) => {
+  const update = <K extends keyof AddClientForm>(key: K, value: AddClientForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => { const n = { ...prev }; delete n[key]; return n; });
   };
@@ -134,6 +140,7 @@ function AddClientDialog({
     if (!form.email.trim()) e.email = "Required";
     if (!form.streetAddress.trim()) e.streetAddress = "Required";
     if (!form.zipcode.trim()) e.zipcode = "Required";
+    if (form.healthCategories.length === 0) e.healthCategories = "Select at least one health category";
 
     if (Object.keys(e).length > 0) { setErrors(e); return; }
 
@@ -142,7 +149,7 @@ function AddClientDialog({
       neighborhood: form.neighborhood,
       homePhone: "",
       aptUnit: "",
-      healthCategories: [],
+      healthCategories: form.healthCategories,
       employed: "No",
       spouseEmployed: "No",
       hasWic: "No",
@@ -288,6 +295,26 @@ function AddClientDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div>
+            <Label className="text-xs text-slate-600">Health Categories *</Label>
+            <p className="text-xs text-slate-500 mt-1">Select the condition(s) relevant to this client.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+              {HEALTH_CATEGORY_OPTIONS.map((category) => {
+                const checked = form.healthCategories.includes(category);
+                return (
+                  <label key={category} className={`flex items-center gap-2 rounded border px-2.5 py-2 text-xs cursor-pointer ${checked ? "border-emerald-400 bg-emerald-50" : "border-slate-200 hover:border-emerald-300"}`}>
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(value) => update("healthCategories", value ? [...form.healthCategories, category] : form.healthCategories.filter((item) => item !== category))}
+                    />
+                    <span>{category}</span>
+                  </label>
+                );
+              })}
+            </div>
+            {errors.healthCategories && <p className="text-red-500 text-xs mt-1">{errors.healthCategories}</p>}
           </div>
         </div>
 

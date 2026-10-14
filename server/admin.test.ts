@@ -993,6 +993,7 @@ describe("assessment completion integrity", () => {
       id: 1,
       firstName: "Sarah",
       lastName: "Cohen",
+      stage: "referral",
       formData: {
         healthCategories: ["Pregnant"],
         dueDate: "2026-12-01",
@@ -1011,6 +1012,13 @@ describe("assessment completion integrity", () => {
     await expect(caller.admin.updateAssessmentCompleted({ id: 1, completed: true })).resolves.toEqual({ success: true });
     expect(updateSubmissionFields).toHaveBeenCalledWith(1, expect.objectContaining({ assessmentCompletedAt: expect.any(Date) }));
     expect(updateSubmissionStage).toHaveBeenCalledWith(1, "assessment");
+    const { createStageHistoryEntry } = await import("./db");
+    expect(createStageHistoryEntry).toHaveBeenCalledWith(expect.objectContaining({
+      submissionId: 1,
+      fromStage: "referral",
+      toStage: "assessment",
+      note: "Assessment completed",
+    }));
   });
 });
 
@@ -1032,6 +1040,61 @@ describe("assessor case notes", () => {
 });
 
 describe("assessor stage transitions", () => {
+  it("requires a client reference before an assessor can refresh a document URL", async () => {
+    const caller = appRouter.createCaller(createOrgAssessorContext());
+
+    await expect(caller.admin.documents.getFreshUrl({ fileKey: "admin-docs/other-client.pdf" })).rejects.toThrow(
+      "A client document reference is required"
+    );
+  });
+
+  it("blocks an assessor from marking an unrelated client Missing Information", async () => {
+    const { getSubmissionById, listOrgMembers, updateSubmissionStage } = await import("./db");
+    vi.mocked(getSubmissionById).mockResolvedValueOnce({
+      id: 77, firstName: "Other", lastName: "Client", stage: "assessment", assessorId: 88, referredOrgId: null,
+    } as any);
+    vi.mocked(listOrgMembers).mockResolvedValueOnce([] as any);
+    vi.mocked(updateSubmissionStage).mockClear();
+    const caller = appRouter.createCaller(createOrgAssessorContext());
+
+    await expect(caller.admin.markMissingInfo({ id: 77, note: "Need eligibility documentation" })).rejects.toThrow("You do not have access to this client");
+    expect(updateSubmissionStage).not.toHaveBeenCalled();
+  });
+
+  it("records history when an assessor marks an accessible client Missing Information", async () => {
+    const { getSubmissionById, createStageHistoryEntry } = await import("./db");
+    vi.mocked(getSubmissionById).mockResolvedValueOnce({
+      id: 1, firstName: "Sarah", lastName: "Cohen", stage: "assessment", assessorId: 5, referredOrgId: null,
+    } as any);
+    vi.mocked(createStageHistoryEntry).mockClear();
+    const caller = appRouter.createCaller(createOrgAssessorContext());
+
+    await expect(caller.admin.markMissingInfo({ id: 1, note: "Please provide a current Medicaid card" })).resolves.toEqual({ success: true });
+    expect(createStageHistoryEntry).toHaveBeenCalledWith(expect.objectContaining({
+      submissionId: 1,
+      fromStage: "assessment",
+      toStage: "missing_information",
+      note: "Please provide a current Medicaid card",
+    }));
+  });
+
+  it("records history when an assessor marks an accessible client Not Eligible", async () => {
+    const { getSubmissionById, createStageHistoryEntry } = await import("./db");
+    vi.mocked(getSubmissionById).mockResolvedValueOnce({
+      id: 1, firstName: "Sarah", lastName: "Cohen", stage: "assessment", assessorId: 5, referredOrgId: null,
+    } as any);
+    vi.mocked(createStageHistoryEntry).mockClear();
+    const caller = appRouter.createCaller(createOrgAssessorContext());
+
+    await expect(caller.admin.markNotEligible({ id: 1, reason: "Does not meet program criteria" })).resolves.toEqual({ success: true });
+    expect(createStageHistoryEntry).toHaveBeenCalledWith(expect.objectContaining({
+      submissionId: 1,
+      fromStage: "assessment",
+      toStage: "not_eligible",
+      note: "Does not meet program criteria",
+    }));
+  });
+
   it("blocks an assessor from marking an unrelated client Not Eligible", async () => {
     const { getSubmissionById, listOrgMembers, updateSubmissionStage } = await import("./db");
     vi.mocked(getSubmissionById).mockResolvedValueOnce({

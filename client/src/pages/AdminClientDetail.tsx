@@ -30,7 +30,7 @@ import { ClientChatTab } from "@/components/ClientChatTab";
 import { useOpenDocument } from "@/hooks/useOpenDocument";
 import { useState, useRef, useEffect } from "react";
 import { formatLocalDate, formatLocalDateShort } from "@/lib/utils";
-import { Link, useParams, useLocation } from "wouter";
+import { Link, useParams, useLocation, useSearch } from "wouter";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -193,6 +193,7 @@ export default function AdminClientDetail() {
   const id = parseInt(params.id || "0");
   const utils = trpc.useUtils();
   const [location, navigate] = useLocation();
+  const search = useSearch();
   const { user } = useAuth();
   const { openDocument, loading: docOpenLoading } = useOpenDocument();
   const isAssessor = user?.role === "assessor";
@@ -211,7 +212,14 @@ export default function AdminClientDetail() {
   const { data: orgList = [] } = trpc.org.list.useQuery({ includeInactive: false });
   const { data: stageHistoryData } = trpc.admin.stageHistory.useQuery({ id }, { enabled: id > 0 });
 
-  const [activeTab, setActiveTab] = useState<"overview" | "assessment" | "services" | "activity" | "chat">("overview");
+  const getTabFromSearch = () => {
+    const tab = new URLSearchParams(search).get("tab");
+    return tab === "assessment" || tab === "services" || tab === "activity" || tab === "chat" ? tab : "overview";
+  };
+  const [activeTab, setActiveTab] = useState<"overview" | "assessment" | "services" | "activity" | "chat">(getTabFromSearch);
+  useEffect(() => {
+    setActiveTab(getTabFromSearch());
+  }, [search]);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [activityPage, setActivityPage] = useState(1);
 
@@ -315,13 +323,28 @@ export default function AdminClientDetail() {
     onError: (err) => toast.error(err.message),
   });
   const updateStageMutation = trpc.admin.updateStage.useMutation({
-    onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Stage updated"); },
+    onSuccess: () => {
+      utils.admin.getById.invalidate({ id });
+      utils.admin.stageHistory.invalidate({ id });
+      utils.auditLog.list.invalidate();
+      toast.success("Stage updated");
+    },
   });
   const updateAssignmentMutation = trpc.admin.updateAssignment.useMutation({
-    onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Assignment updated"); },
+    onSuccess: () => {
+      utils.admin.getById.invalidate({ id });
+      utils.auditLog.list.invalidate();
+      toast.success("Assignment updated");
+    },
   });
   const assignAssessorMutation = trpc.admin.assignAssessor.useMutation({
-    onSuccess: () => { utils.admin.getById.invalidate({ id }); toast.success("Assessor assigned"); setShowReassignWarning(false); setPendingAssessorId(null); },
+    onSuccess: () => {
+      utils.admin.getById.invalidate({ id });
+      utils.auditLog.list.invalidate();
+      toast.success("Assessor assigned");
+      setShowReassignWarning(false);
+      setPendingAssessorId(null);
+    },
     onError: (err) => toast.error(err.message),
   });
   const updatePriorityMutation = trpc.admin.updatePriority.useMutation({

@@ -1255,8 +1255,12 @@ export const appRouter = router({
           submissionId: z.number().nullable().optional(),
         }))
         .query(async ({ input, ctx }) => {
-          // SECURITY: Assessors may only fetch URLs for their assigned clients
-          if (ctx.user.role === "assessor" && input.submissionId) {
+          // SECURITY: An assessor must identify an accessible client before a
+          // storage URL can be refreshed; omitting it must not bypass scoping.
+          if (ctx.user.role === "assessor") {
+            if (!input.submissionId) {
+              throw new TRPCError({ code: "FORBIDDEN", message: "A client document reference is required" });
+            }
             const sub = await getSubmissionById(input.submissionId);
             if (!sub || !(await canAssessorAccessClient(ctx.user as any, sub as any))) {
               throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this document" });
@@ -1522,8 +1526,20 @@ export const appRouter = router({
       note: z.string().min(1),
     })).mutation(async ({ input, ctx }) => {
       const existing = await getSubmissionById(input.id);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+      if (ctx.user.role === "assessor" && !(await canAssessorAccessClient(ctx.user as any, existing as any))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this client" });
+      }
       await updateSubmissionStage(input.id, "missing_information");
       await updateSubmissionFields(input.id, { missingInfoNote: input.note } as any);
+      await createStageHistoryEntry({
+        submissionId: input.id,
+        fromStage: existing.stage ?? null,
+        toStage: "missing_information",
+        changedBy: ctx.user.id,
+        changedByName: ctx.user.name ?? ctx.user.email ?? "Assessor",
+        note: input.note,
+      });
       await logAudit({
         actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Assessor",
         action: "stage_changed",
@@ -1573,6 +1589,14 @@ export const appRouter = router({
       }
       await updateSubmissionStage(input.id, "not_eligible");
       await updateSubmissionFields(input.id, { notEligibleReason: input.reason } as any);
+      await createStageHistoryEntry({
+        submissionId: input.id,
+        fromStage: existing.stage ?? null,
+        toStage: "not_eligible",
+        changedBy: ctx.user.id,
+        changedByName: ctx.user.name ?? ctx.user.email ?? "Assessor",
+        note: input.reason,
+      });
       await logAudit({
         actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Assessor",
         action: "stage_changed",
@@ -1599,7 +1623,17 @@ export const appRouter = router({
       await updateSubmissionFields(input.id, {
         assessmentCompletedAt: input.completed ? new Date() : null,
       } as any);
-      if (input.completed) await updateSubmissionStage(input.id, "assessment");
+      if (input.completed) {
+        await updateSubmissionStage(input.id, "assessment");
+        await createStageHistoryEntry({
+          submissionId: input.id,
+          fromStage: existing.stage ?? null,
+          toStage: "assessment",
+          changedBy: ctx.user.id,
+          changedByName: ctx.user.name ?? ctx.user.email ?? "Staff",
+          note: "Assessment completed",
+        });
+      }
       await logAudit({
         actorId: ctx.user.id, actorName: ctx.user.name ?? ctx.user.email ?? "Staff",
         action: input.completed ? "assessment_completed" : "assessment_incomplete",
@@ -2639,7 +2673,7 @@ export const appRouter = router({
               type: "org_referral",
               title: `${actorName} referred ${clientName} to ${orgName ?? "your organization"}`,
               body: input.note ? `Note: ${input.note}` : `${clientName} has been referred to ${orgName ?? "your organization"} for services.`,
-              link: `/org/clients`,
+              link: `/org/clients/${input.submissionId}`,
               submissionId: input.submissionId,
             }).catch(() => {});
           }
