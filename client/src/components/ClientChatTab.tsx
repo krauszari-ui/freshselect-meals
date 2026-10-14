@@ -583,7 +583,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
   );
 
   // ── Load staff for @mention ────────────────────────────────────────────────
-  const { data: staffList = [] } = trpc.chat.staffList.useQuery(undefined, {
+  const { data: staffList = [] } = trpc.chat.staffList.useQuery({ submissionId }, {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });

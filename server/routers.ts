@@ -124,6 +124,16 @@ function isFreshSelectStaffRole(role: string) {
   return role === "admin" || role === "super_admin" || role === "worker" || role === "viewer";
 }
 
+/** A mention may only notify a staff member already permitted to read that client chat. */
+async function canUserAccessClientChat(
+  user: { id: number; role: string; orgId?: number | null },
+  submission: { assessorId?: number | null; referredOrgId?: number | null },
+): Promise<boolean> {
+  if (isFreshSelectStaffRole(user.role)) return true;
+  if (user.role === "assessor") return canAssessorAccessClient(user, submission);
+  return false;
+}
+
 /** Enforce that organization staff can only access their own group channel. */
 function assertOrgChatAccess(user: { role: string; orgId?: number | null }, orgId: number) {
   if (isFreshSelectStaffRole(user.role)) return;
@@ -2357,10 +2367,16 @@ export const appRouter = router({
         return listClientMessages(input.submissionId, { limit: input.limit, beforeId: input.beforeId });
       }),
 
-    /** List all staff users for @mention autocomplete */
-    staffList: staffProcedure.query(async () => {
+    /** List only staff who can read the selected client chat for @mention autocomplete. */
+    staffList: staffProcedure.input(z.object({ submissionId: z.number().int().positive() })).query(async ({ input, ctx }) => {
+      await assertClientChatAccess(ctx.user as any, input.submissionId);
+      const submission = await getSubmissionById(input.submissionId);
+      if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
       const staff = await listStaffUsers();
-      return staff.map(u => ({ id: u.id, name: u.name ?? "", role: u.role, email: u.email ?? "" }));
+      const visibleStaff = (await Promise.all(staff.map(async (user) => (
+        (await canUserAccessClientChat(user as any, submission as any)) ? user : null
+      )))).filter((user): user is NonNullable<typeof user> => user !== null);
+      return visibleStaff.map(u => ({ id: u.id, name: u.name ?? "", role: u.role, email: u.email ?? "" }));
     }),
     /** Send a message in a client thread */
     send: staffProcedure
@@ -2377,6 +2393,17 @@ export const appRouter = router({
         if (ctx.user.role === "viewer") throw new TRPCError({ code: "FORBIDDEN", message: "Viewers cannot send messages" });
         if (!input.content.trim() && !input.attachmentUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Message cannot be empty" });
         await assertClientChatAccess(ctx.user as any, input.submissionId);
+        const submission = await getSubmissionById(input.submissionId);
+        if (!submission) throw new TRPCError({ code: "NOT_FOUND", message: "Client not found" });
+        const mentionedUsers = input.mentionedUserIds?.length
+          ? await Promise.all(input.mentionedUserIds.map((id) => getUserById(id)))
+          : [];
+        for (const mentionedUser of mentionedUsers) {
+          if (!mentionedUser || mentionedUser.isActive === 0 ||
+            !(await canUserAccessClientChat(mentionedUser as any, submission as any))) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "You can only mention staff who can access this client chat" });
+          }
+        }
         // Look up the replied-to message for denormalised preview
         let replyToSenderName: string | null = null;
         let replyToContent: string | null = null;
@@ -2406,14 +2433,9 @@ export const appRouter = router({
         await markThreadRead(ctx.user.id, input.submissionId, msg.id);
         // Fire mention notifications for each tagged user
         if (input.mentionedUserIds?.length) {
-          const sub = await getSubmissionById(input.submissionId);
-          const clientLabel = sub
-            ? `${(sub.formData as any)?.firstName ?? ""} ${(sub.formData as any)?.lastName ?? ""}`.trim() || `Client #${input.submissionId}`
-            : `Client #${input.submissionId}`;
-          for (const mentionedId of input.mentionedUserIds) {
+          const clientLabel = `${(submission.formData as any)?.firstName ?? ""} ${(submission.formData as any)?.lastName ?? ""}`.trim() || `Client #${input.submissionId}`;
+          for (const mentionedId of Array.from(new Set(input.mentionedUserIds))) {
             if (mentionedId === ctx.user.id) continue;
-            const mentionedUser = await getUserById(mentionedId);
-            if (!mentionedUser) continue;
             // Target only the mentioned user — not a broadcast
             createNotification({
               type: "chat_mention",

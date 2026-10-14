@@ -956,6 +956,20 @@ describe("chat workflow safeguards", () => {
     })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  it("blocks a client-chat mention that would disclose the thread to an unrelated assessor", async () => {
+    const { getUserById, createClientMessage } = await import("./db");
+    vi.mocked(getUserById).mockResolvedValueOnce({ id: 99, role: "assessor", isActive: 1, orgId: null } as any);
+    vi.mocked(createClientMessage).mockClear();
+    const caller = appRouter.createCaller(createWorkerContext());
+
+    await expect(caller.chat.send({
+      submissionId: 1,
+      content: "Private client update",
+      mentionedUserIds: [99],
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(createClientMessage).not.toHaveBeenCalled();
+  });
+
   it("rejects a client-chat reply that references a message from a different client thread", async () => {
     const { getClientMessageById } = await import("./db");
     vi.mocked(getClientMessageById).mockResolvedValueOnce({

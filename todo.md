@@ -1082,3 +1082,13 @@
 - [x] BUG: Stop reporting a staff invite as sent when the transactional-email provider returns a failure
 - [x] FIX: Return invitation delivery status to the staff-management UI and record provider-send failures separately in the audit log
 - [x] TESTS: Cover both provider-accepted and provider-failed staff invitation outcomes
+
+## Reliability Audit Follow-up (October 2026)
+- [x] BUG: Repair Add Client submissions blocked by the required health-category contract and persist selected language
+- [x] SECURITY: Enforce export permissions, organization-chat member mentions, referrer/client message attribution, and real client references for tasks
+- [x] DATA INTEGRITY: Preserve stage age, monotonic read watermarks, task reopening timestamps, stage-history accuracy, and opt-out email blast exclusions
+- [x] WORKFLOW: Match client exports to the active tab/filters, correct list priority/type columns, and remove invalid group-chat task actions
+- [x] SECURITY: Restrict client-chat @mention autocomplete and notification delivery to staff already authorized for that client
+- [x] INTAKE: Complete attempted email, notification, referral, and attestation persistence before a serverless response ends
+- [x] EMAIL: Pass stable idempotency keys through the Resend SDK instead of inert custom headers
+- [x] VERIFY: Run safe production browser checks, full 347-test suite, TypeScript, Vercel build, and Resend test-sink delivery
