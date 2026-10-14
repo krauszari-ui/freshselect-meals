@@ -1089,6 +1089,8 @@
 - [x] DATA INTEGRITY: Preserve stage age, monotonic read watermarks, task reopening timestamps, stage-history accuracy, and opt-out email blast exclusions
 - [x] WORKFLOW: Match client exports to the active tab/filters, correct list priority/type columns, and remove invalid group-chat task actions
 - [x] SECURITY: Restrict client-chat @mention autocomplete and notification delivery to staff already authorized for that client
+- [x] WORKFLOW: Synchronize DOB picker values across client navigation and preserve in-progress signatures through device resize
+- [x] WORKFLOW: Match full @mention tokens so similarly named users and organizations are not notified accidentally
 - [x] INTAKE: Complete attempted email, notification, referral, and attestation persistence before a serverless response ends
 - [x] EMAIL: Pass stable idempotency keys through the Resend SDK instead of inert custom headers
 - [x] VERIFY: Run safe production browser checks, full 347-test suite, TypeScript, Vercel build, and Resend test-sink delivery

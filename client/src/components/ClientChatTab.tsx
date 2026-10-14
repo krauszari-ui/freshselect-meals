@@ -16,6 +16,7 @@ import { ReplyBar, ReplyButton, ReplyQuote, type ReplyTarget } from "@/component
 import { CreateTaskFromMessageDialog } from "@/components/CreateTaskFromMessageDialog";
 import { toast } from "sonner";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { containsExactMention } from "@/lib/mentions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -725,7 +726,7 @@ export function ClientChatTab({ submissionId, clientName }: { submissionId: numb
 
       // Extract mentioned user IDs by scanning the message text against the full staff list
       // Use ref to avoid stale closure issues with staffList
-      const mentionedInText = staffListRef.current.filter(u => content.includes(`@${u.name.trim()}`));
+      const mentionedInText = staffListRef.current.filter(u => containsExactMention(content, u.name));
 
       // Add optimistic message immediately so it doesn't disappear while waiting
       tempId = -(Date.now());

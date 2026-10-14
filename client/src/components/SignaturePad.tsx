@@ -53,6 +53,9 @@ export function SignaturePad({ value, onChange, error, label }: SignaturePadProp
     const canvas = canvasRef.current;
     const pad = padRef.current;
     if (!canvas || !pad) return;
+    // Resizing a canvas clears its pixels. Capture the live pad first instead
+    // of relying only on the last parent render, which can lag a recent stroke.
+    const liveSignature = pad.isEmpty() ? "" : pad.toDataURL("image/jpeg", 0.5);
     const ratio = Math.max(window.devicePixelRatio || 1, 1);
     const width = canvas.offsetWidth;
     const height = canvas.offsetHeight;
@@ -61,8 +64,9 @@ export function SignaturePad({ value, onChange, error, label }: SignaturePadProp
     const ctx = canvas.getContext("2d");
     if (ctx) ctx.scale(ratio, ratio);
     pad.clear();
-    if (value) {
-      pad.fromDataURL(value);
+    const signatureToRestore = liveSignature || value;
+    if (signatureToRestore) {
+      pad.fromDataURL(signatureToRestore);
       setIsEmpty(false);
     } else {
       setIsEmpty(true);

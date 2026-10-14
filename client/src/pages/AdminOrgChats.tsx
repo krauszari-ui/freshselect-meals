@@ -16,6 +16,7 @@ import { CreateTaskFromMessageDialog } from "@/components/CreateTaskFromMessageD
 import { ReplyBar, ReplyButton, ReplyQuote, type ReplyTarget } from "@/components/ReplyBar";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { containsExactMention } from "@/lib/mentions";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -312,12 +313,12 @@ function OrgChatPanel({ orgId, orgName, currentUserId, canSend }: {
 
     // Extract mentioned user IDs by scanning text against staff list
     const mentionedUserIds = staffListRef.current
-      .filter(u => content.includes(`@${u.name.trim()}`))
+      .filter(u => containsExactMention(content, u.name))
       .map(u => u.id);
 
     // Extract mentioned org IDs by scanning text against org list
     const mentionedOrgIds = orgListRef.current
-      .filter(o => content.includes(`@${o.orgName.trim()}`))
+      .filter(o => containsExactMention(content, o.orgName))
       .map(o => o.orgId);
 
     sendMsg.mutate({ orgId, content, mentionedUserIds, mentionedOrgIds, replyToId: replyTarget?.id });

@@ -52,14 +52,15 @@ export function DobPicker({ value, onChange, error, className = "", size = "base
   const [day, setDay]     = useState<number>(parsed.day);
   const [year, setYear]   = useState<number>(parsed.year);
 
-  // Sync inward when the parent resets the value (e.g. form clear)
+  // Sync inward whenever the parent supplies a different record value.
+  // This is required when the same picker instance is reused while navigating
+  // between client records with different dates of birth.
   useEffect(() => {
     const p = parseDobString(value);
     setMonth(p.month);
     setDay(p.day);
     setYear(p.year);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value === "" ? "" : null]); // only re-sync on explicit clear
+  }, [value]);
 
   const currentYear = new Date().getFullYear();
   const maxDays = daysInMonth(month, year);

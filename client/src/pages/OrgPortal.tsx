@@ -14,6 +14,7 @@ import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 import { useNotificationToast } from "@/hooks/useNotificationToast";
+import { containsExactMention } from "@/lib/mentions";
 // OrgGroupChat component - defined below
 
 export default function OrgPortal() {
@@ -307,7 +308,7 @@ function OrgGroupChatPanel({ orgId, orgName, userId, userName }: {
     const trimmed = text.trim();
     if (sendMsg.isPending || !trimmed) return;
     const mentionedUserIds = staffList
-      .filter((staffUser) => staffUser.name.trim() && trimmed.includes(`@${staffUser.name.trim()}`))
+      .filter((staffUser) => containsExactMention(trimmed, staffUser.name))
       .map((staffUser) => staffUser.id);
     sendMsg.mutate({ orgId, content: trimmed, mentionedUserIds, replyToId: replyTarget?.id });
   };

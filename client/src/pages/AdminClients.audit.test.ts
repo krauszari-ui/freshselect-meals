@@ -9,6 +9,7 @@ describe("Admin Clients role-sensitive queries", () => {
     expect(source).toContain("enabled: !isAssessor");
     expect(source).toContain("trpc.admin.staffList.useQuery(undefined, { enabled: !isAssessor })");
     expect(source).toContain("trpc.admin.listAssessors.useQuery(undefined, { enabled: !isAssessor })");
+    expect(source).toContain("trpc.org.list.useQuery(\n    { includeInactive: false },\n    { enabled: !isAssessor },");
   });
 });
 

@@ -7,6 +7,7 @@ describe("assessor client-detail access", () => {
     const source = readFileSync(join(__dirname, "AdminClientDetail.tsx"), "utf8");
     expect(source).toContain("trpc.admin.staffList.useQuery(undefined, { enabled: !isAssessor })");
     expect(source).toContain("trpc.admin.listAssessors.useQuery(undefined, { enabled: !isAssessor })");
+    expect(source).toContain("trpc.org.list.useQuery({ includeInactive: false }, { enabled: !isAssessor })");
   });
 });
 

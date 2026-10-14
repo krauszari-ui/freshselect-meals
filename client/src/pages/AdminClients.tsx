@@ -664,7 +664,10 @@ export default function AdminClients() {
 
   const staffQuery = trpc.admin.staffList.useQuery(undefined, { enabled: !isAssessor });
   const { data: assessorList } = trpc.admin.listAssessors.useQuery(undefined, { enabled: !isAssessor });
-  const { data: orgList, isLoading: orgListLoading } = trpc.org.list.useQuery({ includeInactive: false });
+  const { data: orgList, isLoading: orgListLoading } = trpc.org.list.useQuery(
+    { includeInactive: false },
+    { enabled: !isAssessor },
+  );
   const referralLinksQuery = trpc.admin.referrals.list.useQuery(undefined, { enabled: !isAssessor && canViewReferralLinks });
   const referralLinks = (referralLinksQuery.data ?? []) as any[];
 
