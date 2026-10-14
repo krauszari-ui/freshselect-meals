@@ -51,7 +51,7 @@ npx esbuild src/index.ts \
 echo "[4/6] Creating Vercel function config..."
 cat > .vercel/output/functions/api.func/.vc-config.json << 'EOF'
 {
-  "runtime": "nodejs20.x",
+  "runtime": "nodejs22.x",
   "handler": "index.mjs",
   "launcherType": "Nodejs"
 }
