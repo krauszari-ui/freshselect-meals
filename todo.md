@@ -1077,3 +1077,8 @@
 - [x] INVESTIGATE: Confirm whether the Vercel DATABASE_URL rotation switched the public app away from the historical chat and update dataset
 - [x] RECOVERY: Locate the previous Vercel database connection or provider snapshot without overwriting the current database — Vercel metadata preserves only the change history, not the historical secret
 - [x] INVESTIGATE: Confirm whether the active Manus database reflects an August 11 restoration snapshot rather than the prior live history — core tables were recreated on August 25 and retained history ends at the snapshot boundary
+
+## Invitation Delivery Reliability (October 2026)
+- [x] BUG: Stop reporting a staff invite as sent when the transactional-email provider returns a failure
+- [x] FIX: Return invitation delivery status to the staff-management UI and record provider-send failures separately in the audit log
+- [x] TESTS: Cover both provider-accepted and provider-failed staff invitation outcomes
